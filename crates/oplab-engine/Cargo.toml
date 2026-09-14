@@ -1,0 +1,31 @@
+[package]
+name = "oplab-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Assembly and execution engine for Oplab"
+
+[dependencies]
+clap.workspace = true
+oplab-core.workspace = true
+thiserror.workspace = true
+serde_json.workspace = true
+cxx.workspace = true
+object.workspace = true
+tempfile.workspace = true
+iced-x86.workspace = true
+capstone.workspace = true
+unicorn-engine.workspace = true
+
+[build-dependencies]
+cc.workspace = true
+shlex.workspace = true
+cxx-build.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

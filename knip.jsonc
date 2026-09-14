@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreDependencies": [
+    // Invoked by cargo xtask; Knip does not inspect Rust task commands.
+    "oxfmt",
+    // Loaded by the inlang SDK from project.inlang/settings.json.
+    "@inlang/plugin-message-format",
+  ],
+}

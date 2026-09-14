@@ -1,0 +1,5 @@
+BasedOnStyle: LLVM
+ColumnLimit: 100
+Standard: c++23
+SortIncludes: CaseSensitive
+InsertBraces: true
