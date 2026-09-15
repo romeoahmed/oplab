@@ -92,6 +92,52 @@ fn integer(observation: &Observation) -> TestResult<u64> {
     )
 }
 
+fn verify_analysis_preserves_machine(
+    client: &mut Client,
+    before: &Message,
+    window: Option<MemoryWindow>,
+) -> TestResult {
+    let key = observed(before)?.key;
+    // Analysis is independent of the loaded guest, including failed requests.
+    for (target, bytes) in [
+        (Target::X86_64, vec![0x48, 0xff, 0xc0]),        // INC RAX
+        (Target::Aarch64, vec![0x00, 0x04, 0x00, 0x91]), // ADD X0,X0,#1
+    ] {
+        let valid = client.request(
+            Command::Analyze {
+                target,
+                base: address(0x8000),
+                bytes,
+            },
+            None,
+        )?;
+        assert!(matches!(valid.response.result, Reply::Analyzed(_)));
+        assert!(valid.payloads.is_empty());
+        let invalid = client.request(
+            Command::Analyze {
+                target,
+                base: address(0x8000),
+                bytes: vec![],
+            },
+            None,
+        )?;
+        assert!(
+            matches!(invalid.response.result, Reply::Error(error) if error.code == DiagnosticCode::Decode)
+        );
+    }
+    let after_analysis = execute(client, key, SessionAction::Observe { memory: window })?;
+    let expected = observed(before)?;
+    let after = observed(&after_analysis)?;
+    assert_eq!(after.key, expected.key);
+    assert_eq!(after.status, expected.status);
+    assert_eq!(after.registers, expected.registers);
+    assert_eq!(after.instructions, expected.instructions);
+    assert_eq!(after.dispatches, expected.dispatches);
+    assert_eq!(after.fault, expected.fault);
+    assert_eq!(after_analysis.payloads, before.payloads);
+    Ok(())
+}
+
 #[test]
 fn both_guests_preserve_session_identity_observation_order_and_reset() -> TestResult {
     for (target, source) in [
@@ -131,6 +177,7 @@ fn both_guests_preserve_session_identity_observation_order_and_reset() -> TestRe
             let memory = execute(client, key, SessionAction::Observe { memory: window })?;
             assert_eq!(memory.payloads, [vec![42, 0, 0, 0, 0, 0, 0, 0]]);
             assert_eq!(integer(observed(&memory)?)?, 42);
+            verify_analysis_preserves_machine(client, &memory, window)?;
             let reset = execute(client, key, SessionAction::Reset)?;
             let fresh = observed(&reset)?.key;
             assert_eq!(fresh.session, key.session);

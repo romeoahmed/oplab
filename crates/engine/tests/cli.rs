@@ -1,9 +1,56 @@
-//! CLI and worker operations share the same real assembly implementation.
+//! CLI input, output and error contracts against real engine operations.
 
 mod common;
 
 use object::{Object, ObjectSection};
-use oplab_core::protocol::{Reply, Response};
+use oplab_core::protocol::{DiagnosticCode, Reply, Response};
+
+#[test]
+fn cli_analysis_distinguishes_instruction_errors_from_input_budget_failures()
+-> Result<(), Box<dyn std::error::Error>> {
+    for (target, bytes, destination) in [
+        ("x86_64", &[0xeb, 0xfe][..], 0x1000),
+        ("aarch64", &[0xff, 0xff, 0xff, 0x17][..], 0xffc),
+    ] {
+        let output = common::run(
+            env!("CARGO_BIN_EXE_oplab-cli"),
+            &["analyze", target, "0x1000"],
+            bytes,
+        )?;
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let Reply::Analyzed(facts) = serde_json::from_slice::<Response>(&output.stdout)?.result
+        else {
+            return Err("missing analysis".into());
+        };
+        assert_eq!(
+            facts.branch_target.map(|value| value.address().get()),
+            Some(destination)
+        );
+        for invalid in [vec![], bytes.repeat(2)] {
+            let output = common::run(
+                env!("CARGO_BIN_EXE_oplab-cli"),
+                &["analyze", target, "0x1000"],
+                &invalid,
+            )?;
+            assert!(!output.status.success());
+            assert!(output.stderr.is_empty());
+            assert!(matches!(
+                serde_json::from_slice::<Response>(&output.stdout)?.result,
+                Reply::Error(error) if error.code == DiagnosticCode::Decode
+            ));
+        }
+    }
+    let oversized = common::run(
+        env!("CARGO_BIN_EXE_oplab-cli"),
+        &["analyze", "x86_64", "0x1000"],
+        &[0x90; 16],
+    )?;
+    assert!(!oversized.status.success());
+    assert!(oversized.stdout.is_empty());
+    assert!(!oversized.stderr.is_empty());
+    Ok(())
+}
 
 #[test]
 fn cli_assembles_both_targets_and_reports_guest_bytes() -> Result<(), Box<dyn std::error::Error>> {

@@ -15,7 +15,7 @@ Svelte workbench → Tauri supervisor → isolated worker
 | Location                      | Responsibility                                                                             |
 | ----------------------------- | ------------------------------------------------------------------------------------------ |
 | `crates/core`                 | Validated domain types, memory/execution policy and wire contracts; no native dependencies |
-| `crates/engine`               | Assembly, linking, decoding, loading, sessions, worker and CLI                             |
+| `crates/engine`               | Assembly, linking, decoding/analysis, loading, sessions, worker and CLI                    |
 | `src-tauri`                   | Window-scoped commands, worker supervision, bounded delivery and user-selected file I/O    |
 | `src/lib/workbench`           | Document controller, editor, machine, memory and instruction presentation                  |
 | `src/lib/desktop`             | Sole frontend entry to Tauri; no native execution in browser preview                       |
@@ -59,7 +59,7 @@ src/
     workbench/                # Composition, controller, scratch and preferences
       editor/                 # CodeMirror component, CSS and language support
       machine/                # Machine/register/memory views and initial viewport
-      instructions/           # Static byte windows and bounded disassembly
+      instructions/           # Byte windows, disassembly and static analysis
   routes/                     # SvelteKit entry points
 src-tauri/                    # Native application and supervisor
 static/                       # Application icon master
@@ -74,8 +74,8 @@ xtask/                        # Repository tooling
 Use `PascalCase.svelte` for components, lowercase TypeScript/CSS module names, and
 `.svelte.ts` only for modules using Svelte runes. Name files for their responsibility:
 `scratch.ts` validates draft recovery, `editor/language.ts` supplies lexical assistance,
-and `machine/memory.ts` selects a memory viewport. `ToolbarAction.svelte` identifies
-its toolbar role. Avoid generic `utils`, `shared` or `components` buckets.
+and `machine/memory.ts` selects a memory viewport. Avoid generic `utils`, `shared`
+or `components` buckets.
 
 Rust modules use `snake_case.rs` with child modules in a sibling directory; module
 entry points have explicit names such as `worker.rs` and `supervisor.rs`. Integration
@@ -129,12 +129,10 @@ and [TypeScript's functional guidance](https://www.typescriptlang.org/docs/handb
 | clap                                        | Typed CLI/xtask arguments and generated help                                                |
 | Proptest, fast-check, Vitest Browser        | Domain invariants and real-browser component behavior                                       |
 
-The direct MC boundary avoids reconstructing standard object/linker behavior around
-an instruction emitter. Inkwell/llvm-sys primarily expose IR and LLVM's C API;
-they do not replace MC's C++ interfaces. There is one assembly backend, without
-Keystone or competing fallbacks. Dependency changes must remove real complexity,
-fit the contract, and be checked against maintained official documentation and
-resolved source. Root manifests own requirements; lockfiles own exact resolutions.
+LLVM MC's C++ interface owns assembly; Oplab does not reconstruct object/linker
+behavior around an instruction emitter. Dependency changes must remove real
+complexity and fit the contract. Check official documentation and resolved source;
+root manifests own requirements and lockfiles own exact resolutions.
 
 ## Interface
 
@@ -182,14 +180,33 @@ acceptance; Vite does not polyfill missing Web APIs. Follow
 JetBrains Mono defaults to 14px with ligatures disabled; preferences allow system
 monospace, 12–22px, wrapping and panel proportions. Settings do not enumerate local
 fonts. Focus mode hides inspectors without unmounting the editor or disconnecting
-the worker. Narrow layouts, zoom, visible focus and reduced motion require visual
-and keyboard acceptance.
+the worker. The initial window is 1440×900 logical pixels, with Tauri's native
+`preventOverflow` fitting it to the monitor work area; the minimum remains 880×600.
+The machine panel defaults to 28% width and keeps the full workspace height. The
+observation panel defaults to 36% of the viewport height, with minimum row sizes
+protecting both it and the editor. Saved proportions remain in effect; Reset layout
+restores only panel sizes. Narrow layouts, zoom, visible focus and reduced motion
+require visual and keyboard acceptance.
 
-The observation area includes static instruction inspection. Planned expansion
-adds multiple documents and coordinated instructions in the center, watches on the
-right, and diagnostics/traces below. Introduce navigators only when collections
-exist, and coordinate source/instruction selection through real provenance. Do not
-add inert controls or empty views for planned capabilities. The layout draws on
+Instruction inspection uses a [Svelte-derived](https://svelte.dev/docs/svelte/$derived)
+input identity to invalidate pages and selections when bytes, target, base or
+connection change, including changes back to earlier values. Per-field derivation
+keeps unrelated prop updates from replacing that identity. Selection and retry
+events own requests; a new decode explicitly clears the previous selection. The
+keyed analysis component delegates pending, error and result presentation to
+Svelte's await block. Locale changes retain the request and result.
+Analysis uses decoder facts independently of machine observations.
+
+Source selection and decode controls share a wrapping toolbar. List and analysis
+scroll independently in wide panels. Below 760px of content width, a native CSS
+container query gives analysis the panel; Close restores the existing list and
+controls without another decode.
+
+Planned expansion adds multiple documents and coordinated instructions in the center,
+watches on the right, and diagnostics/traces below. Introduce navigators when
+collections exist and coordinate source/instruction selection through verified
+provenance. Do not add inert controls or empty views for planned capabilities.
+The layout draws on
 [VS Code](https://code.visualstudio.com/docs/getstarted/userinterface) and
 [Binary Ninja](https://docs.binary.ninja/guide/index.html) while keeping this workflow compact.
 

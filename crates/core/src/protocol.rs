@@ -1,5 +1,6 @@
 //! Versioned wire values. Deserialization validates scalars; operations validate semantics.
 
+pub mod analysis;
 pub mod desktop;
 pub mod execution;
 pub mod frame;
@@ -99,6 +100,15 @@ pub enum Command {
         /// Upper bound on returned instructions.
         limit: u32,
     },
+    /// Analyze exactly one complete instruction without observing or changing a machine.
+    Analyze {
+        /// Guest instruction set.
+        target: Target,
+        /// Instruction address, used for relative destinations.
+        base: HexAddress,
+        /// Exact instruction bytes: 1–15 for `x86_64`, exactly four for `AArch64`.
+        bytes: Vec<u8>,
+    },
     /// Bind a standard ELF image, supplied in binary frames after this request.
     Load {
         /// Current session to replace; null requires no active session.
@@ -162,6 +172,8 @@ pub enum Reply {
     AssemblyCancelled(Counter),
     /// A bounded sequence of instructions.
     Decoded(Vec<DecodedInstruction>),
+    /// Static decoder facts for the requested instruction.
+    Analyzed(Box<analysis::InstructionAnalysis>),
     /// One coherent observation; optional memory follows as binary frames.
     Observed(Box<Observation>),
     /// The selected session was dropped on its owning thread.

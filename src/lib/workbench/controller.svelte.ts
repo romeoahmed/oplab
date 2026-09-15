@@ -11,6 +11,7 @@ import {
 import type { Artifact } from '$lib/protocol/generated/Artifact';
 import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
+import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
 import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
 import type { Diagnostic } from '$lib/protocol/generated/Diagnostic';
 import type { DiagnosticCode } from '$lib/protocol/generated/DiagnosticCode';
@@ -303,12 +304,26 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       },
     });
     lifetime.signal.throwIfAborted();
-    if (message.response.result.type === 'error') {
-      const failure = message.response.result.data;
-      throw new RequestError(failure.code, failure.address);
-    }
-    if (message.response.result.type !== 'decoded') throw new RequestError('protocol');
-    return message.response.result.data;
+    const result = message.response.result;
+    if (result.type === 'error') throw new RequestError(result.data.code, result.data.address);
+    if (result.type !== 'decoded') throw new RequestError('protocol');
+    return result.data;
+  }
+  async function analyze(
+    bytes: Uint8Array,
+    guest: Target,
+    address: string,
+  ): Promise<InstructionAnalysis> {
+    if (port === null || !connected) throw new RequestError('unavailable');
+    const message = await port.request({
+      type: 'analyze',
+      data: { target: guest, base: normalizeAddress(address), bytes: Array.from(bytes) },
+    });
+    lifetime.signal.throwIfAborted();
+    const result = message.response.result;
+    if (result.type === 'error') throw new RequestError(result.data.code, result.data.address);
+    if (result.type !== 'analyzed') throw new RequestError('protocol');
+    return result.data;
   }
   function completionAddress(artifact: Artifact): string {
     if (/^(?:0x)?[\da-f]+$/i.test(completion.trim())) return normalizeAddress(completion);
@@ -434,6 +449,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   }
   return {
     decode,
+    analyze,
     get source() {
       return source;
     },

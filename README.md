@@ -22,16 +22,16 @@ The interface is available in English and Simplified Chinese.
 - **Execute:** Load, step, run, pause, stop and reset an isolated Unicorn session.
   Source edits stay separate from the loaded program.
 - **Inspect:** Integer registers, flags, memory and artifact metadata; bounded
-  disassembly of imported machine code or individual ELF segments.
+  disassembly of imported machine code or individual ELF segments. Select an
+  instruction for static register/memory effects, control flow and architecture metadata.
 - **Files:** Import/export UTF-8 assembly and exact machine bytes; export complete
   ELF objects and images through native dialogs.
 - **Adjust:** Self-hosted JetBrains Mono or system monospace, font size, wrapping,
   panel proportions and focus mode; local draft/settings recovery.
 
-The core desktop loop is implemented. Source-to-instruction mapping, editable machine
-setup and multiple documents remain planned. Imported raw bytes can be inspected;
-they do not yet have an execution setup. The CLI builds and decodes; it does not
-yet execute programs. See the [current scope](docs/roadmap.md).
+Source-to-instruction mapping, editable machine setup, multiple documents and CLI
+execution remain planned. Imported raw bytes support inspection only; execution
+loads an assembled ELF image. See the [current scope](docs/roadmap.md).
 
 ## Get started
 
@@ -53,7 +53,7 @@ Vite server, then run:
 pnpm tauri dev
 ```
 
-The normal Tauri hooks build/stage the worker and start the frontend automatically.
+Tauri hooks build and stage the worker and start the frontend automatically.
 Both guests have been exercised in an Apple Silicon macOS debug app. Windows/Linux
 and independently installed/signed distributions remain release gates; a local
 bundle may still depend on installed LLVM/LLD shared libraries.
@@ -91,7 +91,7 @@ language catalogs and the documentation when behavior changes.
 | ------------------------------------ | ----------------------------------------------------------------- |
 | [Development](docs/development.md)   | Build requirements, native discovery, commands, outputs and icons |
 | [Architecture](docs/architecture.md) | Repository layout, ownership, technology and interface            |
-| [Engine](docs/engine.md)             | Assembly, ELF loading and execution semantics                     |
+| [Engine](docs/engine.md)             | Assembly, instruction analysis, ELF loading and execution         |
 | [Protocol](docs/protocol.md)         | Framing, sessions, subscriptions, supervision and CLI             |
 | [Testing](docs/testing.md)           | Test design, browser/native acceptance and evidence limits        |
 | [Roadmap](docs/roadmap.md)           | Implemented work, next capabilities and release gates             |

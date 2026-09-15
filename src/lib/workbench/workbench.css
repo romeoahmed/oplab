@@ -242,7 +242,7 @@
 .workspace-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(285px, var(--inspector-width));
-  grid-template-rows: minmax(180px, 1fr) minmax(160px, var(--memory-height));
+  grid-template-rows: minmax(220px, 1fr) minmax(220px, var(--memory-height));
   flex: 1;
   min-block-size: 0;
 }
@@ -1008,7 +1008,6 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 8px 18px 0;
   font-size: 12px;
   color: var(--muted);
 

@@ -1,7 +1,8 @@
 # Engine contract
 
-Assembly, decoding, loading and execution are separate capabilities. LLVM accepting
-an instruction does not establish decoder coverage or Unicorn execution support.
+Assembly, instruction inspection, loading and execution are separate capabilities.
+LLVM accepting an instruction does not establish decoder coverage or Unicorn
+execution support.
 This document defines the implemented engine; [roadmap](roadmap.md) tracks additions.
 
 ## Assembly
@@ -119,15 +120,74 @@ exact `p_filesz` extent, up to 1 MiB. Exports retain the entire extent; decode
 requests take at most 64 KiB from the chosen offset. This window exceeds 256
 maximum-length instructions on either target, so paging cannot truncate an
 instruction before the page limit. The view lists segment permissions and
-initially prefers an executable segment. It
-never concatenates disjoint segments, synthesizes BSS/padding, infers boundaries
-from symbols or reconstructs bytes from formatted text. ELF headers and embedded
-data remain data even if a decoder recognizes their bytes as instructions.
+initially prefers an executable segment. It never concatenates disjoint segments,
+synthesizes BSS/padding, infers boundaries from symbols or reconstructs bytes from
+formatted text. ELF headers and embedded data remain data even if a decoder
+recognizes their bytes as instructions.
 
 Imported bytes use the selected architecture and base; ELF bytes retain their build
-identity. Changing bytes, target or base invalidates the visible decode result.
+identity. Changing bytes, target, base or connection invalidates the visible decode
+result, even if the previous values are restored.
 These are static file bytes, not a live machine view or verified source mapping.
-Static effects, raw-code loading and broader ISA coverage remain planned.
+Select an instruction for a separate, bounded analysis request. Lists remain
+lightweight; changing the input or page removes the selection and its pending
+result. Locale and panel changes retain the current analysis.
+
+### Static analysis
+
+`decode::analyze` accepts exactly one instruction: 1–15 bytes for x86_64 or four
+bytes for AArch64. Trailing bytes, invalid encodings, misalignment and wrapping
+input ranges fail. Relative destinations retain the architecture's 64-bit wrapping
+arithmetic; they need not lie inside the input range or mapped memory. Analysis
+reads no machine state and changes no session.
+
+- x86 uses [iced-x86 instruction information](https://docs.rs/iced-x86/latest/iced_x86/struct.InstructionInfoFactory.html):
+  explicit/implicit register accesses, conditional accesses, memory widths,
+  control flow, direct destinations, CPUID identifiers and privileged classification.
+  Computed, cleared, set and undefined flags remain distinct. Save/restore
+  instructions explicitly mark their register list incomplete.
+- AArch64 uses [Capstone detail](https://docs.rs/capstone/latest/capstone/struct.InsnDetail.html):
+  reported register reads/writes, relative destinations, groups, NZCV updates and
+  base writeback. Register names retain backend aliases such as `lr`.
+- AArch64 memory operands have **unknown access direction and width**. The current
+  operand API has no width, and its access flags can conflate memory effects and
+  base writeback: `STR X0,[X1,#8]!` reports ReadWrite. Oplab does not expose that as
+  a data read or repair metadata with a handwritten opcode table. Literal loads
+  may have no memory operand in this API. An empty list is not proof of no access.
+
+Access lists contain reported data reads/writes, including conditional accesses.
+Unknown access is distinct from an absent entry. iced-x86 omits operands classified
+as `None` or [`NoMemAccess`](https://docs.rs/iced-x86/latest/iced_x86/enum.OpAccess.html#variant.NoMemAccess)
+from its used-access lists; Oplab does not turn them into unknown data accesses.
+This classification is backend-specific, not a complete inventory of cache or
+translation effects. Memory sizes describe operands, not measured traffic, total
+REP traffic or cache-line extents. Address expressions, branch conditions and
+effective addresses are not evaluated. A null
+branch target may mean indirect control or an unreported destination, not fallthrough.
+Aliases, system behavior, partial state and unreported effects prevent treating
+this metadata as a complete ISA model.
+It does not establish source provenance or retire-time effects.
+
+### Verified capability samples
+
+The analysis suite compares LLVM output with fixed architectural encodings and
+checks the available decoder metadata. These are representative instructions,
+not blanket extension-support claims. Exact dependency releases remain in lockfiles.
+
+| Guest / sample                                           | Assembly and recognition             | Static metadata                                                              | Execution evidence                                       |
+| -------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------- |
+| x86_64 integer arithmetic, branches and stack operations | Verified                             | Registers, memory, flags and control flow                                    | Existing integer/session tests; stack policy is explicit |
+| x86_64 SSE2 `PXOR`                                       | Verified                             | SSE2 tag and register effects                                                | Not verified by this matrix                              |
+| x86_64 AVX `VADDPS`                                      | Verified                             | AVX tag and register effects                                                 | Not verified by this matrix                              |
+| AArch64 integer arithmetic, branches and writeback       | Verified                             | Registers, flags, destinations and writeback; memory direction/width unknown | Existing integer/session tests                           |
+| AArch64 Advanced SIMD `ADD`                              | Verified                             | NEON group                                                                   | Not verified by this matrix                              |
+| AArch64 crypto `AESE`                                    | Verified with `.arch armv8-a+crypto` | Crypto group                                                                 | Not verified by this matrix                              |
+| AArch64 SVE `PTRUE`                                      | Verified with `.arch armv8-a+sve`    | No SVE group returned by the current backend                                 | Not verified by this matrix                              |
+
+CPUID identifiers describe x86 decoder requirements. Capstone groups are a different,
+incomplete taxonomy; no groups does not mean no extension is required. Neither
+selects an emulator CPU or guarantees execution. Raw-code loading, broader ISA
+coverage and an execution capability matrix remain planned.
 
 ## Loading
 

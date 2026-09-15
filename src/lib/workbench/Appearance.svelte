@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Popover } from 'bits-ui';
-  import { SlidersHorizontal, X } from '@lucide/svelte';
+  import { RotateCcw, SlidersHorizontal, X } from '@lucide/svelte';
   import type { Locale } from '$lib/paraglide/runtime';
   import { defaultPreferences, type Preferences } from './preferences';
   import * as m from '$lib/paraglide/messages.js';
@@ -63,6 +63,15 @@
               >{preferences.memoryHeight}%</output
             ></span
           ></label
+        >
+        <button
+          type="button"
+          disabled={preferences.inspectorWidth === defaultPreferences.inspectorWidth &&
+            preferences.memoryHeight === defaultPreferences.memoryHeight}
+          onclick={() => {
+            preferences.inspectorWidth = defaultPreferences.inspectorWidth;
+            preferences.memoryHeight = defaultPreferences.memoryHeight;
+          }}><RotateCcw size={14} aria-hidden="true" />{m.reset_layout({}, options)}</button
         >
       </div>
       <p class="muted-note">{m.appearance_hint({}, options)}</p>

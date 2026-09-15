@@ -1,4 +1,4 @@
-//! Machine-readable assembly and decoding CLI using the worker's operation semantics.
+//! Machine-readable assembly and instruction inspection through the worker's operations.
 
 use clap::Parser;
 use oplab_core::{
@@ -16,9 +16,9 @@ use std::{
     process::ExitCode,
 };
 
-/// Assemble standard ELF images or decode raw guest machine code from stdin.
+/// Assemble ELF images, disassemble machine code or analyze an instruction from stdin.
 #[derive(clap::Parser)]
-#[command(version, about)]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
     operation: Operation,
@@ -32,6 +32,8 @@ enum Operation {
     Assemble(Input),
     /// Read machine code and write decoded instructions as JSON.
     Decode(Input),
+    /// Read exactly one instruction and write its static analysis as JSON.
+    Analyze(Input),
 }
 
 #[derive(clap::Args)]
@@ -127,6 +129,11 @@ fn run(operation: Operation) -> Result<transport::Message, &'static str> {
             },
             source: String::from_utf8(read_input(MAX_SOURCE_BYTES)?)
                 .map_err(|_| "source must be UTF-8")?,
+        },
+        Operation::Analyze(input) => Command::Analyze {
+            target: input.target.into(),
+            base: HexAddress::new(input.base),
+            bytes: read_input(15)?,
         },
         Operation::Decode(input) => Command::Decode {
             target: input.target.into(),

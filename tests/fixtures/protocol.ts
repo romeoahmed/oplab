@@ -1,5 +1,6 @@
 import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
+import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
 import type { Observation } from '$lib/protocol/generated/Observation';
 import type { WorkerPort } from '$lib/desktop/worker';
 
@@ -62,3 +63,20 @@ export function assembled(identity: BuildIdentity): Awaited<ReturnType<WorkerPor
     payloads: [new Uint8Array([1]), new Uint8Array([2])],
   };
 }
+
+/** Static x86 NOP facts; fixtures never infer instruction behavior. */
+export const nopAnalysis = {
+  registers: [],
+  memory: [],
+  branch_target: null,
+  architecture: {
+    type: 'x86',
+    data: {
+      flow: 'next',
+      cpuid: ['X64'],
+      privileged: false,
+      registers_incomplete: false,
+      flags: { read: [], written: [], cleared: [], set: [], undefined: [] },
+    },
+  },
+} satisfies InstructionAnalysis;

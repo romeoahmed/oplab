@@ -472,21 +472,6 @@
             />
           </Tabs.Content>
           <Tabs.Content value="instructions" class="instructions-content">
-            {#if byteSources.length > 0}<label class="byte-source"
-                >{m.byte_source({}, options)}
-                <select
-                  value={selectedBytes?.id}
-                  onchange={(event) => {
-                    byteSource = event.currentTarget.value;
-                  }}
-                >
-                  {#each byteSources as item (item.id)}<option value={item.id}>{item.label}</option
-                    >{/each}
-                </select>
-                {#if selectedBytes?.id !== 'imported' && !work.artifactCurrent}<span class="stale"
-                    >{m.artifact_stale({}, options)}</span
-                  >{/if}
-              </label>{/if}
             <Instructions
               bytes={selectedBytes?.bytes}
               target={selectedBytes?.target ?? work.target}
@@ -494,7 +479,27 @@
               connected={work.connected}
               locale={language.current}
               decode={work.decode}
-            />
+              analyze={work.analyze}
+            >
+              {#snippet source()}
+                {#if byteSources.length > 0}<label class="byte-source"
+                    >{m.byte_source({}, options)}
+                    <select
+                      value={selectedBytes?.id}
+                      onchange={(event) => {
+                        byteSource = event.currentTarget.value;
+                      }}
+                    >
+                      {#each byteSources as item (item.id)}<option value={item.id}
+                          >{item.label}</option
+                        >{/each}
+                    </select>
+                    {#if selectedBytes?.id !== 'imported' && !work.artifactCurrent}<span
+                        class="stale">{m.artifact_stale({}, options)}</span
+                      >{/if}
+                  </label>{/if}
+              {/snippet}
+            </Instructions>
           </Tabs.Content>
           <Tabs.Content value="artifact" class="artifact-content">
             {#if work.candidate === null}<div class="empty-observation">

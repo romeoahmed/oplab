@@ -190,12 +190,10 @@ build/dev command. Use `cargo xtask --help` and subcommand help for options. Foc
 runs use native tool arguments, such as `pnpm test --project logic`,
 `pnpm test --project browser`, or `cargo test -p oplab-core --locked`.
 
-Verification commands may compile dependencies, refresh ignored generated files
-and stage ignored binaries. They do not update lockfiles, format tracked source
-or change Git staging.
-Use one Vite server per checkout. Frontend and catalog changes use HMR; engine
-changes require worker staging and an app restart. Tauri's watcher does not rebuild
-the independent worker automatically.
+Check/test commands may compile dependencies, refresh ignored generated files
+and stage ignored binaries. They preserve lockfiles, tracked source and Git staging.
+Frontend and catalog changes use HMR; engine changes require worker staging and
+an app restart. Tauri's watcher does not rebuild the independent worker automatically.
 
 ## API documentation
 
@@ -241,8 +239,8 @@ pnpm tauri build --debug --bundles app
 The worker's transitive LLVM/LLD shared libraries are **not automatically bundled
 by declaring `externalBin`**. Local debug success can depend on installed native
 libraries. Inspect native dependencies and implement target-specific bundling,
-loader paths, licensing and signing/JIT policy before distributing an installer.
-No signed or independently installed distribution is currently verified.
+loader paths, licensing and signing/JIT policy before distribution. See the
+[release gates](roadmap.md#release-gates).
 
 ## Configuration and assets
 

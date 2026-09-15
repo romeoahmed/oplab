@@ -12,8 +12,8 @@ export const defaultPreferences: Preferences = {
   font: 'jetbrains',
   fontSize: 14,
   wrap: false,
-  inspectorWidth: 30,
-  memoryHeight: 28,
+  inspectorWidth: 28,
+  memoryHeight: 36,
 };
 
 /**

@@ -1,8 +1,8 @@
 # Worker protocol
 
-The isolated worker provides negotiation, assembly, decoding, ELF loading, execution,
-coherent observations and shutdown. Rust declarations in `oplab-core::protocol`
-are authoritative; `cargo xtask codegen [--check]` exports or verifies the committed
+The isolated worker provides negotiation, assembly, instruction inspection, ELF
+loading, execution, coherent observations and shutdown. Rust declarations in
+`oplab-core::protocol` are authoritative; `cargo xtask codegen [--check]` exports or verifies the committed
 TypeScript declarations. [Engine](engine.md) owns machine semantics and artifact limits.
 
 ## Framing
@@ -89,6 +89,37 @@ command. It polls between slices, advances after servicing commands, and blocks
 when stopped. Shutdown/EOF disconnect and join the owner. A native hang requires
 the desktop supervisor, not a detached replacement thread.
 
+## Instruction inspection
+
+`decode` supplies a target, canonical base address, 1–65,536 bytes and an instruction
+limit of 1–4,096. Its JSON-only `decoded` reply contains each instruction's address,
+original bytes and display text. Invalid or incomplete instructions before the
+limit fail the whole request; no partial prefix is returned. Bytes beyond the
+limit are not decoded. Consumers advance by returned byte lengths, not row counts.
+
+Both `decode` and `analyze` carry bytes as JSON arrays, not trailing binary frames.
+Input ranges cannot wrap; AArch64 base addresses must be four-byte aligned.
+
+### Static analysis
+
+`analyze` supplies a target, canonical base address and the exact bytes of one
+instruction (1–15 for x86_64, four for AArch64). Unlike `decode`, it does not accept
+an instruction stream or a row limit. Invalid/trailing input receives a correlated
+`decode` diagnostic; successful `analyzed` replies carry JSON only.
+
+`InstructionAnalysis` retains register aliases, conditional access categories,
+optional memory widths and direct destinations. Its architecture union preserves
+x86 CPUID/flag/control facts separately from AArch64 groups/flags/writeback.
+Unknown access is distinct from an absent entry. Missing metadata does not establish
+that an effect is absent; see the
+[analysis limitations and capability samples](engine.md#static-analysis).
+
+Requests carry no session key. Consumers associate each response with its input
+and selection; invalidated responses must not replace the current view. Analysis
+results neither change the loaded machine nor establish source locations. The
+[frontend ownership rules](architecture.md#interface) define presentation
+and locale retention.
+
 ## Subscriptions
 
 `subscribe` supplies an exact key and optional memory window. Its request ID becomes
@@ -141,7 +172,8 @@ The dispatcher admits one active build and up to eight pending builds, one per
 document. A newer valid pending build replaces its predecessor with `superseded`;
 it does not implicitly cancel active work. Invalid input cannot replace valid work.
 A full pending queue rejects a new document with `resource_limit`, while replacement
-for an already queued document remains possible. Controls/decoding do not await assembly.
+for an already queued document remains possible. Controls and instruction inspection
+do not await assembly.
 
 `cancel_assembly` names an outstanding request. If cancellation wins publication,
 the original receives `cancelled` and the cancel request receives `assembly_cancelled`
@@ -156,14 +188,15 @@ The writer chooses whole messages in this order:
 
 1. Control replies and errors.
 2. Paused/terminal observations and capture failures.
-3. Bulk artifacts, decoded windows and memory-bearing Ready/Running replies.
+3. Bulk artifacts, decoded windows, instruction analyses and memory-bearing Ready/Running replies.
 4. Ready/Running subscription samples.
 
 An in-flight message finishes first. Priority does not imply a hard latency guarantee.
 Other bulk traffic cannot consume a build reservation. Without an unreserved slot,
-a decode/memory-read result becomes a correlated `resource_limit` error; a completed
-capture can therefore leave a sequence gap. Builds wait for capacity while controls
-remain serviceable. Writer wakeups never block behind a full inbound queue.
+a decode/analysis/memory-read result becomes a correlated `resource_limit` error;
+a completed capture can therefore leave a sequence gap. Builds wait for capacity
+while controls remain serviceable. Writer wakeups never block behind a full
+inbound queue.
 
 Control saturation applies backpressure instead of dropping outcomes. Clients must
 drain output while submitting work. Writer loss wakes producers with failure.
@@ -216,15 +249,18 @@ transport; application credit supplies the bound.
 ## CLI
 
 The clap CLI shares engine operations. `assemble` reads source from stdin and writes
-only linked ELF to stdout; operation failures leave stdout empty and emit a structured
-JSON diagnostic to stderr. `capabilities` and `decode` write newline-terminated JSON.
+only linked ELF to stdout; engine failures leave stdout empty and write a JSON
+diagnostic to stderr. `capabilities`, `decode` and `analyze` write newline-terminated
+JSON responses, including engine errors, to stdout. Input read, size and encoding
+failures occur before the operation and write a static message to stderr.
 Help/version and argument validation run before stdin reads. Usage errors exit 2;
-operation failures also exit nonzero.
+all other failures exit nonzero.
 
 ```sh
 cargo run --locked -p oplab-engine --bin oplab-cli -- capabilities
 cargo run --locked -p oplab-engine --bin oplab-cli -- assemble x86_64 0x1000 < experiment.s > experiment.elf
 cargo run --locked -p oplab-engine --bin oplab-cli -- decode aarch64 0x1000 < code.bin
+cargo run --locked -p oplab-engine --bin oplab-cli -- analyze x86_64 0x1000 < instruction.bin
 ```
 
 CLI addresses accept ordinary hexadecimal input, including `0x1000` and `0XFF`.
@@ -235,9 +271,9 @@ execution is available through the engine and framed worker.
 
 `import_file` and `export_file` use the Tauri command boundary independently of the
 worker's binary stream. `FileFormat` is generated from Rust alongside the other
-frontend contracts.
-Source is valid UTF-8 up to 256 KiB. Raw binary files and complete ELF exports
-contain 1 byte to 1 MiB. The file budget is independent of the 64 KiB decode-request budget.
+frontend contracts. Source is valid UTF-8 up to 256 KiB. Raw binary files and
+complete ELF exports contain 1 byte to 1 MiB. The file budget is independent of
+the 64 KiB decode-request budget.
 
 Dialogs select each path explicitly. Frontend callers supply a localized title and
 format, and receive contents or cancellation, never host paths. Errors are stable

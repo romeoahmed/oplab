@@ -2,9 +2,9 @@
 
 Tests should establish behavior, independent architectural facts and invariants.
 Prefer the smallest test at the boundary that can detect a meaningful regression.
-Do not freeze incidental DOM structure, object identity, zero-storage representation,
-independent reply order or formatter output. Test counts and coverage percentages
-are diagnostic information, not acceptance targets.
+Do not freeze DOM structure, object identity, internal storage, independent reply
+order or formatter output. Test counts and coverage percentages are diagnostic
+information, not acceptance targets.
 [Development](development.md#commands-and-ownership) owns command recipes;
 [roadmap](roadmap.md#verification) owns dated results and outstanding gates.
 
@@ -39,6 +39,7 @@ implementation in the expected result or merely round-trip two production helper
 | Memory access              | Complete containment in one mapping and a permission bit-set model                                                                 |
 | Framing                    | Published little-endian headers, binary chunk boundaries, arbitrary pipe fragmentation and truncated input                         |
 | ELF loading                | Hand-built ELF64 headers, page envelopes, file bytes and observed zero-fill                                                        |
+| Instruction analysis       | Fixed effects, generated MOV/signed-branch operands, full-width destinations and independent extension encodings                   |
 | Guest execution            | Generated add/subtract/XOR programs compared with wrapping `u32` arithmetic on both guests                                         |
 | Build scheduling           | Latest valid request per document, cancellation and exactly-once delivery without assuming unrelated reply order                   |
 | Observations               | Generated full/delta histories, independent complete samples, exact counters, retained baselines and stale identities              |
@@ -53,9 +54,8 @@ protocol boundaries use deterministic examples, not random selection from a shor
 list of constants. File-budget tests state the documented limits independently of
 production constants; file I/O properties use standard filesystem reads/writes as
 the oracle in each direction. Native program generation has a lower case count
-than pure logic; it still executes real LLVM/Unicorn work. Repeated runs must
-explore new inputs rather than permanently
-pinning every property to one seed.
+than pure logic; it still executes real LLVM/Unicorn work. Repeated runs explore
+new inputs rather than pinning every property to one seed.
 
 For a failure, preserve the minimized input and the printed replay information.
 [Proptest persists regressions](https://proptest-rs.github.io/proptest/proptest/failure-persistence.html);
@@ -66,11 +66,20 @@ Do not ignore failures, retry until green or weaken a contract to accommodate a 
 ## Effects and fixtures
 
 Frontend feature tests mirror `src/lib` ownership; editor and machine tests live
-under their corresponding `tests/workbench` subdirectories. Shared DTO factories
+under their corresponding `tests/workbench` subdirectories. Shared DTO fixtures
 live in `tests/fixtures/protocol.ts`; they supply data rather than implementing a
 second worker or emulator. Browser ports reject unexpected commands. A component
 fixture proves the frontend's use of a contract, while actual process tests prove
 that the native implementation fulfills it.
+
+Instruction analysis compares fixed encodings and generated operands with
+architectural facts, including signed displacements, address wraparound and AArch64
+bit-test branches with multiple immediate operands. Real worker tests verify that
+analysis of either architecture, including rejected input, preserves the loaded
+guest's registers, memory, status and execution counters. The
+[capability samples](engine.md#verified-capability-samples) establish assembly and
+recognition evidence, not extension execution support. Allow improved backend
+metadata without freezing known omissions into the expected behavior.
 
 Use white-box tests only where deterministic control adds evidence: holding a native
 job at the handoff, returning output capacity, coalescing unsent samples and losing
@@ -98,32 +107,36 @@ and [Playwright best practices](https://playwright.dev/docs/best-practices): use
 semantic locators, real input and awaited visible outcomes. Use the renderer's
 [automatic cleanup](https://vitest.dev/api/browser/svelte) and clear storage between
 cases; explicitly unmount only when testing lifecycle behavior.
+Parameterize independent outcomes instead of mounting multiple cases in one test.
+Settle injected promises and [Svelte updates](https://svelte.dev/docs/svelte/svelte#settled)
+before asserting that stale UI is absent; a negative assertion alone can pass too early.
 Read accessible names from the locale catalogs. Do not snapshot translations or
 hard-code product wording in assertions; copy edits must not break behavior tests.
 
-Coverage includes locale changes with retained text/history/search, late builds,
-corrupt scratch reattachment, actual draft unmount/reopen, appearance/focus mode,
-completion/comment commands and native disabled controls. Diagnostic cases cover
-Unicode navigation, language changes and rejection of late build failures. Focused
-`Files` tests cover exact export payloads, unavailable actions, cancellation,
-read/write/encoding failures, retries, import conflicts and unmounted callbacks.
-The workbench file flow verifies source reaches assembly unchanged and raw-byte
-inspection stays separate from machine loading. Instruction tests use variable-length
-instructions to distinguish byte advancement from row counting, preserve failure
-categories, and reject pending successes/errors after bytes, architecture, base or
-connection changes. Native offset validation and panel/locale retention are exercised
-through user controls. The execution flow verifies that assembling does not load,
-loading does not run, ELF completion metadata reaches the load request, and a
-rejected reset retains the displayed machine. Further
-keyboard/screen-reader acceptance, including toolbar focus when all actions begin
-disabled, remains open. Use Bits UI
-and native semantics; do not add a custom focus framework to satisfy a test.
+Browser coverage follows observable workflows:
+
+- **Editing:** locale, font, wrapping, layout reset and focus-mode changes retain
+  source/history/search; completion, comments and Unicode diagnostic navigation
+  use the real editor. Stale builds cannot annotate current source.
+- **Files and recovery:** draft unmount/reopen, corrupt scratch, exact exports,
+  cancellation, failures, retries, import conflicts and callbacks after unmount.
+  Imported source reaches assembly unchanged; raw bytes remain inspection inputs.
+- **Instructions:** byte-based pagination, native offset validation, explicit
+  analysis/retry, late success/failure, input changes and reversions, locale
+  retention and narrow-panel return without another decode. Re-decoding clears
+  selection. Workbench tests also exercise the complete request/reply adapter.
+- **Execution:** assembly does not load, loading does not run, completion metadata
+  reaches the request, and rejected reset preserves the displayed machine.
+
+Broader keyboard/screen-reader acceptance remains open, including toolbar focus
+when all actions begin disabled. Use Bits UI and native semantics without custom
+focus patches.
 
 Worker ports are explicit component fixtures. They do not establish native IPC,
 ELF validity or actual machine effects. Use browser HMR for visual acceptance at
-1280×820 and the desktop minimum 880×600, then inspect narrow layouts, zoom, both
-languages, long values and keyboard focus. Do not publish synthetic fixture states
-as evidence of native behavior.
+the default 1440×900 and the desktop minimum 880×600, then inspect narrow layouts,
+zoom, both languages, long values and keyboard focus. Do not publish synthetic
+fixture states as evidence of native behavior.
 
 The current Vitest/Vite combination warns that the mocks interceptor's
 `configureServer` hook is ignored. The suite uses explicit ports and passes without
@@ -139,8 +152,9 @@ upstream compatibility verification.
 - **Loading:** sectionless ELF, BSS/padding separation, congruence and permission
   conflicts, unsupported runtime headers, aggregate bounds and the last address page;
   real guest stores cannot write RX pages.
-- **Decoding/CLI:** independent instruction bytes and addresses, bounded complete
-  prefixes, explicit invalid-byte locations, raw-stdin decode and separate usage errors.
+- **Instruction inspection/CLI:** independent instruction bytes and static effects,
+  bounded complete prefixes, exact single-instruction analysis, invalid-byte locations,
+  raw stdin and separate usage errors.
 - **Execution:** canonical registers, flags/alias effects, arithmetic properties,
   whole-REP stepping, instruction budgets, before-effect breakpoints/re-arming,
   reset, coherent memory, fault/environment outcomes and boundary completion.
@@ -163,7 +177,9 @@ For UI changes, verify a fresh static desktop bundle as well as the browser:
    source, navigate to its point and edit to clear it.
 4. Import/export UTF-8 text and raw code; compare exact bytes. Inspect a known ELF
    code segment and imported bytes, change target/base, and verify stale results
-   disappear. File selection/cancellation must not load or run a machine.
+   disappear. Analyze an instruction on each guest, switch locale and verify retained
+   details without changing machine state. File selection/cancellation must not load
+   or run a machine.
 5. Verify fonts, dynamic editor loading, both locales and focus behavior under the
    actual WebView origin/CSP. Test failure/restart when the supervisor changes.
 

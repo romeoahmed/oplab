@@ -64,6 +64,23 @@ export type Command =
       };
     }
   | {
+      type: 'analyze';
+      data: {
+        /**
+         * Guest instruction set.
+         */
+        target: Target;
+        /**
+         * Instruction address, used for relative destinations.
+         */
+        base: HexAddress;
+        /**
+         * Exact instruction bytes: 1–15 for `x86_64`, exactly four for `AArch64`.
+         */
+        bytes: Array<number>;
+      };
+    }
+  | {
       type: 'load';
       data: {
         /**

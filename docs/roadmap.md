@@ -6,8 +6,6 @@ an independently distributable application. Checked items describe implementatio
 
 ## Implemented
 
-- [x] Concise workspace directories, named Rust module entries, editor/machine
-      feature groups and corresponding tests; framework entry points retain defaults.
 - [x] Rust core, engine and desktop boundaries; workspace dependencies/lints, stable
       toolchain, clap CLI/xtask and native Cargo/Vite/Tauri build ownership.
 - [x] Strict Rust/C++/TypeScript/Svelte/CSS checks, formatting, dependency analysis
@@ -22,7 +20,7 @@ an independently distributable application. Checked items describe implementatio
 - [x] Desktop leases, deadlines/RSS monitoring, unknown outcomes, bounded delivery,
       kill/reap and explicit worker recovery.
 - [x] Source/machine/observation interface, stale-build handling, scratch recovery,
-      configuration, appearance, focus mode and adjustable panel proportions.
+      configuration, appearance, focus mode, adjustable panel proportions and layout reset.
 - [x] CodeMirror/Lezer lexical assistance, completion, comment/search/history commands,
       bracket matching and multiple selections; dynamically imported editor.
 - [x] Build-scoped diagnostics, exact UTF-8 to UTF-16 positioning, CodeMirror point
@@ -31,10 +29,10 @@ an independently distributable application. Checked items describe implementatio
       reads and temporary-file replacement; paths stay outside the frontend.
 - [x] Instruction inspection of raw bytes or individual file-backed ELF segments,
       explicit byte offsets, bounded pages and stale-result rejection.
+- [x] On-demand analysis in the workbench, worker and CLI: register/memory metadata,
+      x86 control/flags/CPUID and AArch64 groups/writeback, with explicit metadata limits.
 - [x] English/Simplified Chinese, self-hosted JetBrains Mono/system monospace,
       font size/wrap preferences, native CSS, Bits UI primitives and Lucide icons.
-- [x] Standard component event composition and native disabled controls; no custom
-      focus-management layer. Broader accessibility acceptance remains open.
 - [x] Tests outside production directories, with independent Proptest/fast-check
       oracles, generated guest programs and observation histories, scoped concurrency
       probes and Chromium new-headless workbench flows.
@@ -45,17 +43,18 @@ an independently distributable application. Checked items describe implementatio
 1. **Source provenance:** derive verified MC/DWARF source/instruction relationships,
    including macros, duplicate locations, Unicode, data and padding. Diagnostic
    points are implemented; they are not instruction provenance.
-2. **Instruction analysis:** static effects and a tested target/extension capability
-   matrix. Raw-byte import and bounded disassembly are implemented.
+2. **Execution coverage:** extend the tested guest/extension matrix beyond static
+   recognition; CPU selection, SIMD observations and precise unsupported behavior
+   need explicit contracts.
 3. **Machine setup:** validated initial registers/mappings and explicit raw-code
    loading, alias writes, executable patches and translated-code invalidation.
 4. **CLI execution:** use standard source/binary inputs and explicit machine policy.
-   There is no planned saved-experiment container or machine-state persistence format.
 5. **Workbench expansion:** multiple source documents, coordinated source/instruction
    focus, accessible draggable separators and large-data views as needed.
 
-Files use standard assembly text, raw bytes and ELF. Local scratch/settings recovery
-remains; importing a file never implicitly loads or patches a machine.
+Files use standard assembly text, raw bytes and ELF; no saved-experiment container
+is planned. Local scratch/settings recovery remains. Importing a file never
+implicitly loads or patches a machine.
 
 ## Later capabilities
 
@@ -65,8 +64,8 @@ remains; importing a file never implicitly loads or patches a machine.
 - [ ] Assertions and bounded traces with visible truncation; static effects remain
       distinct from observed execution.
 - [ ] Verified undefined flags, self-modifying code and broader instruction coverage.
-- [ ] Complete snapshots/replay, selected import/export formats, SIMD and optional
-      static performance analysis, each with its own semantics and acceptance gates.
+- [ ] Complete snapshots/replay and optional static performance analysis, each
+      with explicit semantics and acceptance gates.
 
 ## Release gates
 
@@ -88,30 +87,28 @@ work. Browser fixtures and local debug builds do not satisfy distribution gates.
 
 ## Verification
 
-Current evidence is limited to local Apple Silicon macOS development. It does not
-establish Windows/Linux support or signed, independently installed distributions.
+Evidence is limited to Apple Silicon macOS development. Windows/Linux builds and
+signed, independently installed distributions remain unverified.
 
-| Scope             | Latest verified result                                                                                                                                                                                                                                                                           |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Workspace         | `cargo xtask check` and `cargo xtask test` passed on 2026-09-15: 66 Rust unit/integration tests, 2 doctests and 49 frontend tests, including 25 Chromium component cases. Native tests ran with the host access described in the testing guide.                                                  |
-| API documentation | Rustdoc with warnings denied and both executable documentation examples passed on 2026-09-15; generated TypeScript comments match the Rust contracts.                                                                                                                                            |
-| Repository layout | Migrated paths, imports, build configuration and documentation were checked on 2026-09-15; no files were lost and Cargo package/binary names are unchanged.                                                                                                                                      |
-| Frontend          | Static production build passed on 2026-09-15. Visual review covered desktop, minimum-window and narrow layouts, both languages, fonts, wrapping and focus mode.                                                                                                                                  |
-| Desktop           | A fresh debug app built through Tauri's default hooks on 2026-09-15. Both guests assembled, loaded, stepped and stored 42; reset restored state, failed assembly preserved the machine, and a bounded loop paused/stopped. Fonts and the dynamic editor loaded under the application origin/CSP. |
-| Icons             | All 10 ICNS representations and 6 ICO layers matched their PNG references on 2026-09-14.                                                                                                                                                                                                         |
+Verified on **2026-09-15**:
 
-Native acceptance covers Unicode diagnostic navigation, an exact 20-byte AArch64
-code export/import round trip, disassembly and execution yielding X0 = 42. A
-126,980-byte aligned ELF segment decoded its final instruction at `0x20000` and
-exported byte for byte against LLVM/LLD output. The latest static debug app also
-passed bilingual instruction-panel retention and keyboard export/cancellation.
-Browser visual review covered both languages at 1280×720 and 900×600; a reliable
-full native-window screenshot was unavailable for the latest icon review.
-Raw imports remain inspection inputs; execution loads the separately assembled ELF.
+- `cargo xtask check` and `cargo xtask test`: 74 Rust unit/integration tests,
+  2 doctests and 60 frontend tests, including 36 Chromium cases. Rustdoc also
+  passed with warnings denied; generated TypeScript matches the Rust contracts.
+- Static frontend and Tauri debug builds through the normal hooks. Both guests
+  assembled, loaded, stepped and stored 42; reset restored state, failed assembly
+  preserved the machine, and a bounded loop paused/stopped.
+- Native Unicode diagnostic navigation, a byte-exact AArch64 source/code workflow,
+  and a 126,980-byte ELF segment exported unchanged and decoded through its end.
+  Static analysis preserved loaded-machine state and survived locale changes.
+- Browser and native layout review covered both languages, font/wrap preferences,
+  focus mode, layout reset, narrow instruction navigation and the larger default
+  window. Fonts and the dynamic editor loaded under the app origin/CSP.
+- Regression probes detected incorrect pagination, branch-immediate selection,
+  ignored base changes and file callbacks after unmount. Input-reversion and
+  re-decoding tests reject stale pages and analyses.
 
-Targeted mutation probes confirmed detection of row-count pagination, ignored
-base changes and file callbacks after unmount.
-
-The Vitest/Vite mock-hook warning and remaining keyboard/focus acceptance are
-recorded in [testing](testing.md#browser-coverage). The product work and release
-gates above remain open.
+All 10 ICNS representations and 6 ICO layers matched PNG references on
+**2026-09-14**. Test design, acceptance procedures and the known Vitest/Vite mock-hook
+warning are maintained in [testing](testing.md). These results do not close the
+release gates above.

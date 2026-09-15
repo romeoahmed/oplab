@@ -163,7 +163,7 @@ impl Drop for Receiver {
 
 fn is_bulk(message: &Message) -> bool {
     match &message.response.result {
-        Reply::Assembled(_) | Reply::Decoded(_) => true,
+        Reply::Assembled(_) | Reply::Decoded(_) | Reply::Analyzed(_) => true,
         Reply::Observed(observation) => {
             observation.memory.is_some()
                 && matches!(observation.status, Status::Ready | Status::Running)

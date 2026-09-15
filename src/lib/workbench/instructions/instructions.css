@@ -1,4 +1,5 @@
 .instructions {
+  container: instructions / inline-size;
   display: flex;
   flex-direction: column;
   min-block-size: 0;
@@ -62,5 +63,127 @@
     background: var(--surface);
     color: var(--muted);
     font-weight: 500;
+  }
+}
+
+.instruction-inspection {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  min-block-size: 0;
+  overflow: hidden;
+  gap: 16px;
+
+  &:has(> .instruction-analysis) {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.7fr);
+  }
+}
+
+.instruction-select {
+  display: inline-block;
+  min-block-size: 24px;
+  max-inline-size: 100%;
+  padding: 2px 6px;
+  border-color: transparent;
+  background: transparent;
+  font: inherit;
+  text-align: start;
+
+  &[aria-pressed='true'] {
+    background: color-mix(in oklch, var(--accent) 12%, transparent);
+    color: var(--accent);
+    border-color: currentcolor;
+  }
+}
+
+.instruction-analysis {
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+
+  h3 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    margin: 0;
+  }
+
+  h4 {
+    margin-block: 12px 4px;
+    font-size: inherit;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  code {
+    font-family: var(--mono);
+    overflow-wrap: anywhere;
+  }
+}
+
+.analysis-heading {
+  position: sticky;
+  inset-block-start: -12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-block: 4px;
+  margin-block-end: 4px;
+  background: var(--surface-deep);
+
+  button {
+    inline-size: 24px;
+    min-block-size: 24px;
+    padding: 3px;
+  }
+}
+
+.analysis-identity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-block-end: 8px;
+}
+
+.analysis-facts {
+  margin: 8px 0 0;
+
+  > div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 12px;
+    padding-block: 3px;
+  }
+
+  dt {
+    color: var(--muted);
+  }
+
+  dd {
+    margin: 0;
+    font-family: inherit;
+  }
+}
+
+.analysis-memory {
+  margin: 0;
+  padding-inline-start: 16px;
+}
+
+@container instructions (width < 760px) {
+  .instruction-inspection:has(> .instruction-analysis) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .instructions:has(.instruction-analysis) .instruction-controls,
+  .instruction-table:has(+ .instruction-analysis) {
+    display: none;
   }
 }

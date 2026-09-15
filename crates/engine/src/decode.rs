@@ -1,5 +1,8 @@
 //! Bounded decoding from a known instruction boundary.
 
+mod analysis;
+pub use analysis::analyze;
+
 use capstone::prelude::*;
 use iced_x86::{Decoder, DecoderOptions, Formatter, IntelFormatter};
 use oplab_core::{

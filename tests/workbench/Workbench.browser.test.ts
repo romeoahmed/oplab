@@ -9,7 +9,7 @@ import type { FileFormat } from '$lib/protocol/generated/FileFormat';
 import type { WorkerPort } from '$lib/desktop/worker';
 import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { Command } from '$lib/protocol/generated/Command';
-import { assembled, connection, observation } from '../fixtures/protocol';
+import { assembled, connection, observation, nopAnalysis } from '../fixtures/protocol';
 import '$lib/styles/theme.css';
 
 beforeEach(() => {
@@ -114,6 +114,27 @@ test('appearance changes and focus mode preserve edits and undo history', async 
   await size.click();
   await userEvent.keyboard('{End}');
   await expect.element(size).toHaveValue(size.element().getAttribute('max'));
+  const width = page.getByRole('slider', { name: en.inspector_width });
+  const height = page.getByRole('slider', { name: en.memory_height });
+  const [originalWidth, originalHeight, fontSize] = [width, height, size].map((slider) => {
+    const input = slider.element();
+    if (!(input instanceof HTMLInputElement)) throw new Error('Expected a range input');
+    return input.value;
+  });
+  for (const slider of [width, height]) {
+    await slider.click();
+    await userEvent.keyboard('{End}');
+  }
+  await expect.element(width).not.toHaveValue(originalWidth);
+  await expect.element(height).not.toHaveValue(originalHeight);
+  const resetLayout = page.getByRole('button', { name: en.reset_layout });
+  await resetLayout.click();
+  await expect.element(width).toHaveValue(originalWidth);
+  await expect.element(height).toHaveValue(originalHeight);
+  await expect.element(resetLayout).toBeDisabled();
+  await expect.element(page.getByRole('combobox', { name: en.editor_font })).toHaveValue('system');
+  await expect.element(page.getByRole('checkbox', { name: en.word_wrap })).toBeChecked();
+  await expect.element(size).toHaveValue(fontSize);
   await userEvent.keyboard('{Escape}');
   await expect
     .element(page.getByRole('button', { name: en.appearance, exact: true }))
@@ -323,7 +344,6 @@ test('imported source reaches assembly unchanged and binary inspection never loa
   const bytes = new Uint8Array([0x90, 0xc3]);
   const source = '\uFEFF// 中文 😀\r\n  nop\r\n';
   const saved: { format: string; bytes: Uint8Array }[] = [];
-  const commands: Command[] = [];
   await render(Workbench, {
     filePort: {
       open: (format) =>
@@ -336,10 +356,20 @@ test('imported source reaches assembly unchanged and binary inspection never loa
     portFactory: (): WorkerPort => ({
       connect: () => Promise.resolve(connection()),
       request: (command) => {
-        commands.push(command);
         if (command.type === 'assemble') {
           expect(command.data.source).toBe(source);
           return Promise.resolve(assembled(command.data.identity));
+        }
+        if (command.type === 'analyze') {
+          expect(command.data).toEqual({
+            target: 'x86_64',
+            base: '0x0000000000001000',
+            bytes: [0x90],
+          });
+          return Promise.resolve({
+            response: { id: '3', result: { type: 'analyzed', data: nopAnalysis } },
+            payloads: [],
+          });
         }
         if (command.type !== 'decode') throw new Error(`Unexpected ${command.type}`);
         expect(command.data).toMatchObject({
@@ -389,9 +419,13 @@ test('imported source reaches assembly unchanged and binary inspection never loa
   await page.getByRole('tab', { name: en.memory, exact: true }).click();
   await page.getByRole('tab', { name: en.instructions, exact: true }).click();
   await expect.element(instructions).toMatchTextContent('ret');
-  expect(commands.map((command) => command.type)).toEqual(['assemble', 'decode']);
+  await page.getByRole('button', { name: 'nop', exact: true }).click();
+  await expect
+    .element(page.getByRole('region', { name: en.instruction_analysis }))
+    .toMatchTextContent('X64');
   await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
   await expect
-    .element(page.getByRole('table', { name: zh.instructions, exact: true }))
-    .toMatchTextContent('ret');
+    .element(page.getByRole('region', { name: zh.instruction_analysis }))
+    .toMatchTextContent('X64');
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
 });

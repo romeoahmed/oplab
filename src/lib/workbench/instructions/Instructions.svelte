@@ -1,6 +1,8 @@
 <script lang="ts">
   import './instructions.css';
-  import { onDestroy } from 'svelte';
+  import Analysis from './Analysis.svelte';
+  import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
+  import { onDestroy, type Snippet } from 'svelte';
   import { ArrowRight, ListOrdered } from '@lucide/svelte';
   import { normalizeAddress } from '$lib/protocol/scalars';
   import { problemLabel } from '../presentation';
@@ -17,31 +19,41 @@
     connected,
     locale,
     decode,
+    analyze,
+    source,
   }: {
+    source?: Snippet;
     bytes: Uint8Array | undefined;
     target: Target;
     base: string;
     connected: boolean;
     locale: Locale;
+    analyze: (bytes: Uint8Array, target: Target, base: string) => Promise<InstructionAnalysis>;
     decode: (bytes: Uint8Array, target: Target, base: string) => Promise<DecodedInstruction[]>;
   } = $props();
   const options = $derived({ locale });
-  const input = $derived({ bytes, target, base, connected });
-  function matches(value: typeof input) {
-    return (
-      value.bytes === bytes &&
-      value.target === target &&
-      value.base === base &&
-      value.connected === connected
-    );
-  }
+  // Per-field memoization keeps unrelated prop updates out of the input identity.
+  const [code, guest, origin, available] = $derived([bytes, target, base, connected] as const);
+  const input = $derived({ bytes: code, target: guest, base: origin, connected: available });
   let query = $state.raw<{ input: typeof input; offset: number } | null>(null);
-  const offset = $derived(query !== null && matches(query.input) ? query.offset : 0);
+  const offset = $derived(query?.input === input ? query.offset : 0);
   type Outcome =
     | { type: 'decoded'; rows: DecodedInstruction[]; next: number }
     | { type: 'error'; code: string; address: string | null };
   let completed = $state.raw<{ input: typeof input; value: Outcome } | null>(null);
-  const result = $derived(completed !== null && matches(completed.input) ? completed.value : null);
+  const result = $derived(completed?.input === input ? completed.value : null);
+  let selection = $state.raw<{
+    row: DecodedInstruction;
+    request: Promise<InstructionAnalysis>;
+  } | null>(null);
+  const selected = $derived(
+    selection !== null && result?.type === 'decoded' && result.rows.includes(selection.row)
+      ? selection
+      : null,
+  );
+  function select(row: DecodedInstruction) {
+    selection = { row, request: analyze(new Uint8Array(row.bytes), target, row.address) };
+  }
   let busy = $state(false);
   let active = true;
   onDestroy(() => {
@@ -53,10 +65,11 @@
     const current = input;
     busy = true;
     completed = null;
+    selection = null;
     try {
       const window = decodeWindow(bytes, normalizeAddress(base), start);
       const rows = await decode(window.bytes, target, window.base);
-      if (!active || !matches(current)) return;
+      if (!active || current !== input) return;
       completed = {
         input: current,
         value: {
@@ -67,7 +80,7 @@
       };
       query = { input: current, offset: start };
     } catch (failure) {
-      if (!active || !matches(current)) return;
+      if (!active || current !== input) return;
       const code =
         typeof failure === 'object' &&
         failure !== null &&
@@ -103,6 +116,7 @@
         void inspect();
       }}
     >
+      {@render source?.()}
       <span class="instruction-origin">{target} · {base} · {bytes.length} B</span>
       <label
         >{m.byte_offset({}, options)}<input
@@ -127,29 +141,57 @@
         }}>{m.next_instructions({}, options)}<ArrowRight size={14} aria-hidden="true" /></button
       >
     </form>
-    <p class="instruction-note">{m.instructions_hint({}, options)}</p>
+    {#if result?.type !== 'decoded'}<p class="instruction-note">
+        {m.instructions_hint({}, options)}
+      </p>{/if}
     {#if result?.type === 'error'}<p role="alert" class="instruction-error">
         {problemLabel(result.code, locale)}{#if result.address !== null}
           <code>{result.address}</code>{/if}
       </p>{/if}
     {#if result?.type === 'decoded' && result.rows.length > 0}
-      <div class="instruction-table">
-        <table aria-label={m.instructions({}, options)}>
-          <thead
-            ><tr
-              ><th scope="col">{m.address({}, options)}</th><th scope="col"
-                >{m.bytes({}, options)}</th
-              ><th scope="col">{m.instruction({}, options)}</th></tr
-            ></thead
-          >
-          <tbody
-            >{#each result.rows as row (row.address)}<tr
-                ><td>{row.address}</td><td
-                  >{row.bytes.map((byte) => byte.toString(16).padStart(2, '0')).join(' ')}</td
-                ><td>{row.text}</td></tr
-              >{/each}</tbody
-          >
-        </table>
+      <div class="instruction-inspection">
+        <div class="instruction-table">
+          <table aria-label={m.instructions({}, options)}>
+            <thead
+              ><tr
+                ><th scope="col">{m.address({}, options)}</th><th scope="col"
+                  >{m.bytes({}, options)}</th
+                ><th scope="col">{m.instruction({}, options)}</th></tr
+              ></thead
+            >
+            <tbody
+              >{#each result.rows as row (row.address)}<tr
+                  ><td>{row.address}</td><td
+                    >{row.bytes.map((byte) => byte.toString(16).padStart(2, '0')).join(' ')}</td
+                  ><td
+                    ><button
+                      type="button"
+                      class="instruction-select"
+                      aria-pressed={selected?.row === row}
+                      onclick={() => {
+                        if (selected?.row === row) selection = null;
+                        else select(row);
+                      }}>{row.text}</button
+                    ></td
+                  ></tr
+                >{/each}</tbody
+            >
+          </table>
+        </div>
+        {#if selected !== null}
+          {@const current = selected}
+          {#key current.row}<Analysis
+              instruction={current.row}
+              request={current.request}
+              {locale}
+              retry={() => {
+                select(current.row);
+              }}
+              close={() => {
+                selection = null;
+              }}
+            />{/key}
+        {/if}
       </div>
     {/if}
   {/if}

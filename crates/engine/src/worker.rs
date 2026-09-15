@@ -177,17 +177,17 @@ impl Worker {
                             })
                             .collect(),
                     ),
-                    Err(error) => Reply::Error(Diagnostic {
-                        code: DiagnosticCode::Decode,
-                        source_offset: None,
-                        address: if let DecodeError::Invalid(address) = error {
-                            Some(HexAddress::new(address))
-                        } else {
-                            None
-                        },
-                    }),
+                    Err(error) => Reply::Error(decode_diagnostic(&error)),
                 }
             }
+            Command::Analyze {
+                target,
+                base,
+                bytes,
+            } => match decode::analyze(target, &bytes, base.address()) {
+                Ok(analysis) => Reply::Analyzed(Box::new(analysis)),
+                Err(error) => Reply::Error(decode_diagnostic(&error)),
+            },
             Command::CancelAssembly { .. }
             | Command::Subscribe { .. }
             | Command::Unsubscribe { .. } => {
@@ -211,4 +211,16 @@ impl Worker {
 /// Native hangs require an external process supervisor deadline.
 pub fn serve() -> Result<(), WorkerError> {
     runtime::serve()
+}
+
+const fn decode_diagnostic(error: &DecodeError) -> Diagnostic {
+    Diagnostic {
+        code: DiagnosticCode::Decode,
+        source_offset: None,
+        address: if let DecodeError::Invalid(address) = error {
+            Some(HexAddress::new(*address))
+        } else {
+            None
+        },
+    }
 }
