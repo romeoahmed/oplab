@@ -1,5 +1,6 @@
 import { encodeCall, decodeResponse, decodeStream } from '$lib/protocol/frames';
 import type { DesktopCall } from '$lib/protocol/generated/DesktopCall';
+import type { LoadImage } from '$lib/protocol/generated/LoadImage';
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
 
@@ -63,7 +64,10 @@ test('stream memory preserves arbitrary bytes and publishes only complete window
   );
 });
 
-test('desktop load calls preserve every documented chunk boundary', () => {
+test.each([
+  { type: 'elf' },
+  { type: 'raw', data: { base: '0x0020000000000000', entry: '0x0020000000000000' } },
+] satisfies LoadImage[])('$type load calls preserve every documented chunk boundary', (format) => {
   for (const length of [1, 65535, 65536, 65537, 131073, 1048576]) {
     const image = Uint8Array.from(
       { length },
@@ -75,6 +79,7 @@ test('desktop load calls preserve every documented chunk boundary', () => {
       command: {
         type: 'load',
         data: {
+          image: format,
           replace: null,
           target: 'aarch64',
           completion: '0x0000000000001008',

@@ -193,50 +193,59 @@ fn binary_artifacts_require_complete_bounded_ordered_transfers()
 #[test]
 fn image_requests_require_complete_bounded_binary_transfers()
 -> Result<(), Box<dyn std::error::Error>> {
-    use oplab_core::address::Address;
-    let mut message = transport::RequestMessage {
-        request: Request {
-            id: Counter::new(2),
-            command: Command::Load {
-                initial: oplab_core::protocol::execution::InitialState::default(),
-                replace: None,
-                target: Target::X86_64,
-                completion: HexAddress::new(Address::new(0x2000)),
-                instruction_budget: Counter::new(100),
-                image_bytes: 65_537,
-            },
+    use oplab_core::protocol::execution::LoadImage;
+    for image in [
+        LoadImage::Elf,
+        LoadImage::Raw {
+            base: HexAddress::new(Address::new(0x1000)),
+            entry: HexAddress::new(Address::new(0x1002)),
         },
-        image: Some(vec![0xa5; 65_537]),
-    };
-    let mut bytes = Vec::new();
-    transport::write_request(&mut Fragmented(&mut bytes, 1), &message)?;
-    let parsed = transport::read_request(&mut Fragmented(Cursor::new(&bytes), 1))?
-        .ok_or("missing request")?;
-    assert_eq!(parsed.request, message.request);
-    assert_eq!(parsed.image, message.image);
-    assert!(transport::read_request(&mut Cursor::new(&bytes[..bytes.len() - 1])).is_err());
-    let mut wrong_kind = Vec::new();
-    transport::write_frame(
-        &mut wrong_kind,
-        Kind::Control,
-        &serde_json::to_vec(&message.request)?,
-    )?;
-    transport::write_frame(&mut wrong_kind, Kind::Control, b"{}")?;
-    assert!(transport::read_request(&mut Cursor::new(wrong_kind)).is_err());
-    message.image = Some(vec![0]);
-    let mut output = Vec::new();
-    assert!(transport::write_request(&mut output, &message).is_err());
-    assert!(output.is_empty());
-    let Command::Load { image_bytes, .. } = &mut message.request.command else {
-        return Err("wrong fixture command".into());
-    };
-    *image_bytes = 1_048_577;
-    let mut oversized = Vec::new();
-    transport::write_frame(
-        &mut oversized,
-        Kind::Control,
-        &serde_json::to_vec(&message.request)?,
-    )?;
-    assert!(transport::read_request(&mut Cursor::new(oversized)).is_err());
+    ] {
+        let mut message = transport::RequestMessage {
+            request: Request {
+                id: Counter::new(2),
+                command: Command::Load {
+                    image,
+                    initial: oplab_core::protocol::execution::InitialState::default(),
+                    replace: None,
+                    target: Target::X86_64,
+                    completion: HexAddress::new(Address::new(0x2000)),
+                    instruction_budget: Counter::new(100),
+                    image_bytes: 65_537,
+                },
+            },
+            image: Some(vec![0xa5; 65_537]),
+        };
+        let mut bytes = Vec::new();
+        transport::write_request(&mut Fragmented(&mut bytes, 1), &message)?;
+        let parsed = transport::read_request(&mut Fragmented(Cursor::new(&bytes), 1))?
+            .ok_or("missing request")?;
+        assert_eq!(parsed.request, message.request);
+        assert_eq!(parsed.image, message.image);
+        assert!(transport::read_request(&mut Cursor::new(&bytes[..bytes.len() - 1])).is_err());
+        let mut wrong_kind = Vec::new();
+        transport::write_frame(
+            &mut wrong_kind,
+            Kind::Control,
+            &serde_json::to_vec(&message.request)?,
+        )?;
+        transport::write_frame(&mut wrong_kind, Kind::Control, b"{}")?;
+        assert!(transport::read_request(&mut Cursor::new(wrong_kind)).is_err());
+        message.image = Some(vec![0]);
+        let mut output = Vec::new();
+        assert!(transport::write_request(&mut output, &message).is_err());
+        assert!(output.is_empty());
+        let Command::Load { image_bytes, .. } = &mut message.request.command else {
+            return Err("wrong fixture command".into());
+        };
+        *image_bytes = 1_048_577;
+        let mut oversized = Vec::new();
+        transport::write_frame(
+            &mut oversized,
+            Kind::Control,
+            &serde_json::to_vec(&message.request)?,
+        )?;
+        assert!(transport::read_request(&mut Cursor::new(oversized)).is_err());
+    }
     Ok(())
 }

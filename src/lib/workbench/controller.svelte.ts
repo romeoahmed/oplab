@@ -8,6 +8,8 @@ import type { Diagnostic } from '$lib/protocol/generated/Diagnostic';
 import type { DiagnosticCode } from '$lib/protocol/generated/DiagnosticCode';
 import type { FailureCode } from '$lib/protocol/generated/FailureCode';
 import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
+import type { LoadImage } from '$lib/protocol/generated/LoadImage';
+import type { MemoryWindow } from '$lib/protocol/generated/MemoryWindow';
 import type { Observation } from '$lib/protocol/generated/Observation';
 import type { SessionAction } from '$lib/protocol/generated/SessionAction';
 import type { StreamEvent } from '$lib/protocol/generated/StreamEvent';
@@ -20,6 +22,8 @@ import {
   sameBuildIdentity,
 } from '$lib/protocol/scalars';
 
+import aarch64 from '../../../examples/aarch64.s?raw';
+import x86_64 from '../../../examples/x86_64.s?raw';
 import { initialMemory } from './machine/memory';
 import { initialState, type SetupInput } from './machine/setup';
 import { readScratch } from './scratch';
@@ -42,10 +46,8 @@ type Factory = (
 ) => WorkerPort | null;
 
 export const examples: Record<Target, string> = {
-  x86_64:
-    '.intel_syntax noprefix\n.text\n# Store the answer, then stop at done.\n\nmov rax, 40\nadd rax, 2\nmov qword ptr [rip + output], rax\ndone: nop\n\n.bss\noutput: .skip 64\n',
-  aarch64:
-    '.text\n// Store the answer, then stop at done.\n\nmov x0, #40\nadd x0, x0, #2\nadr x1, output\nstr x0, [x1]\ndone: nop\n\n.bss\noutput: .skip 64\n',
+  x86_64,
+  aarch64,
 };
 
 /**
@@ -74,8 +76,19 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   let candidate = $state.raw<{ artifact: Artifact; object: Uint8Array; image: Uint8Array } | null>(
     null,
   );
-  let loaded = $state.raw<BuildIdentity | null>(null);
+  let binary = $state.raw<Uint8Array>();
+  let raw = $state<{ target: Target; base: string; entry: string; completion: string }>({
+    target: 'x86_64',
+    base: '0x1000',
+    entry: '0x1000',
+    completion: '',
+  });
+  type Loaded =
+    | { type: 'source'; identity: BuildIdentity }
+    | { type: 'raw'; bytes: Uint8Array; target: Target; base: string; entry: string };
+  let loaded = $state.raw<Loaded | null>(null);
   let snapshot = $state.raw<Snapshot | null>(null);
+  let inspected = $state.raw<Snapshot | null>(null);
   let connected = $state(false);
   let connecting = $state(false);
   let building = $state(false);
@@ -131,6 +144,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   }
   function failed(error: DesktopFailure): void {
     connected = false;
+    inspected = null;
     snapshot = null;
     loaded = null;
     baseline = null;
@@ -148,6 +162,18 @@ export function createWorkbench(factory: Factory = desktopWorker) {
         return;
     }
     snapshot = next;
+    const bytes = next.memory;
+    if (bytes !== null) {
+      const previous = inspected;
+      // Identical captured bytes retain decode/selection state across observations.
+      const sameWindow =
+        previous?.observation.key.session === next.observation.key.session &&
+        previous.observation.key.generation === next.observation.key.generation &&
+        previous.observation.memory?.address === next.observation.memory?.address &&
+        previous.memory?.length === bytes.length &&
+        previous.memory.every((byte, index) => byte === bytes[index]);
+      inspected = sameWindow ? { observation: next.observation, memory: previous.memory } : next;
+    }
   }
   function acknowledge(stream: Stream): void {
     const update = stream.event.update;
@@ -247,6 +273,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       connected = true;
       // A retained native session does not prove which local source produced it.
       loaded = null;
+      inspected = null;
       subscription = null;
       baseline = null;
       snapshot = next.session === null ? null : { observation: next.session, memory: null };
@@ -341,37 +368,52 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       throw new RequestError('completion');
     return address;
   }
-  async function load(): Promise<void> {
-    if (port === null || candidate === null || controlling || !matches(candidate.artifact.identity))
+  type LoadInput = {
+    bytes: Uint8Array;
+    image: LoadImage;
+    target: Target;
+    completion: string;
+    identity: Loaded;
+    memory: MemoryWindow | null;
+  };
+  async function loadInput(prepare: () => LoadInput): Promise<void> {
+    if (
+      port === null ||
+      !connected ||
+      controlling ||
+      snapshot?.observation.status.type === 'running'
+    )
       return;
     controlling = true;
     problem = null;
     unknown = false;
-    const artifact = candidate;
     try {
+      const input = prepare();
       const maximum = BigInt(budget);
       if (maximum < 1n || maximum > 100000000n) throw new RangeError('Invalid budget');
       const message = await port.request(
         {
           type: 'load',
           data: {
+            image: input.image,
             replace: snapshot?.observation.key ?? null,
-            target: artifact.artifact.identity.target,
-            completion: completionAddress(artifact.artifact),
+            target: input.target,
+            completion: input.completion,
             instruction_budget: formatCounter(maximum),
-            image_bytes: artifact.image.length,
-            initial: initialState(setups[artifact.artifact.identity.target]),
+            image_bytes: input.bytes.length,
+            initial: initialState(setups[input.target]),
           },
         },
-        artifact.image,
+        input.bytes,
       );
       lifetime.signal.throwIfAborted();
       const result = message.response.result;
       if (result.type === 'error') throw new RequestError(result.data.code);
       if (result.type !== 'observed') throw new Error('Invalid load result');
       snapshot = { observation: result.data, memory: null };
-      loaded = artifact.artifact.identity;
-      const window = initialMemory(artifact.artifact.image);
+      inspected = null;
+      loaded = input.identity;
+      const window = input.memory;
       memoryRequested = window !== null;
       if (window !== null) {
         memoryAddress = window.address;
@@ -383,6 +425,35 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     } finally {
       controlling = false;
     }
+  }
+  function load(): Promise<void> {
+    return loadInput(() => {
+      if (candidate === null || !matches(candidate.artifact.identity))
+        throw new RequestError('input');
+      return {
+        bytes: candidate.image,
+        image: { type: 'elf' },
+        target: candidate.artifact.identity.target,
+        completion: completionAddress(candidate.artifact),
+        identity: { type: 'source', identity: candidate.artifact.identity },
+        memory: initialMemory(candidate.artifact.image),
+      };
+    });
+  }
+  function loadRaw(): Promise<void> {
+    return loadInput(() => {
+      if (binary === undefined) throw new RequestError('input');
+      const base = normalizeAddress(raw.base);
+      const entry = normalizeAddress(raw.entry);
+      return {
+        bytes: binary,
+        image: { type: 'raw', data: { base, entry } },
+        target: raw.target,
+        completion: normalizeAddress(raw.completion),
+        identity: { type: 'raw', bytes: binary, target: raw.target, base, entry },
+        memory: { address: base, length: Math.min(binary.length, 64) },
+      };
+    });
   }
   async function execute(action: SessionAction): Promise<void> {
     if (port === null || snapshot === null || controlling || !connected) return;
@@ -402,6 +473,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
         if (action.type === 'reset') await subscribe();
       } else if (result.type === 'session_closed') {
         snapshot = null;
+        inspected = null;
         loaded = null;
         subscription = null;
         baseline = null;
@@ -547,10 +619,62 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       return candidate !== null && matches(candidate.artifact.identity);
     },
     get loadedCurrent() {
-      return loaded !== null && matches(loaded);
+      if (loaded === null) return false;
+      if (loaded.type === 'source') return matches(loaded.identity);
+      try {
+        return (
+          loaded.bytes === binary &&
+          loaded.target === raw.target &&
+          loaded.base === normalizeAddress(raw.base) &&
+          loaded.entry === normalizeAddress(raw.entry)
+        );
+      } catch {
+        return false;
+      }
     },
     get loadedRevision() {
-      return loaded?.revision ?? null;
+      return loaded?.type === 'source' ? loaded.identity.revision : null;
+    },
+    get loadedKind() {
+      return loaded?.type ?? null;
+    },
+    get binary() {
+      return binary;
+    },
+    get raw() {
+      return raw;
+    },
+    set raw(value: typeof raw) {
+      raw = value;
+    },
+    get rawSetup() {
+      return setups[raw.target];
+    },
+    set rawSetup(value: SetupInput) {
+      setups[raw.target] = value;
+    },
+    importBinary(bytes: Uint8Array) {
+      binary = bytes;
+      raw.target = target;
+    },
+    loadRaw,
+    async breakpoint(address: string, enabled: boolean) {
+      try {
+        await execute({
+          type: 'breakpoint',
+          data: { address: normalizeAddress(address), enabled },
+        });
+      } catch (error) {
+        report(error);
+      }
+    },
+    get inspected() {
+      const key = snapshot?.observation.key;
+      return connected &&
+        inspected?.observation.key.session === key?.session &&
+        inspected?.observation.key.generation === key?.generation
+        ? inspected
+        : null;
     },
     get snapshot() {
       return snapshot;

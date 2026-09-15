@@ -48,6 +48,57 @@ fn first_integer(session: &Session) -> TestResult<u64> {
 }
 
 #[test]
+fn workbench_examples_sort_signed_values_at_different_link_addresses() -> TestResult {
+    for (target, source) in [
+        (Target::X86_64, include_str!("../../../examples/x86_64.s")),
+        (Target::Aarch64, include_str!("../../../examples/aarch64.s")),
+    ] {
+        let object =
+            assembly::compile(target, source).map_err(|error| format!("{target:?}: {error:?}"))?;
+        for base in [0x1000, 0x1234_5000] {
+            let image = assembly::link(&object, Address::new(base))
+                .map_err(|error| format!("{target:?}: {error:?}"))?;
+            let done = symbol(&image, "done")?;
+            let output = symbol(&image, "output")?;
+            let total = symbol(&image, "total")?;
+            let input = symbol(&image, "input")?;
+            let mut session = Session::from_elf(&image, target, done, 10_000)?;
+            let original = session.read_memory(input, 64)?;
+            let mut values = original
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .copied()
+                .map(i64::from_le_bytes)
+                .collect::<Vec<_>>();
+            let sum = values
+                .iter()
+                .fold(0_i64, |sum, &value| sum.wrapping_add(value));
+            values.sort_unstable();
+            let expected: Vec<_> = values.into_iter().flat_map(i64::to_le_bytes).collect();
+            for _ in 0..2 {
+                assert_eq!(session.read_memory(output, 64)?, [0; 64]);
+                session.start()?;
+                settle(&mut session)?;
+                assert_eq!(
+                    session.state(),
+                    ExecutionState::Terminated(Termination::Completed),
+                    "{target:?} at {base:#x}: {:?}",
+                    session.fault()
+                );
+                assert_eq!(session.read_registers()?.instruction_pointer(), done);
+                assert_eq!(first_integer(&session)?.to_le_bytes(), sum.to_le_bytes());
+                assert_eq!(session.read_memory(output, 64)?, expected);
+                assert_eq!(session.read_memory(total, 8)?, sum.to_le_bytes());
+                assert_eq!(session.read_memory(input, 64)?, original);
+                session.reset()?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn integer_aliases_flags_and_explicit_completion_follow_the_architecture() -> TestResult {
     for (target, source) in [
         (

@@ -13,7 +13,7 @@ export const defaultPreferences: Preferences = {
   fontSize: 14,
   wrap: false,
   inspectorWidth: 28,
-  memoryHeight: 36,
+  memoryHeight: 40,
 };
 
 /**

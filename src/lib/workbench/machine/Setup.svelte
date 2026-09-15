@@ -9,10 +9,10 @@
   import './setup.css';
 
   let {
-    value = $bindable({ registers: [], mappings: [] }),
+    value = $bindable(),
     target,
     locale,
-  }: { value?: SetupInput; target: Target; locale: Locale } = $props();
+  }: { value: SetupInput; target: Target; locale: Locale } = $props();
   const options = $derived({ locale });
   const names = $derived(registerNames(target));
   const available = $derived(
@@ -41,6 +41,7 @@
             pattern="(?:[0-9]+|0[xX][0-9a-fA-F]+)"
           />
           <button
+            type="button"
             class="icon-button"
             aria-label={m.remove_register({ name: row.name.toUpperCase() }, options)}
             onclick={() => {
@@ -50,6 +51,7 @@
         </div>
       {/each}
       <button
+        type="button"
         class="text-button"
         disabled={available.length === 0}
         onclick={() => {
@@ -91,6 +93,7 @@
             </select></label
           >
           <button
+            type="button"
             class="icon-button"
             aria-label={m.remove_mapping({ number: index + 1 }, options)}
             onclick={() => {
@@ -100,6 +103,7 @@
         </fieldset>
       {/each}
       <button
+        type="button"
         class="text-button"
         disabled={value.mappings.length >= 63}
         onclick={() => {

@@ -59,6 +59,7 @@ function applyDelta(base: Snapshot, delta: ObservationDelta, memory: Uint8Array 
       registers:
         delta.registers.type === 'unchanged' ? base.observation.registers : delta.registers.data,
       fault: delta.fault,
+      breakpoints: base.observation.breakpoints,
       memory: base.observation.memory,
     },
     memory: delta.memory_bytes === 0 ? base.memory : memory,

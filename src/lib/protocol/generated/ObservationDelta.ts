@@ -8,7 +8,8 @@ import type { Status } from './Status.js';
 /**
  * A coherent update relative to the last delivered subscription sample.
  *
- * Status, counters and fault are current; unchanged registers and memory come from `base`.
+ * Status, counters and fault are current; unchanged registers, memory and breakpoints
+ * come from `base`. Breakpoint changes require a full observation.
  */
 export type ObservationDelta = {
   /**

@@ -70,11 +70,14 @@ The bounded image view exposes named address symbols, excluding undefined, file,
 section and TLS entries. TLS offsets remain in the complete ELF; they are not
 virtual addresses or desktop stop positions.
 
-`load` declares target, completion, instruction budget, image length, `initial`
-and `replace`, followed by binary image chunks. No guest memory is mapped until
-the transfer and loader validation succeed. `replace: null` requires no session;
-replacement requires the current exact key and a non-running state. Failure
-preserves the old machine.
+`load` declares `image`, target, completion, instruction budget, image length,
+`initial` and `replace`, followed by a binary payload of 1 byte to 1 MiB.
+`image: {type: "elf"}` uses standard ELF addresses, entry and permissions.
+`image: {type: "raw", data: {base, entry}}` maps exact bytes RX at `base`, with an
+explicit entry inside those bytes; both addresses use canonical hexadecimal.
+No guest memory is mapped until the transfer and loader validation succeed.
+`replace: null` requires no session; replacement requires the current exact key and
+a non-running state. Failure preserves the old machine.
 Success uses the load request ID as session ID and starts generation zero.
 
 `initial` contains `registers: [{name, value}]` and
@@ -95,10 +98,12 @@ worker connection, because they can recur after restart.
 
 Other successful controls return `observed`: a complete snapshot containing key,
 increasing sequence, status, instruction/dispatch counters, canonical registers,
-fault metadata and optional memory metadata. Sequence begins at one, continues
-across reset and never wraps. Run/step acceptance can report Running; poll or
-subscribe to learn completion. Prioritized newer observations can precede older
-correlated replies, so check key/generation/sequence before updating a live view.
+fault metadata, sorted distinct `breakpoints` (at most 256) and optional memory
+metadata. Breakpoints survive reset; a new load starts with an empty set.
+Sequence begins at one, continues across reset and never wraps. Run/step acceptance
+can report Running; poll or subscribe to learn completion. Newer observations can
+precede older correlated replies, so check key/generation/sequence before updating
+a live view.
 
 Memory windows contain 1–65,536 bytes within one mapping and transfer after the
 snapshot. Registers, memory and counters are captured coherently at one owner boundary.
@@ -163,10 +168,11 @@ Kind `2` carries `StreamEvent { subscription, update }`, without a request ID:
 | `delta` | Exact key, baseline `base`, new sequence, current status/counters/fault, register update and memory length |
 | `ended` | Structured capture failure; ends the subscription without itself mutating the guest                        |
 
-A delta either retains the previous register bank or replaces the complete bank,
-including explicit null after native loss. Zero memory length retains the baseline;
-nonzero length replaces the entire baseline window. Window changes require `full`.
-These are bank/window deltas, not individual-register or byte-range patches.
+A delta retains or replaces the complete register bank, including explicit null
+after native loss. Zero memory length retains the baseline bytes; nonzero length
+replaces the entire window. Breakpoints come from the baseline. Changes to the
+window metadata or breakpoint set require `full`. There are no individual-register,
+breakpoint or byte-range patches.
 
 Only complete samples coalesce, in one dedicated output slot. The writer computes
 a delta against the last **delivered** sample and advances that baseline only after
@@ -236,12 +242,12 @@ engine APIs; the pipe runtime owns process-level lifetime.
 Four main-window Tauri commands manage the worker. Two separate commands handle
 [file import/export](#desktop-file-boundary).
 
-| Command          | Responsibility                                                                                                               |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `worker_connect` | Attach a Channel and obtain capabilities, connection/view lease and retained metadata; explicit restart creates a new worker |
-| `worker_request` | Send a binary framed `DesktopCall` plus optional ELF; supervisor assigns worker IDs and returns the complete framed reply    |
-| `worker_ack`     | Grant credit for a delivered subscription/sequence                                                                           |
-| `worker_detach`  | Invalidate the view without replaying or cancelling admitted mutations                                                       |
+| Command          | Responsibility                                                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `worker_connect` | Attach a Channel and obtain capabilities, connection/view lease and retained metadata; explicit restart creates a new worker        |
+| `worker_request` | Send a binary framed `DesktopCall` plus optional ELF/raw bytes; supervisor assigns worker IDs and returns the complete framed reply |
+| `worker_ack`     | Grant credit for a delivered subscription/sequence                                                                                  |
+| `worker_detach`  | Invalidate the view without replaying or cancelling admitted mutations                                                              |
 
 Reattachment issues a new lease while preserving the worker. Zero, detached and
 obsolete leases cannot mutate it. Source association is not inferred from retained

@@ -68,12 +68,15 @@ and staged worker binaries remain ignored.
   `redundant_pub_crate` disabled and retain explicit scoped visibility.
 - Prefer typed enums/newtypes, pure transformations and explicit effect owners.
   Avoid redundant state, unchecked casts and speculative abstractions.
+- Keep bundled programs in `examples/`, shared unchanged by Vite raw imports and
+  Rust execution tests. Use independent small documents for editor workflow tests.
 - Svelte runes own presentation; derive computed values and use attachments for
   external widgets and cleanup. Reconfigure CodeMirror compartments without
   replacing editor history.
 - Use semantic HTML, native CSS/inputs and Bits UI for composite interactions.
   Preserve library event/attachment composition and native disabled behavior;
-  avoid custom focus patches. Newly Baseline features need real WebView acceptance.
+  use form submission and constraint validation for related actions. Avoid custom
+  focus patches. Newly Baseline features need real WebView acceptance.
 - Update both `messages/en.json` and `messages/zh-CN.json`. Keep keys/placeholders
   aligned and wording concise and natural. Do not translate source or expose host
   paths, raw backend diagnostics or internal delivery counters in ordinary UI.

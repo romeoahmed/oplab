@@ -16,12 +16,14 @@ import { page, userEvent } from 'vitest/browser';
 import en from '../../messages/en.json';
 import zh from '../../messages/zh-CN.json';
 import { assembled, connection, observation, nopAnalysis } from '../fixtures/protocol';
+import { scratch } from '../fixtures/scratch';
 
 import '$lib/styles/theme.css';
 
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('PARAGLIDE_LOCALE', 'en');
+  localStorage.setItem('oplab.scratch.v1', JSON.stringify(scratch));
 });
 afterEach(() => {
   localStorage.clear();
@@ -32,7 +34,6 @@ test('switching locale retains edits and undo history', async () => {
   const editor = page.getByRole('textbox', { name: en.editor_label });
   await expect.element(editor).toBeVisible();
   const originalText = editor.element().textContent;
-  expect(originalText).toContain('mov rax, 40');
   await editor.click();
   await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}mov rax, 99');
   await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
@@ -336,7 +337,7 @@ test('build diagnostics locate Unicode source, follow locale and expire on edits
 
 test('imported source reaches assembly unchanged and binary inspection never loads a machine', async () => {
   const bytes = new Uint8Array([0x90, 0xc3]);
-  const source = '\uFEFF// 中文 😀\r\n  nop\r\n';
+  const source = '\uFEFF# 中文 😀\r\n' + '  nop\r\n'.repeat(512);
   const saved: { format: string; bytes: Uint8Array }[] = [];
   await render(Workbench, {
     filePort: {
@@ -395,21 +396,20 @@ test('imported source reaches assembly unchanged and binary inspection never loa
   await expect.element(page.getByText('UTF-8 BOM · CRLF', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: en.assemble, exact: true }).click();
   await files.click();
+  await page.getByRole('menuitem', { name: en.export_source }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  expect(saved[0]).toEqual({ format: 'source', bytes: new TextEncoder().encode(source) });
+  await files.click();
   await page.getByRole('menuitem', { name: en.import_binary }).click();
-  await expect
-    .element(page.getByRole('tab', { name: en.instructions, exact: true }))
-    .toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: en.instructions, exact: true }).click();
   await page.getByRole('button', { name: en.disassemble, exact: true }).click();
   const instructions = page.getByRole('table', { name: en.instructions, exact: true });
   await expect.element(instructions).toMatchTextContent('0x0000000000001001');
   await expect.element(instructions).toMatchTextContent('ret');
-  await expect
-    .element(page.getByRole('tabpanel', { name: en.memory, exact: true }))
-    .not.toBeInTheDocument();
   await files.click();
   await page.getByRole('menuitem', { name: en.export_binary }).click();
-  await expect.poll(() => saved.length).toBe(1);
-  expect(saved[0]).toEqual({ format: 'binary', bytes });
+  await expect.poll(() => saved.length).toBe(2);
+  expect(saved[1]).toEqual({ format: 'binary', bytes });
   await page.getByRole('tab', { name: en.memory, exact: true }).click();
   await page.getByRole('tab', { name: en.instructions, exact: true }).click();
   await expect.element(instructions).toMatchTextContent('ret');
@@ -425,8 +425,9 @@ test('imported source reaches assembly unchanged and binary inspection never loa
 });
 
 test('initial setup is target-specific, survives locale changes and applies only on load', async () => {
-  const disclosure = (label: string) => {
-    const summary = Array.from(document.querySelectorAll('summary')).find((element) =>
+  const disclosure = (configuration: string, label: string) => {
+    const panel = page.getByLabelText(configuration, { exact: true }).element();
+    const summary = Array.from(panel.querySelectorAll('summary')).find((element) =>
       element.textContent.includes(label),
     );
     if (summary === undefined) throw new Error('Missing setup disclosure');
@@ -456,14 +457,14 @@ test('initial setup is target-specific, survives locale changes and applies only
     }),
   });
   await page.getByRole('button', { name: en.configuration, exact: true }).click();
-  await disclosure(en.initial_registers).click();
+  await disclosure(en.configuration, en.initial_registers).click();
   await page.getByRole('button', { name: en.add_register }).click();
   await page.getByRole('textbox', { name: /RAX/ }).fill('0xffffffffffffffff');
   await page.getByRole('button', { name: en.add_register }).click();
   await page
     .getByRole('button', { name: remove_register({ name: 'RCX' }, { locale: 'en' }) })
     .click();
-  await disclosure(en.extra_memory).click();
+  await disclosure(en.configuration, en.extra_memory).click();
   await page.getByRole('button', { name: en.add_mapping }).click();
   await page
     .getByRole('group', { name: memory_region({ number: 1 }, { locale: 'en' }) })
@@ -475,7 +476,7 @@ test('initial setup is target-specific, survives locale changes and applies only
   expect(commands).toEqual([]);
   await page.getByRole('combobox', { name: en.target }).selectOptions('aarch64');
   await page.getByRole('button', { name: en.configuration, exact: true }).click();
-  await disclosure(en.initial_registers).click();
+  await disclosure(en.configuration, en.initial_registers).click();
   await expect
     .element(page.getByRole('combobox', { name: en.register_name, exact: true }))
     .not.toBeInTheDocument();
@@ -483,7 +484,7 @@ test('initial setup is target-specific, survives locale changes and applies only
   await page.getByRole('combobox', { name: en.target }).selectOptions('x86_64');
   await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
   await page.getByRole('button', { name: zh.configuration, exact: true }).click();
-  await disclosure(zh.initial_registers).click();
+  await disclosure(zh.configuration, zh.initial_registers).click();
   await expect
     .element(page.getByRole('textbox', { name: /RAX/ }))
     .toHaveValue('0xffffffffffffffff');
@@ -494,7 +495,7 @@ test('initial setup is target-specific, survives locale changes and applies only
   await expect.element(page.getByRole('alert')).toMatchTextContent(zh.error_input);
   expect(commands.some((command) => command.type === 'load')).toBe(false);
   await page.getByRole('button', { name: zh.configuration, exact: true }).click();
-  await disclosure(zh.initial_registers).click();
+  await disclosure(zh.configuration, zh.initial_registers).click();
   await page.getByRole('textbox', { name: /RAX/ }).fill('0xffffffffffffffff');
   await page.getByRole('button', { name: zh.close, exact: true }).click();
   await page.getByRole('button', { name: zh.load_artifact, exact: true }).click();

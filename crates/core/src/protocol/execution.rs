@@ -8,6 +8,26 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+/// Interpretation of the complete binary payload supplied with a load request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(
+    tag = "type",
+    content = "data",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum LoadImage {
+    /// Standard ELF owns addresses, entry and permissions.
+    Elf,
+    /// Exact machine code mapped RX without relocation or an implicit ABI.
+    Raw {
+        /// Address of the first payload byte; mapping pages round outward.
+        base: HexAddress,
+        /// Initial fetch address within the actual bytes, with target alignment.
+        entry: HexAddress,
+    },
+}
+
 /// Initial machine inputs applied only when loading, then retained for reset.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
@@ -189,6 +209,8 @@ pub struct Observation {
     pub registers: Option<Registers>,
     /// Most recent terminal guest fault, if any.
     pub fault: Option<Fault>,
+    /// Sorted, distinct address breakpoints retained across reset; at most 256.
+    pub breakpoints: Vec<HexAddress>,
     /// Metadata for the binary memory payload immediately following the reply.
     pub memory: Option<MemoryWindow>,
 }

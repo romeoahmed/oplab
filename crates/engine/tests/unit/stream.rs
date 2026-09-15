@@ -7,6 +7,7 @@ use oplab_core::{
     address::Address,
     protocol::{execution::Registers, scalar::HexAddress},
 };
+use proptest::prelude::*;
 
 fn capture(sequence: u64) -> Capture {
     Capture {
@@ -26,6 +27,7 @@ fn capture(sequence: u64) -> Capture {
                 rflags: Counter::new(2),
             }),
             fault: None,
+            breakpoints: Vec::new(),
             memory: Some(MemoryWindow {
                 address: HexAddress::new(Address::new(0x2000)),
                 length: 8,
@@ -91,4 +93,34 @@ fn coalesced_samples_reference_only_delivered_bases_and_keep_binary_boundaries()
     }
     assert!(transport::read_output(&mut broken).is_err());
     Ok(())
+}
+
+proptest! {
+    #[test]
+    fn breakpoint_histories_survive_stream_encoding(
+        sets in prop::collection::vec(prop::collection::btree_set(any::<u64>(), 0..16), 1..16),
+    ) {
+        let mut encoder = Encoder::default();
+        let mut sequence = 0;
+        let mut retained = Vec::new();
+        // Repeat each set, then clear it: cover both inheritance and replacement.
+        for set in sets.iter().flat_map(|set| [Some(set), Some(set), None]) {
+            sequence += 1;
+            let expected: Vec<_> = set.into_iter().flatten()
+                .map(|&value| HexAddress::new(Address::new(value))).collect();
+            let mut sample = capture(sequence);
+            sample.observation.breakpoints.clone_from(&expected);
+            let mut wire = Vec::new();
+            encoder.write(&mut wire, Pending::Capture(sample))?;
+            let mut input = wire.as_slice();
+            let Some(Output::Observation(message)) = transport::read_output(&mut input)? else {
+                return Err(TestCaseError::fail("missing observation"));
+            };
+            if let ObservationUpdate::Full(observation) = message.event.update {
+                retained = observation.breakpoints;
+            }
+            prop_assert_eq!(&retained, &expected);
+            prop_assert!(input.is_empty());
+        }
+    }
 }

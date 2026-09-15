@@ -142,6 +142,7 @@ impl Encoder {
                 base.subscription == capture.subscription
                     && base.observation.key == current.key
                     && base.observation.memory == current.memory
+                    && base.observation.breakpoints == current.breakpoints
                     && base.observation.sequence < current.sequence
             })
             .map_or_else(

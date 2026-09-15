@@ -13,7 +13,9 @@ use oplab_core::{
     memory::{MAX_MAPPED_BYTES, MAX_REGIONS, Permissions},
     protocol::{
         Command, Diagnostic, DiagnosticCode, Reply, Response,
-        execution::{InitialState, MemoryWindow, Observation, SessionAction, SessionKey, Status},
+        execution::{
+            InitialState, LoadImage, MemoryWindow, Observation, SessionAction, SessionKey, Status,
+        },
         scalar::{Counter, HexAddress},
     },
     registers::InitialRegisters,
@@ -144,6 +146,7 @@ impl BoundSession {
             registers,
             fault,
             memory,
+            breakpoints: self.machine.breakpoints().map(HexAddress::new).collect(),
         };
         self.sequence = sequence;
         Ok((Reply::Observed(Box::new(observation)), payloads))
@@ -214,6 +217,7 @@ fn dispatch(
 ) -> Result<(Reply, Vec<Vec<u8>>), Diagnostic> {
     match command {
         Command::Load {
+            image: format,
             initial,
             replace,
             target,
@@ -232,7 +236,15 @@ fn dispatch(
             }
             let image = image.ok_or_else(|| Diagnostic::new(DiagnosticCode::InvalidInput))?;
             let setup = setup(*target, initial).map_err(|error| diagnostic(&error))?;
-            let machine = Machine::load(Image::Elf(&image), *target, setup)
+            let input = match format {
+                LoadImage::Elf => Image::Elf(&image),
+                LoadImage::Raw { base, entry } => Image::Raw {
+                    bytes: &image,
+                    base: base.address(),
+                    entry: entry.address(),
+                },
+            };
+            let machine = Machine::load(input, *target, setup)
                 .and_then(|machine| {
                     Session::new(machine, completion.address(), instruction_budget.get())
                 })

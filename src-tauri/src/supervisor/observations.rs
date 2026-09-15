@@ -64,6 +64,7 @@ impl Cache {
                         RegisterUpdate::Replace(bank) => bank.map(|bank| *bank),
                     },
                     fault: delta.fault,
+                    breakpoints: observation.breakpoints.clone(),
                     memory: observation.memory,
                 });
                 let memory = if delta.memory_bytes == 0 {
@@ -106,3 +107,7 @@ impl Cache {
 const fn protocol() -> DesktopFailure {
     DesktopFailure::new(FailureCode::Protocol)
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/observations.rs"]
+mod tests;

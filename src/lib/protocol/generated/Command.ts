@@ -3,6 +3,7 @@ import type { BuildIdentity } from './BuildIdentity.js';
 import type { Counter } from './Counter.js';
 import type { HexAddress } from './HexAddress.js';
 import type { InitialState } from './InitialState.js';
+import type { LoadImage } from './LoadImage.js';
 import type { MemoryWindow } from './MemoryWindow.js';
 import type { SessionAction } from './SessionAction.js';
 import type { SessionKey } from './SessionKey.js';
@@ -85,6 +86,10 @@ export type Command =
       type: 'load';
       data: {
         /**
+         * Standard ELF interpretation or explicit raw-code placement.
+         */
+        image: LoadImage;
+        /**
          * Explicit initial GPRs and additional zero-filled mappings.
          */
         initial: InitialState;
@@ -93,7 +98,7 @@ export type Command =
          */
         replace: SessionKey | null;
         /**
-         * Required guest architecture, independently checked against ELF.
+         * Required guest architecture; ELF inputs must declare the same target.
          */
         target: Target;
         /**
@@ -105,7 +110,7 @@ export type Command =
          */
         instruction_budget: Counter;
         /**
-         * Complete ELF file length, between one byte and one MiB.
+         * Complete binary payload length, between one byte and one MiB.
          */
         image_bytes: number;
       };

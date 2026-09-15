@@ -5,10 +5,8 @@
   import { Popover } from 'bits-ui';
 
   import { defaultPreferences, type Preferences } from './preferences';
-  let {
-    preferences = $bindable({ ...defaultPreferences }),
-    locale,
-  }: { preferences?: Preferences; locale: Locale } = $props();
+  let { preferences = $bindable(), locale }: { preferences: Preferences; locale: Locale } =
+    $props();
   const options = $derived({ locale });
 </script>
 

@@ -155,9 +155,10 @@ across commands; do not patch generated native headers to hide a failed configur
 
 ## Commands and ownership
 
-Install dependencies with `pnpm install --frozen-lockfile`. Use `pnpm dev` for
-frontend HMR or `pnpm tauri dev` after native setup. Stop standalone Vite before
-starting Tauri dev; both use the same configured port.
+Use `pnpm dev` for frontend HMR or `pnpm tauri dev` after native setup. Stop
+standalone Vite before starting Tauri dev; both use the same configured port.
+Stop development servers before a static build in the same checkout. Both regenerate
+SvelteKit/Paraglide output, which can invalidate the running HMR module graph.
 
 Install the test browser separately when running component tests:
 
@@ -202,7 +203,7 @@ Edit exported contract comments in Rust, then run `cargo xtask codegen`.
 With the native toolchain configured, verify Rust documentation and its examples:
 
 ```sh
-cargo doc --workspace --no-deps --locked
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 cargo test --workspace --doc --locked
 ```
 
@@ -242,8 +243,13 @@ Each tool owns one configuration. `vite.config.ts` contains SvelteKit, Paraglide
 both Vitest projects. The browser project uses
 [Vite entry scanning](https://vite.dev/config/dep-optimization-options#optimizedeps-entries)
 for tests and the dynamic editor, avoiding dependency reloads during cold runs.
-`svelte.config.ts` produces a static SPA; `tsconfig.json` extends SvelteKit's generated project. ESLint uses native ESM
-`.js`; Stylelint reads native CSS. There are no Svelte `<style>` blocks or PostCSS adapters.
+`svelte.config.ts` produces a static SPA; `tsconfig.json` extends SvelteKit's
+generated project. ESLint uses native ESM `.js`; TypeScript ESLint uses the project
+service, and Stylelint reads native CSS.
+No separate Vitest configuration, test TS project or PostCSS adapter is needed.
+Only `.svelte` components disable `no-useless-default-assignment`: the rule treats
+required [`$bindable()` declarations](https://svelte.dev/docs/svelte/$bindable) as
+removable defaults. Ordinary TypeScript retains the rule.
 
 Prefer tool defaults unless a project constraint requires an override. Oxfmt honors
 `.gitignore` and its built-in lockfile exclusions; its only additional exclusion is

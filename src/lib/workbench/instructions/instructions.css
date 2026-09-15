@@ -69,8 +69,8 @@
 .instruction-inspection {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  flex: 1;
-  min-block-size: 0;
+  flex: 1 0 120px;
+  min-block-size: 120px;
   overflow: hidden;
   gap: 16px;
 
@@ -185,5 +185,18 @@
   .instructions:has(.instruction-analysis) .instruction-controls,
   .instruction-table:has(+ .instruction-analysis) {
     display: none;
+  }
+}
+
+.instruction-table tr[aria-current='step'] {
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.instruction-breakpoint[aria-pressed='true'] {
+  color: var(--error);
+
+  svg {
+    fill: currentcolor;
   }
 }

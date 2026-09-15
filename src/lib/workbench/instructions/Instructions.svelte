@@ -6,7 +6,7 @@
   import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
   import type { Target } from '$lib/protocol/generated/Target';
   import { normalizeAddress } from '$lib/protocol/scalars';
-  import { ArrowRight, ListOrdered } from '@lucide/svelte';
+  import { ArrowRight, Circle, ListOrdered } from '@lucide/svelte';
   import { onDestroy, type Snippet } from 'svelte';
 
   import { problemLabel } from '../presentation';
@@ -22,8 +22,18 @@
     decode,
     analyze,
     source,
+    live = false,
+    pc,
+    breakpoints = [],
+    canBreakpoint = false,
+    onbreakpoint,
   }: {
     source?: Snippet;
+    live?: boolean;
+    pc?: string | undefined;
+    breakpoints?: readonly string[];
+    canBreakpoint?: boolean;
+    onbreakpoint?: (address: string, enabled: boolean) => void;
     bytes: Uint8Array | undefined;
     target: Target;
     base: string;
@@ -107,6 +117,7 @@
 </script>
 
 <div class="instructions">
+  {@render source?.()}
   {#if bytes === undefined}
     <p class="muted-note">{m.instructions_empty({}, options)}</p>
   {:else}
@@ -117,7 +128,6 @@
         void inspect();
       }}
     >
-      {@render source?.()}
       <span class="instruction-origin">{target} · {base} · {bytes.length} B</span>
       <label
         >{m.byte_offset({}, options)}<input
@@ -142,6 +152,7 @@
         }}>{m.next_instructions({}, options)}<ArrowRight size={14} aria-hidden="true" /></button
       >
     </form>
+    {#if live}<p class="muted-note">{m.live_decode_hint({}, options)}</p>{/if}
     {#if result?.type !== 'decoded'}<p class="instruction-note">
         {m.instructions_hint({}, options)}
       </p>{/if}
@@ -155,15 +166,33 @@
           <table aria-label={m.instructions({}, options)}>
             <thead
               ><tr
-                ><th scope="col">{m.address({}, options)}</th><th scope="col"
+                >{#if live}<th scope="col"
+                    ><span class="sr-only">{m.breakpoints({}, options)}</span></th
+                  >{/if}<th scope="col">{m.address({}, options)}</th><th scope="col"
                   >{m.bytes({}, options)}</th
                 ><th scope="col">{m.instruction({}, options)}</th></tr
               ></thead
             >
             <tbody
               >{#each result.rows as row (row.address)}<tr
-                  ><td>{row.address}</td><td
-                    >{row.bytes.map((byte) => byte.toString(16).padStart(2, '0')).join(' ')}</td
+                  aria-current={row.address === pc ? 'step' : undefined}
+                  >{#if live}<td
+                      ><button
+                        class="instruction-breakpoint icon-button"
+                        type="button"
+                        disabled={!canBreakpoint}
+                        aria-label={m.breakpoint_at({ address: row.address }, options)}
+                        aria-pressed={breakpoints.includes(row.address)}
+                        onclick={() => {
+                          onbreakpoint?.(row.address, !breakpoints.includes(row.address));
+                        }}><Circle size={12} aria-hidden="true" /></button
+                      ></td
+                    >{/if}<td
+                    >{#if row.address === pc}<ArrowRight
+                        size={12}
+                        aria-label={m.current_instruction({}, options)}
+                      />{/if}{row.address}</td
+                  ><td>{row.bytes.map((byte) => byte.toString(16).padStart(2, '0')).join(' ')}</td
                   ><td
                     ><button
                       type="button"

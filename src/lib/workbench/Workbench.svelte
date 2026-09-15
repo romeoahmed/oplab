@@ -5,6 +5,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import type { Diagnostic } from '@codemirror/lint';
   import {
+    Binary,
     Hammer,
     Download,
     Play,
@@ -35,6 +36,7 @@
   import Instructions from './instructions/Instructions.svelte';
   import Machine from './machine/Machine.svelte';
   import Memory from './machine/Memory.svelte';
+  import Raw from './machine/Raw.svelte';
   import Setup from './machine/Setup.svelte';
   import { defaultPreferences, readPreferences } from './preferences';
   import { problemLabel } from './presentation';
@@ -50,10 +52,10 @@
   const work = createWorkbench(untrack(() => portFactory));
   let editor = $state<{ revealDiagnostic: () => void }>();
   const options = $derived({ locale: language.current });
-  let imported = $state.raw<Uint8Array>();
   let byteSource = $state('');
   let observationTab = $state('memory');
   let fileProblem = $state<string | null>(null);
+  const captured = $derived(work.inspected);
   const artifactSources = $derived(
     work.candidate?.artifact.image.segments
       .flatMap((segment, index) => {
@@ -72,15 +74,28 @@
       .toSorted((left, right) => Number(right.executable) - Number(left.executable)) ?? [],
   );
   const byteSources = $derived([
-    ...(imported === undefined
+    ...(work.binary === undefined
       ? []
       : [
           {
             id: 'imported',
             label: m.imported_binary({}, options),
-            bytes: imported,
-            target: work.target,
-            base: work.base,
+            bytes: work.binary,
+            target: work.raw.target,
+            base: work.raw.base,
+          },
+        ]),
+    ...(captured?.memory == null ||
+    captured.observation.memory === null ||
+    captured.observation.registers === null
+      ? []
+      : [
+          {
+            id: 'live',
+            label: m.live_memory({}, options),
+            bytes: captured.memory,
+            target: captured.observation.registers.type,
+            base: captured.observation.memory.address,
           },
         ]),
     ...artifactSources,
@@ -105,6 +120,16 @@
         },
   );
   const observation = $derived(work.snapshot?.observation);
+  const capturedPC = $derived(
+    captured?.observation.registers?.type === 'x86_64'
+      ? captured.observation.registers.data.rip
+      : captured?.observation.registers?.data.pc,
+  );
+  const pc = $derived(
+    observation?.registers?.type === 'x86_64'
+      ? observation.registers.data.rip
+      : observation?.registers?.data.pc,
+  );
   const running = $derived(observation?.status.type === 'running');
   const resumable = $derived(
     observation !== undefined &&
@@ -235,11 +260,11 @@
       aria-label={m.workspace({}, options)}
     >
       <header class="topbar">
-        <div class="brand">
+        <h1 class="brand" aria-label="Oplab">
           <img src="/icon.svg" alt="" width="30" height="30" /><strong
             >oplab<span class="brand-period">.</span></strong
           >
-        </div>
+        </h1>
         <Files
           port={filePort}
           locale={language.current}
@@ -251,35 +276,15 @@
             work.setSource(source);
           }}
           onbinary={(bytes: Uint8Array) => {
-            imported = bytes;
+            work.importBinary(bytes);
             byteSource = 'imported';
-            observationTab = 'instructions';
+            observationTab = 'raw';
             focused = false;
           }}
           onerror={(code: string | null) => {
             fileProblem = code;
           }}
         />
-        <div class="experiment-title">
-          <h1>{m.experiment({}, options)}</h1>
-          <span class="local-badge">{m.local_scratch({}, options)}</span>
-        </div>
-        <div class="toolbar-end">
-          <label class="locale-picker"
-            ><span class="sr-only">{m.language({}, options)}</span><select
-              value={language.current}
-              onchange={(event) => {
-                void language.change(event.currentTarget.value === 'zh-CN' ? 'zh-CN' : 'en');
-              }}
-              ><option value="en" lang="en">English</option><option value="zh-CN" lang="zh-CN"
-                >简体中文</option
-              ></select
-            ></label
-          >
-          <Appearance bind:preferences locale={language.current} />
-        </div>
-      </header>
-      <div class="commandbar">
         <Toolbar.Root class="execution-toolbar" aria-label={m.execution_controls({}, options)}>
           {#each actions as action, index (index)}
             {#if index === 2}<span class="divider" aria-hidden="true"></span>{/if}
@@ -339,7 +344,21 @@
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>
-      </div>
+        <div class="toolbar-end">
+          <label class="locale-picker"
+            ><span class="sr-only">{m.language({}, options)}</span><select
+              value={language.current}
+              onchange={(event) => {
+                void language.change(event.currentTarget.value === 'zh-CN' ? 'zh-CN' : 'en');
+              }}
+              ><option value="en" lang="en">English</option><option value="zh-CN" lang="zh-CN"
+                >简体中文</option
+              ></select
+            ></label
+          >
+          <Appearance bind:preferences locale={language.current} />
+        </div>
+      </header>
       <div class="workspace-grid">
         <section class="source-pane" aria-label={m.source({}, options)}>
           <header class="pane-header source-header">
@@ -425,6 +444,11 @@
           {observation}
           loadedCurrent={work.loadedCurrent}
           loadedRevision={work.loadedRevision}
+          loadedKind={work.loadedKind}
+          editable={work.connected && resumable && !work.controlling}
+          onbreakpoint={(address: string, enabled: boolean) => {
+            void work.breakpoint(address, enabled);
+          }}
           locale={language.current}
         />
         <Tabs.Root bind:value={observationTab} class="observation-pane">
@@ -437,6 +461,8 @@
                   {},
                   options,
                 )}</Tabs.Trigger
+              ><Tabs.Trigger value="raw"
+                ><Binary size={15} aria-hidden="true" />{m.raw_code({}, options)}</Tabs.Trigger
               ><Tabs.Trigger value="artifact"
                 ><Box size={15} aria-hidden="true" />{m.artifact({}, options)}</Tabs.Trigger
               ></Tabs.List
@@ -459,19 +485,30 @@
               <label
                 ><span>{m.window_size({}, options)}</span><input
                   type="number"
+                  required
                   aria-label={m.window_size({}, options)}
                   min="1"
                   max="4096"
                   bind:value={work.memoryLength}
                 /><span class="input-unit">B</span></label
               >
+              <button
+                type="button"
+                disabled={!work.connected || pc === undefined}
+                onclick={(event) => {
+                  if (pc !== undefined) {
+                    work.memoryAddress = pc;
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}><LocateFixed size={14} aria-hidden="true" />{m.inspect_pc({}, options)}</button
+              >
               <button disabled={!work.connected || observation === undefined}
                 >{m.inspect_memory({}, options)}<ArrowRight size={14} aria-hidden="true" /></button
               >
             </form>
             <Memory
-              window={observation?.memory ?? null}
-              bytes={work.snapshot?.memory ?? null}
+              window={captured?.observation.memory ?? null}
+              bytes={captured?.memory ?? null}
               locale={language.current}
             />
           </Tabs.Content>
@@ -484,6 +521,16 @@
               locale={language.current}
               decode={work.decode}
               analyze={work.analyze}
+              live={selectedBytes?.id === 'live'}
+              pc={selectedBytes?.id === 'live' ? capturedPC : undefined}
+              breakpoints={observation?.breakpoints ?? []}
+              canBreakpoint={selectedBytes?.id === 'live' &&
+                work.connected &&
+                resumable &&
+                !work.controlling}
+              onbreakpoint={(address: string, enabled: boolean) => {
+                void work.breakpoint(address, enabled);
+              }}
             >
               {#snippet source()}
                 {#if byteSources.length > 0}<label class="byte-source"
@@ -498,12 +545,25 @@
                           >{item.label}</option
                         >{/each}
                     </select>
-                    {#if selectedBytes?.id !== 'imported' && !work.artifactCurrent}<span
+                    {#if selectedBytes?.id.startsWith('segment-') && !work.artifactCurrent}<span
                         class="stale">{m.artifact_stale({}, options)}</span
                       >{/if}
                   </label>{/if}
               {/snippet}
             </Instructions>
+          </Tabs.Content>
+          <Tabs.Content value="raw" class="raw-content">
+            <Raw
+              bind:value={work.raw}
+              bind:setup={work.rawSetup}
+              bind:budget={work.budget}
+              bytes={work.binary?.length}
+              disabled={!work.connected || work.controlling || running}
+              locale={language.current}
+              onload={() => {
+                void work.loadRaw();
+              }}
+            />
           </Tabs.Content>
           <Tabs.Content value="artifact" class="artifact-content">
             {#if work.candidate === null}<div class="empty-observation">

@@ -107,12 +107,14 @@
   }
 }
 
+/* Window decorations stay native; this header contains application commands. */
 .topbar {
-  display: flex;
-  flex: 0 0 65px;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 30px;
-  padding-inline: 23px 18px;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 10px 16px;
   background: var(--surface-deep);
   border-block-end: 1px solid var(--border);
 }
@@ -120,12 +122,12 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
 }
 
 .brand strong {
-  font-size: 23px;
-  letter-spacing: -1px;
+  font-size: 20px;
+  letter-spacing: -0.5px;
   font-weight: 650;
 }
 
@@ -133,43 +135,15 @@
   color: var(--accent);
 }
 
-.experiment-title {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-}
-
-.experiment-title h1 {
-  font-size: 13px;
-}
-
-.local-badge {
-  color: var(--muted);
-  font-size: 11px;
-  border: 1px solid var(--border);
-  padding: 1px 7px;
-  border-radius: 4px;
-}
-
 .toolbar-end {
-  margin-inline-start: auto;
   display: flex;
   align-items: center;
-  gap: 13px;
+  gap: 8px;
 }
 
 .locale-picker select {
   background: transparent;
   border-color: transparent;
-}
-
-.commandbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 10px 18px;
-  border-block-end: 1px solid var(--border);
 }
 
 .execution-toolbar {
@@ -538,10 +512,13 @@
 .panel-tabs {
   display: flex;
   align-self: stretch;
-  gap: 22px;
+  gap: clamp(12px, 2vw, 22px);
+  min-inline-size: 0;
+  overflow-x: auto;
 }
 
 .panel-tabs button {
+  flex-shrink: 0;
   padding: 0 1px;
   background: transparent;
   border: 0;
@@ -828,13 +805,24 @@
   white-space: nowrap;
 }
 
-@media (width <= 1100px) {
-  .local-badge {
+@media (width <= 1200px) {
+  .topbar {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    gap: 6px 12px;
+    padding: 8px 12px;
+  }
+
+  .brand strong {
     display: none;
   }
 
-  .topbar {
-    gap: 22px;
+  .execution-toolbar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .configuration-button {
+    justify-self: end;
   }
 
   .inspector-body {
@@ -843,11 +831,6 @@
 
   .pane-header {
     padding-inline: 16px;
-  }
-
-  .commandbar {
-    gap: 7px;
-    padding-inline: 12px;
   }
 
   .action {
@@ -869,12 +852,6 @@
     gap: 0;
   }
 
-  .experiment-title h1 {
-    font-size: 12px;
-  }
-}
-
-@media (width <= 640px) {
   .workbench {
     block-size: auto;
     min-block-size: 100dvh;
@@ -882,7 +859,7 @@
 
   .workspace-grid {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 440px 260px auto;
+    grid-template-rows: clamp(320px, 55dvh, 440px) clamp(320px, 45dvh, 440px) auto;
   }
 
   .inspector {
@@ -890,23 +867,6 @@
     grid-row: 3;
     border-inline-start: 0;
     border-block-start: 1px solid var(--border);
-  }
-
-  .topbar {
-    gap: 16px;
-    padding-inline: 12px;
-  }
-
-  .experiment-title {
-    display: none;
-  }
-
-  .execution-toolbar {
-    flex: 1;
-  }
-
-  .configuration-button {
-    flex-shrink: 0;
   }
 
   .statusbar {
@@ -927,15 +887,7 @@
   }
 }
 
-@media (height <= 700px) and (width > 640px) {
-  .topbar {
-    flex-basis: 48px;
-  }
-
-  .commandbar {
-    padding-block: 5px;
-  }
-
+@media (height <= 700px) and (width > 800px) {
   .source-context {
     justify-content: flex-end;
     padding-block: 3px;
@@ -999,6 +951,7 @@
   }
 }
 
+.raw-content:not([hidden]),
 .instructions-content:not([hidden]) {
   display: flex;
   flex: 1;

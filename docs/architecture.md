@@ -2,6 +2,7 @@
 
 Oplab is a desktop assembly workbench for x86_64 and little-endian AArch64.
 Its working loop is source → standard ELF → loaded machine → observable effects.
+Raw bytes can enter the same loading/execution path with explicit placement.
 [Roadmap](roadmap.md) separates implemented capabilities from the planned debugger.
 
 ## Ownership
@@ -22,6 +23,7 @@ Svelte workbench → Tauri supervisor → isolated worker
 | `src/lib/protocol`            | Rust-generated declarations and pure framing/scalar/observation logic                      |
 | `src/lib/i18n`, `messages`    | Locale selection and English/Simplified Chinese catalogs                                   |
 | `tests`, Rust package `tests` | Behavior and invariant tests outside production directories                                |
+| `examples`                    | Standard assembly shared by the workbench and native execution tests                       |
 | `xtask`                       | Cross-tool verification, formatting, contract export and sidecar staging                   |
 
 Keep state and effects with their owners, native types in engine adapters and desktop
@@ -50,6 +52,7 @@ crates/
     tests/                    # Public integration targets
       common/                 # Process fixtures
       unit/                   # Private concurrency tests
+examples/                     # x86_64.s and aarch64.s, loaded unchanged
 src/
   lib/
     desktop/                  # Tauri IPC boundary
@@ -132,6 +135,16 @@ load inputs: changing the link address requires assembly; completion, budget,
 initial GPRs and extra mappings apply on load. Per-target setup survives target and
 locale switches for the current window without mutating an artifact or session.
 
+Raw-code configuration owns its target, base, entry and completion; per-target
+GPR/mapping setup and the instruction budget are shared with source loading.
+Each load captures its bytes and settings before awaiting IPC. Later edits remain
+editable inputs and cannot alter the pending load or the machine it creates.
+Code freshness compares the source build identity or raw bytes/target/base/entry.
+Completion, budget and initial conditions apply on load; freshness does not compare
+those settings with the active session.
+Configuration components require parent-owned bindings. Defaults live in the
+workbench/controller; child components do not initialize competing state.
+
 ### Editor and diagnostics
 
 CodeMirror loads through a [Svelte await block](https://svelte.dev/docs/svelte/await).
@@ -141,6 +154,8 @@ and wrapping while preserving history. Svelte derives presentation from immutabl
 snapshots; effects synchronize external state.
 
 A target-specific `StreamLanguage` and Lezer tags provide lexical highlighting.
+Built-in programs live in `examples/`: Vite imports them with `?raw`, and Rust
+execution tests use `include_str!`. No generated copy or custom asset loader is needed.
 Completion combines register/directive hints and document words, excluding comments
 and strings. Native CodeMirror commands handle search, history, comments, indentation,
 bracket matching and multiple selections. Tab leaves the editor. LLVM alone validates
@@ -154,9 +169,17 @@ onto unverified text. The original assembly input remains unchanged.
 ### Controls and layout
 
 Bits UI owns toolbar, tooltip, popover, menu and tab interactions. Native inputs
-own field validation; buttons retain `disabled`, and library event/attachment
-composition remains intact. Inactive tab panels use `hidden` without losing state.
+own constraint validation and submission; related shortcuts use `requestSubmit()`
+to follow the same path. Buttons retain `disabled`, and library event/attachment
+composition remains intact. Bits UI keeps inactive tab panels hidden without losing state.
 Use semantic landmarks, labelled fields, tables and definition lists.
+
+A compact application header combines files, execution and settings. Below 1200px
+it moves execution controls to a second row. Window decorations and controls remain
+native; macOS retains Tauri's default application menu. Tauri's
+[window menu](https://tauri.app/learn/window-menu/) API provides menus, not a portable
+native toolbar. Platform toolbar bridges and
+[overlay titlebars](https://tauri.app/learn/window-customization/) are not implemented.
 
 Native CSS uses Grid/Flexbox, logical properties, nesting, `oklch`, `color-mix`,
 container queries and dynamic viewport units. Newly Baseline features require
@@ -164,9 +187,13 @@ actual WebView acceptance; Vite does not polyfill missing Web APIs.
 
 The default window is 1440×900 logical pixels, fitted to the monitor work area by
 Tauri's `preventOverflow`, with an 880×600 minimum. The machine panel starts at
-28% width and the observation panel at 36% of viewport height. Minimum row sizes
-protect the editor and observations. Focus mode hides inspectors without unmounting
-the editor or disconnecting the worker; Reset layout restores only panel sizes.
+28% width and the observation panel at 40% of viewport height. Minimum row sizes
+protect the editor and observations. At 800px and below, panels stack vertically;
+forms reflow with Grid and the tab strip scrolls without compressing its controls.
+This also accommodates zoomed WebViews without JavaScript resize handlers. Raw-code
+loading stays beside the panel heading, ahead of optional setup. Existing saved
+panel sizes remain; Reset layout applies the defaults without changing other preferences.
+Focus mode hides inspectors without unmounting the editor or disconnecting the worker.
 
 JetBrains Mono defaults to 14px with ligatures disabled. Preferences offer system
 monospace, 12–22px text and wrapping; the app does not enumerate installed fonts.
@@ -185,6 +212,20 @@ pending, error and result presentation. Re-decoding clears the selection.
 Lists and analysis scroll independently. Below 760px of content width, a CSS
 container query gives analysis the panel; Close restores the retained list without
 another decode. Static analysis remains separate from live machine observations.
+
+Observed memory is a separate instruction source with its captured target, address
+and PC. Captures belong to a connection, session and generation, and disappear on
+replacement or reset. Identical bytes retain decoded rows and selection across
+observations; control replies without memory do not erase the last capture. The PC
+marker belongs to that capture, not an inferred source location. The memory table
+uses the same retained capture. Manual inspection and Inspect at PC share native
+form validation for the desktop's 1–4,096-byte window; the engine still validates
+that the requested range lies in one mapping.
+
+Address breakpoint controls use the latest authoritative observation. They are
+editable only in ready/paused states, retain the engine's reset semantics and never
+optimistically publish a change. Static artifact/imported rows cannot change session
+breakpoints; only rows from the bound memory capture expose those controls.
 
 ## Localization and recovery
 
@@ -208,7 +249,7 @@ Files use standard UTF-8 assembly, raw bytes and ELF; no saved-experiment contai
 is planned. Import replaces the current source only if it has not changed while the
 picker was open. Source exports preserve BOM and newline bytes until editing;
 CodeMirror edits use its normal LF representation. Binary imports are separate,
-transient inspection inputs and do not replace the loaded machine.
+transient raw inputs; only the explicit load action replaces the machine.
 
 The desktop file boundary uses Tauri dialogs and bounded Rust I/O. Paths stay
 native; cancellation is normal. Exports validate contents before same-directory

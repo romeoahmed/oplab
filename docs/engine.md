@@ -17,28 +17,24 @@ The artifact retains both complete files and a bounded ELF-derived image view.
 Use LLVM's GNU-style assembly: Intel operands by default on x86_64 and LLVM/GNU
 syntax on little-endian AArch64. Source reaches LLVM unchanged. There is
 no NASM/MASM translation, custom preprocessor or per-instruction fallback.
-Declare x86 operand syntax explicitly in portable examples:
+The built-in [x86_64](../examples/x86_64.s) and [AArch64](../examples/aarch64.s)
+programs copy eight signed integers from `.rodata` to `.bss`, insertion-sort them
+and compute their sum. Link at `0x1000` and stop at `done`: RAX or X0 and `total`
+contain 42; `output` contains `[-19, -7, 0, 2, 3, 8, 13, 42]` as little-endian
+64-bit integers. The first writable segment shows this array in the desktop.
 
-```asm
-.intel_syntax noprefix
-.text
-mov rax, 40
-add rax, 2
-done: nop
-```
+Both programs declare `_start`, function symbols and their own 16-byte-aligned
+stack storage. The sort is a leaf function using caller-saved registers and the
+integer argument registers of [System V AMD64](https://gitlab.com/x86-psABIs/x86-64-ABI)
+or [AAPCS64](https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst).
+These are self-contained guest programs; Oplab does not supply an OS process stack
+or an implicit return address. Execution stops before the `done` loop.
 
-The corresponding AArch64 source is:
-
-```asm
-.text
-mov x0, #40
-add x0, x0, #2
-done: nop
-```
-
-Link at `0x1000` and choose `done` as the desktop stop symbol. The machine stops
-before executing `done`; RAX or X0 is 42. Neither example needs a stack or host ABI.
-`ret` would require an explicit return/stack policy that these examples do not supply.
+x86 explicitly selects `.intel_syntax noprefix`, uses RIP-relative addresses and
+copies with `rep movsq`. `offset count` selects a symbolic immediate rather than
+a memory operand. AArch64 uses [page-relative relocations](https://sourceware.org/binutils/docs/as/AArch64_002dRelocations.html),
+post-indexed loads/stores and scaled register offsets. Array lengths derive from
+assembler expressions rather than duplicated numeric constants.
 
 GNU directives, labels, expressions, macros and pseudo-instructions remain toolchain
 owned. Use `.byte`, `.quad`, `.macro`/`.endm` and `.rept`/`.endr`.
@@ -116,7 +112,7 @@ by the returned instruction lengths. Addresses cannot wrap; AArch64 starts must 
 four-byte aligned. Invalid or incomplete instructions before the limit fail the call
 at the reported address. Bytes beyond the instruction limit remain unexamined.
 
-Inputs are imported raw bytes or one [ELF segment](https://gabi.xinuos.com/elf/07-pheader.html)'s
+File inputs are imported raw bytes or one [ELF segment](https://gabi.xinuos.com/elf/07-pheader.html)'s
 exact `p_filesz` extent, up to 1 MiB. Exports retain the entire extent; decode
 requests take at most 64 KiB from the chosen offset. This window exceeds 256
 maximum-length instructions on either target, so paging cannot truncate an
@@ -126,10 +122,14 @@ synthesizes BSS/padding, infers boundaries from symbols or reconstructs bytes fr
 formatted text. ELF headers and embedded data remain data even if a decoder
 recognizes their bytes as instructions.
 
-Imported bytes use the selected architecture and base; ELF bytes retain their build
-identity. Changing bytes, target, base or connection invalidates the visible decode
-result, even if the previous values are restored.
-These are static file bytes, not a live machine view or verified source mapping.
+Imported bytes use the Raw code panel's architecture and load address; ELF bytes
+retain their build identity. Changing bytes, target, base or connection invalidates
+the visible decode result, even if the previous values are restored.
+File bytes remain separate from the loaded machine. Captured memory is another
+input, bound to its session, generation, address and register snapshot. Controls
+without memory retain that capture; reset or replacement invalidates it. Refresh
+memory and disassemble again to inspect changed bytes. Neither input provides
+verified source mapping.
 Select an instruction for a separate, bounded analysis request. Lists remain
 lightweight; changing the input or page removes the selection and its pending
 result. Locale and panel changes retain the current analysis.
@@ -257,7 +257,8 @@ ELF wrapper. The base need not be page-aligned. The aligned entry must fit the
 minimum instruction width entirely inside the actual input, not page padding.
 Pages round outward; surrounding bytes initialize to zero. This validates initial
 fetch geometry, not decoding or instruction boundaries. Completion remains explicit.
-The CLI exposes raw execution; desktop binary import remains inspection-only.
+Desktop, worker and CLI expose raw execution through this same loader. Importing
+bytes alone never starts or replaces a session.
 
 `MachineSetup` optionally supplies an architecture-shaped `InitialRegisters` bank
 and additional `InitialMapping` regions. Canonical names are lowercase: the 16 x86
@@ -329,7 +330,11 @@ Address breakpoints stop before effects. Resume bypasses the stop until admissio
 including across zero-work yields, then re-arms for the next architectural visit.
 The set is bounded to 256 addresses with AArch64 alignment checks. An address
 breakpoint does not establish instruction-boundary or source-location validity.
-Source breakpoints and watchpoints remain planned.
+Breakpoints can be edited in ready/paused states. The desktop adds/removes addresses
+in the machine panel or toggles decoded rows from captured memory. Successful
+observations carry the authoritative sorted set; repeated adds/removals are
+idempotent, and rejected changes leave it intact. Source breakpoints and watchpoints
+remain planned.
 
 Observations capture canonical x86_64 GPRs/RIP/RFLAGS or AArch64 X0–X30/SP/PC/NZCV,
 status, counters, fault data and an optional memory window at one owner boundary.

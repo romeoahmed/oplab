@@ -1,14 +1,15 @@
 import type { Observation } from '$lib/protocol/generated/Observation';
 import type { ObservationDelta } from '$lib/protocol/generated/ObservationDelta';
 import type { StreamEvent } from '$lib/protocol/generated/StreamEvent';
+import type { Target } from '$lib/protocol/generated/Target';
 import { applyObservation } from '$lib/protocol/observations';
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
 
 import { observation } from '../fixtures/protocol';
 
-function baseline(): { observation: Observation; memory: Uint8Array } {
-  const value = observation();
+function baseline(target: Target = 'x86_64'): { observation: Observation; memory: Uint8Array } {
+  const value = observation(undefined, target);
   value.memory = { address: '0x0000000000002000', length: 8 };
   return { observation: value, memory: new Uint8Array(8) };
 }
@@ -31,57 +32,70 @@ function event(data: ObservationDelta): StreamEvent {
 
 // The model is the latest complete sample, independently chosen by the generator.
 // Production decides how a full or delta packet reconstructs that sample.
-test('full/delta histories reconstruct each sample across coalescing gaps without changing earlier samples', () => {
-  fc.assert(
-    fc.property(
-      fc.array(
-        fc.record({
-          gap: fc.integer({ min: 1, max: 1000 }),
-          full: fc.boolean(),
-          value: fc.option(fc.bigInt({ min: 0n, max: (1n << 64n) - 1n })),
-          memory: fc.option(fc.uint8Array({ minLength: 8, maxLength: 8 })),
-        }),
-        { minLength: 1, maxLength: 30 },
+test.each(['x86_64', 'aarch64'] as const)(
+  '%s full/delta histories reconstruct samples without mutating retained state',
+  (target) => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            gap: fc.integer({ min: 1, max: 1000 }),
+            full: fc.boolean(),
+            breakpoints: fc.uniqueArray(fc.bigInt({ min: 0n, max: (1n << 64n) - 1n }), {
+              maxLength: 16,
+            }),
+            value: fc.option(fc.bigInt({ min: 0n, max: (1n << 64n) - 1n })),
+            memory: fc.option(fc.uint8Array({ minLength: 8, maxLength: 8 })),
+          }),
+          { minLength: 1, maxLength: 30 },
+        ),
+        (samples) => {
+          let previous = baseline(target);
+          for (const [index, sample] of samples.entries()) {
+            const retained = structuredClone(previous);
+            const expected = structuredClone(previous);
+            expected.observation.sequence = String(
+              BigInt(previous.observation.sequence) + BigInt(sample.gap),
+            );
+            if (sample.full)
+              expected.observation.breakpoints = sample.breakpoints
+                .toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+                .map((value) => `0x${value.toString(16).padStart(16, '0')}`);
+            expected.observation.instructions = String(index + 1);
+            expected.observation.dispatches = String(index + 1);
+            const bank = expected.observation.registers;
+            if (bank === null) throw new Error('Missing fixture bank');
+            if (sample.value !== null) {
+              const registers = bank.type === 'x86_64' ? bank.data.gpr : bank.data.x;
+              registers[0] = String(sample.value);
+            }
+            expected.memory = sample.memory ?? previous.memory;
+            const packet: StreamEvent = sample.full
+              ? { subscription: '3', update: { type: 'full', data: expected.observation } }
+              : event({
+                  ...delta(expected.observation, expected.observation.sequence),
+                  base: previous.observation.sequence,
+                  registers:
+                    sample.value === null ? { type: 'unchanged' } : { type: 'replace', data: bank },
+                  memory_bytes: sample.memory === null ? 0 : 8,
+                });
+            const model = structuredClone(expected);
+            const result = applyObservation(
+              { subscription: '3', key: previous.observation.key, baseline: previous },
+              packet,
+              sample.full ? expected.memory : sample.memory,
+            );
+            expect(result).toEqual({ type: 'updated', snapshot: model });
+            expect(previous).toEqual(retained);
+            if (result.type !== 'updated' || result.snapshot.memory === null)
+              throw new Error('Missing complete sample');
+            previous = { observation: result.snapshot.observation, memory: result.snapshot.memory };
+          }
+        },
       ),
-      (samples) => {
-        let previous = baseline();
-        for (const [index, sample] of samples.entries()) {
-          const retained = structuredClone(previous);
-          const expected = structuredClone(previous);
-          expected.observation.sequence = String(
-            BigInt(previous.observation.sequence) + BigInt(sample.gap),
-          );
-          expected.observation.instructions = String(index + 1);
-          expected.observation.dispatches = String(index + 1);
-          const bank = expected.observation.registers;
-          if (bank?.type !== 'x86_64') throw new Error('Wrong fixture bank');
-          if (sample.value !== null) bank.data.gpr[0] = String(sample.value);
-          expected.memory = sample.memory ?? previous.memory;
-          const packet: StreamEvent = sample.full
-            ? { subscription: '3', update: { type: 'full', data: expected.observation } }
-            : event({
-                ...delta(expected.observation, expected.observation.sequence),
-                base: previous.observation.sequence,
-                registers:
-                  sample.value === null ? { type: 'unchanged' } : { type: 'replace', data: bank },
-                memory_bytes: sample.memory === null ? 0 : 8,
-              });
-          const model = structuredClone(expected);
-          const result = applyObservation(
-            { subscription: '3', key: previous.observation.key, baseline: previous },
-            packet,
-            sample.full ? expected.memory : sample.memory,
-          );
-          expect(result).toEqual({ type: 'updated', snapshot: model });
-          expect(previous).toEqual(retained);
-          if (result.type !== 'updated' || result.snapshot.memory === null)
-            throw new Error('Missing complete sample');
-          previous = { observation: result.snapshot.observation, memory: result.snapshot.memory };
-        }
-      },
-    ),
-  );
-});
+    );
+  },
+);
 
 test('stale identities are ignored; absent or lost delta bases require a full sample', () => {
   const initial = baseline();
@@ -161,7 +175,7 @@ test('full memory windows validate byte counts and the exclusive 64-bit address 
   fc.assert(
     fc.property(
       fc.integer({ min: 0, max: 65536 }),
-      fc.constantFrom(0, 1, 8, 65536, 65537),
+      fc.integer({ min: 0, max: 65537 }),
       (remaining, length) => {
         const start = (1n << 64n) - 1n - BigInt(remaining);
         const value = observation();
@@ -181,5 +195,15 @@ test('full memory windows validate byte counts and the exclusive 64-bit address 
         } else expect(apply).toThrow(RangeError);
       },
     ),
+    {
+      examples: [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [65535, 65536],
+        [65534, 65536],
+        [65536, 65537],
+      ],
+    },
   );
 });

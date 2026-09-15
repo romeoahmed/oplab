@@ -5,16 +5,23 @@
   import { Cpu, Keyboard } from '@lucide/svelte';
 
   import { stateLabel } from '../presentation';
+  import Breakpoints from './Breakpoints.svelte';
   import Registers from './Registers.svelte';
   const {
     observation,
     loadedCurrent,
     loadedRevision,
+    loadedKind,
+    editable,
+    onbreakpoint,
     locale,
   }: {
     observation: Observation | undefined;
     loadedCurrent: boolean;
     loadedRevision: string | null;
+    loadedKind: 'source' | 'raw' | null;
+    editable: boolean;
+    onbreakpoint: (address: string, enabled: boolean) => void;
     locale: Locale;
   } = $props();
   const options = $derived({ locale });
@@ -67,13 +74,19 @@
               ? 'AArch64'
               : '—'}</span
         ><span
-          >{loadedRevision === null
-            ? m.existing_session({}, options)
-            : m.loaded_revision({ revision: loadedRevision }, options)}</span
+          >{loadedKind === 'raw'
+            ? m.loaded_raw({}, options)
+            : loadedRevision === null
+              ? m.existing_session({}, options)
+              : m.loaded_revision({ revision: loadedRevision }, options)}</span
         >
       </div>
       {#if !loadedCurrent}<p class="revision-warning">
-          {loadedRevision === null ? m.source_unlinked({}, options) : m.source_changed({}, options)}
+          {loadedKind === 'raw'
+            ? m.raw_changed({}, options)
+            : loadedRevision === null
+              ? m.source_unlinked({}, options)
+              : m.source_changed({}, options)}
         </p>{/if}
       <dl class="execution-counts">
         <div>
@@ -81,6 +94,12 @@
           <dd>{observation.instructions}</dd>
         </div>
       </dl>
+      <Breakpoints
+        addresses={observation.breakpoints}
+        disabled={!editable}
+        {locale}
+        onchange={onbreakpoint}
+      />
       <Registers bank={observation.registers} {locale} />
     {/if}
   </div>

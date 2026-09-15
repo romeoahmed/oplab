@@ -223,6 +223,7 @@ fn load_example(
         service,
         info,
         Command::Load {
+            image: oplab_core::protocol::execution::LoadImage::Elf,
             initial: oplab_core::protocol::execution::InitialState::default(),
             replace: None,
             target,

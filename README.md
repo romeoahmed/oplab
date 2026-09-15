@@ -16,12 +16,13 @@ remain [release gates](docs/roadmap.md#release-gates).
 
 [Build and develop](docs/development.md) · [Engine guide](docs/engine.md) · [Roadmap](docs/roadmap.md)
 
-## Explore an experiment
+## Run an example
 
 1. Choose an architecture and **Load example**.
 2. **Assemble**, then **Load artifact**.
-3. **Step** (`F10`) or **Run** (`F5`). The example stores 42 in memory.
-4. Inspect the result. **Reset** restores the loaded initial state.
+3. **Step** (`F10`) or **Run** (`F5`). The example sorts eight signed integers and sums them to 42.
+4. Inspect the sorted array in **Memory** and the sum in RAX or X0.
+   **Reset** restores the program and initial state, keeping address breakpoints.
 
 Use `Ctrl+Enter` / `⌘+Enter` to assemble. Configure the link address, completion
 address or symbol, instruction limit, initial registers and additional memory.
@@ -32,8 +33,8 @@ loaded machine intact.
 
 - **Edit and build:** CodeMirror highlighting, completion, search, history and
   source diagnostics; unchanged GNU-style source assembled and linked by LLVM MC/LLD.
-- **Execute and inspect:** step, run, pause, stop and reset; integer registers,
-  flags and memory; bounded disassembly and static instruction analysis.
+- **Execute and inspect:** ELF or raw-code sessions; step, run, pause, stop, reset
+  and address breakpoints; integer registers, flags, memory and bounded disassembly.
 - **Work with files:** import/export UTF-8 assembly and exact machine bytes;
   export complete ELF objects and images through native dialogs.
 - **Automate:** run source, static ELF or raw code from stdin with explicit
@@ -41,9 +42,11 @@ loaded machine intact.
 - **Make it comfortable:** self-hosted JetBrains Mono or system monospace,
   font size, wrapping, panel proportions, focus mode and local draft recovery.
 
-Desktop execution loads ELF artifacts; imported raw bytes are for inspection.
-Raw-code execution is available in the CLI. Verified source-to-instruction mapping,
-live register/memory editing and multiple documents are [planned](docs/roadmap.md#next-product-work).
+Import machine code from **Files**, then use **Raw code** to set its architecture,
+load address, entry and stop address. Loading is explicit and replaces the machine.
+Select **Captured memory** in **Instructions** to disassemble observed bytes and
+toggle address breakpoints. Source-to-instruction mapping, live register/memory
+editing and multiple documents are [planned](docs/roadmap.md#next-product-work).
 Instruction recognition does not guarantee emulator support for every extension.
 
 ## Build from source
@@ -62,15 +65,12 @@ Tauri builds and stages the worker and starts Vite automatically. Engine changes
 require rebuilding the worker and restarting the app; see the
 [development workflow](docs/development.md#commands-and-ownership).
 
-For frontend-only work, use `pnpm dev` instead. Browser preview supports editing
-and interface development but cannot assemble or execute. Use one Vite server
-per checkout.
+For frontend-only work, use `pnpm dev`. Browser preview cannot assemble or execute.
 
-For a terminal experiment, save the [x86_64 example](docs/engine.md#language-and-layout)
-as `experiment.s`, then run:
+Run the bundled [x86_64 example](examples/x86_64.s) from the terminal:
 
 ```sh
-cargo run --locked -p oplab-engine --bin oplab-cli -- run source x86_64 0x1000 --until-symbol done --budget 100 < experiment.s
+cargo run --locked -p oplab-engine --bin oplab-cli -- run source x86_64 0x1000 --until-symbol done --budget 10000 < examples/x86_64.s
 ```
 
 The [CLI reference](docs/protocol.md#cli) covers ELF/raw inputs, initial state,
@@ -78,8 +78,6 @@ memory output and exit codes. No stack or operating-system services are supplied
 implicitly.
 
 ## Development
-
-After installing the native toolchain and JavaScript dependencies:
 
 ```sh
 pnpm exec playwright install --with-deps --no-shell chromium

@@ -109,19 +109,21 @@ pub enum Command {
         /// Exact instruction bytes: 1–15 for `x86_64`, exactly four for `AArch64`.
         bytes: Vec<u8>,
     },
-    /// Bind a standard ELF image, supplied in binary frames after this request.
+    /// Bind an ELF image or raw code, supplied in binary frames after this request.
     Load {
+        /// Standard ELF interpretation or explicit raw-code placement.
+        image: execution::LoadImage,
         /// Explicit initial GPRs and additional zero-filled mappings.
         initial: execution::InitialState,
         /// Current session to replace; null requires no active session.
         replace: Option<SessionKey>,
-        /// Required guest architecture, independently checked against ELF.
+        /// Required guest architecture; ELF inputs must declare the same target.
         target: Target,
         /// Explicit completion address before fetch.
         completion: HexAddress,
         /// Maximum architectural instruction starts.
         instruction_budget: Counter,
-        /// Complete ELF file length, between one byte and one MiB.
+        /// Complete binary payload length, between one byte and one MiB.
         image_bytes: u32,
     },
     /// Operate on an exact session generation at its owning thread boundary.

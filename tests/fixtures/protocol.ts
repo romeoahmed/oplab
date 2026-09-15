@@ -3,25 +3,70 @@ import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
 import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
 import type { Observation } from '$lib/protocol/generated/Observation';
+import type { Target } from '$lib/protocol/generated/Target';
 
 // Shared protocol data; native behavior is exercised by the Rust process tests.
-export function observation(sequence = '9007199254740993'): Observation {
+export function observation(sequence = '9007199254740993', target: Target = 'x86_64'): Observation {
   return {
     key: { session: '2', generation: '0' },
     sequence,
     status: { type: 'ready' },
     instructions: '0',
     dispatches: '0',
-    registers: {
-      type: 'x86_64',
-      data: {
-        gpr: ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
-        rip: '0x0000000000001000',
-        rflags: '2',
-      },
-    },
+    registers:
+      target === 'aarch64'
+        ? {
+            type: 'aarch64',
+            data: {
+              x: [
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+                '0',
+              ],
+              sp: '0',
+              pc: '0x0000000000001000',
+              nzcv: 0,
+            },
+          }
+        : {
+            type: 'x86_64',
+            data: {
+              gpr: ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
+              rip: '0x0000000000001000',
+              rflags: '2',
+            },
+          },
     memory: null,
     fault: null,
+    breakpoints: [],
   };
 }
 

@@ -92,6 +92,10 @@ impl Machine {
         Ok(())
     }
 
+    pub(crate) fn breakpoints(&self) -> impl Iterator<Item = Address> + '_ {
+        self.native.get_data().breakpoints.iter().copied()
+    }
+
     pub(crate) fn set_breakpoint(
         &mut self,
         address: Address,

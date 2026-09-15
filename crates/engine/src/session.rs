@@ -263,6 +263,11 @@ impl Session {
         self.machine.set_breakpoint(address, enabled)
     }
 
+    /// Sorted address breakpoints, retained across reset and cleared by a new load.
+    pub fn breakpoints(&self) -> impl Iterator<Item = Address> + '_ {
+        self.machine.breakpoints()
+    }
+
     /// Observe canonical integer registers between native slices.
     ///
     /// # Errors

@@ -63,6 +63,7 @@ fn load(
 ) -> TestResult<Message> {
     client.request(
         Command::Load {
+            image: oplab_core::protocol::execution::LoadImage::Elf,
             initial: oplab_core::protocol::execution::InitialState::default(),
             replace,
             target,
@@ -512,6 +513,7 @@ fn configured_loads_restore_initial_state_and_failed_replacements_preserve_the_m
             };
             let image_bytes = u32::try_from(image.len())?;
             let command = |initial, replace| Command::Load {
+                image: oplab_core::protocol::execution::LoadImage::Elf,
                 initial,
                 replace,
                 target,
@@ -570,4 +572,126 @@ fn configured_loads_restore_initial_state_and_failed_replacements_preserve_the_m
         })?;
     }
     Ok(())
+}
+
+#[test]
+fn raw_sessions_keep_exact_entry_breakpoints_and_reset_state() -> TestResult {
+    for (target, bytes, entry, completion, register) in [
+        (
+            Target::X86_64,
+            vec![0x0f, 0x0b, 0x48, 0x83, 0xc0, 2, 0x90],
+            0x1002,
+            0x1006,
+            "rax",
+        ),
+        (
+            Target::Aarch64,
+            vec![0, 0, 0x20, 0xd4, 0, 8, 0, 0x91, 0x1f, 0x20, 3, 0xd5],
+            0x1004,
+            0x1008,
+            "x0",
+        ),
+    ] {
+        verify_raw_session(target, &bytes, entry, completion, register)?;
+    }
+    Ok(())
+}
+
+fn verify_raw_session(
+    target: Target,
+    bytes: &[u8],
+    entry: u64,
+    completion: u64,
+    register: &str,
+) -> TestResult {
+    use oplab_core::protocol::execution::{InitialState, LoadImage, RegisterValue};
+    let image_bytes = u32::try_from(bytes.len())?;
+    interactive::worker(|client| {
+        client.request(Command::Hello { version: VERSION }, None)?;
+        let command = |entry, replace| Command::Load {
+            image: LoadImage::Raw {
+                base: address(0x1000),
+                entry: address(entry),
+            },
+            initial: InitialState {
+                registers: vec![RegisterValue {
+                    name: register.into(),
+                    value: Counter::new(40),
+                }],
+                mappings: Vec::new(),
+            },
+            replace,
+            target,
+            completion: address(completion),
+            instruction_budget: Counter::new(10),
+            image_bytes,
+        };
+        let loaded = client.request(command(entry, None), Some(bytes.to_vec()))?;
+        let initial = observed(&loaded)?;
+        let key = initial.key;
+        for (location, enabled, expected) in [
+            (completion, true, vec![completion]),
+            (entry, true, vec![entry, completion]),
+            (entry, true, vec![entry, completion]),
+            (completion, false, vec![entry]),
+            (completion, false, vec![entry]),
+        ] {
+            let reply = execute(
+                client,
+                key,
+                SessionAction::Breakpoint {
+                    address: address(location),
+                    enabled,
+                },
+            )?;
+            assert_eq!(
+                observed(&reply)?.breakpoints,
+                expected.into_iter().map(address).collect::<Vec<_>>()
+            );
+        }
+        execute(client, key, SessionAction::Run)?;
+        let paused = settle(client, key)?;
+        assert_eq!(
+            observed(&paused)?.status,
+            Status::Breakpoint(address(entry))
+        );
+        assert_eq!(integer(observed(&paused)?)?, 40);
+        assert_eq!(observed(&paused)?.instructions.get(), 0);
+        let rejected = client.request(command(0x2000, Some(key)), Some(bytes.to_vec()))?;
+        assert!(
+            matches!(rejected.response.result, Reply::Error(error) if error.code == DiagnosticCode::InvalidInput)
+        );
+        let memory = execute(
+            client,
+            key,
+            SessionAction::Observe {
+                memory: Some(MemoryWindow {
+                    address: address(0x1000),
+                    length: image_bytes,
+                }),
+            },
+        )?;
+        assert_eq!(memory.payloads.as_slice(), &[bytes.to_vec()]);
+        let preserved = observed(&memory)?;
+        let mut expected = observed(&paused)?.clone();
+        expected.sequence = preserved.sequence;
+        expected.memory = preserved.memory;
+        assert_eq!(preserved, &expected);
+        execute(client, key, SessionAction::Run)?;
+        let done = settle(client, key)?;
+        assert_eq!(
+            observed(&done)?.status,
+            Status::Terminated(Termination::Completed)
+        );
+        assert_eq!(integer(observed(&done)?)?, 42);
+        let reset = execute(client, key, SessionAction::Reset)?;
+        let restored = observed(&reset)?;
+        assert_eq!(restored.registers, initial.registers);
+        assert_eq!(restored.breakpoints, [address(entry)]);
+        let replaced = client.request(command(entry, Some(restored.key)), Some(bytes.to_vec()))?;
+        assert!(observed(&replaced)?.breakpoints.is_empty());
+        assert_ne!(observed(&replaced)?.key.session, key.session);
+        client.request(Command::Shutdown, None)?;
+        Ok(())
+    })
 }

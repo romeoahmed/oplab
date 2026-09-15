@@ -66,7 +66,7 @@ class Reader {
 }
 
 /**
- * Encode a desktop call and its declared ELF image as one contiguous message.
+ * Encode a desktop call and its declared ELF or raw image as one contiguous message.
  *
  * @param image - Required only for a load command; otherwise `null`.
  * @throws RangeError - Image metadata disagrees with the payload or a size limit is exceeded.

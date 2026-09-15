@@ -33,6 +33,11 @@ export default defineConfig(
   },
   ...svelte.configs.recommended,
   {
+    files: ['**/*.svelte'],
+    // Required props still need $bindable(); it is a compiler marker, not a default value.
+    rules: { '@typescript-eslint/no-useless-default-assignment': 'off' },
+  },
+  {
     files: ['**/*.svelte', '**/*.svelte.ts'],
     languageOptions: {
       globals: globals.browser,

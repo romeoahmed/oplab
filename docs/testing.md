@@ -10,13 +10,13 @@ are diagnostic information, not acceptance targets.
 
 ## Suites
 
-| Location                                          | Evidence                                                                            |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `crates/core/tests`                               | Scalar/schema validity, address/permission rules, fragmented and incomplete framing |
-| `crates/engine/tests`                             | Exact encodings, ELF geometry, real guest effects, CLI and worker processes         |
-| `crates/engine/tests/unit`                        | Private scheduling, output reservations, cancellation and stream baselines          |
-| `src-tauri/tests/unit`                            | Worker supervision, leases, unknown outcomes, kill/reap and bounded file I/O        |
-| `tests/protocol`, `tests/i18n`, `tests/workbench` | Frontend properties, catalogs, recovery and browser interaction                     |
+| Location                                          | Evidence                                                                                 |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `crates/core/tests`                               | Scalar/schema validity, address/permission rules, fragmented and incomplete framing      |
+| `crates/engine/tests`                             | Exact encodings, ELF geometry, real guest effects, CLI and worker processes              |
+| `crates/engine/tests/unit`                        | Private scheduling, output reservations, cancellation and stream baselines               |
+| `src-tauri/tests/unit`                            | Worker supervision, stream reconstruction, leases, unknown outcomes and bounded file I/O |
+| `tests/protocol`, `tests/i18n`, `tests/workbench` | Frontend properties, catalogs, recovery and browser interaction                          |
 
 Rust `tests/unit` files are private `#[cfg(test)]` modules included through `#[path]`;
 root integration tests exercise public APIs. Tests remain outside production source
@@ -43,7 +43,7 @@ implementation in the expected result or merely round-trip two production helper
 | Batch CLI                  | Full-width arithmetic and memory from source/ELF/raw inputs; exit outcomes, sectionless ELF and completion symbols                 |
 | Guest execution            | Generated add/subtract/XOR programs compared with wrapping `u32` arithmetic on both guests                                         |
 | Build scheduling           | Latest valid request per document, cancellation and exactly-once delivery without assuming unrelated reply order                   |
-| Observations               | Generated full/delta histories, independent complete samples, exact counters, retained baselines and stale identities              |
+| Observations               | Both register banks, full-width breakpoint histories, independent complete samples, retained baselines and stale identities        |
 | Editor language            | Target-specific literal/comment examples and incremental parsing compared with a fresh parse after generated edits                 |
 | Source locations           | Unicode byte boundaries against CodeMirror text/line positions, explicit CRLF/BOM cases and invalid-boundary rejection             |
 | File inspection            | Exact ELF extents, arbitrary 64-bit byte windows, standard filesystem I/O and documented size/encoding boundaries                  |
@@ -68,9 +68,14 @@ Do not ignore failures, retry until green or weaken a contract to accommodate a 
 ## Effects and fixtures
 
 Frontend tests mirror feature ownership. Shared data in `tests/fixtures/protocol.ts`
-provides DTOs, not a second worker or emulator. Browser ports reject unexpected
-commands. A component fixture proves the frontend's use of a contract, while actual process tests prove
-that the native implementation fulfills it.
+provides DTOs, not a second worker or emulator. Browser ports return explicit
+scenario replies and reject unexpected commands; assertions verify outgoing mutations.
+Component fixtures exercise the frontend contract; process tests verify its native
+implementation.
+
+Editing workflows use a small scratch fixture independent of built-in examples.
+CodeMirror renders a viewport, not the entire document: verify long source through
+assembly requests and source exports, including BOM and newline preservation.
 
 Instruction analysis compares fixed encodings and generated operands with
 architectural facts, including signed displacements, address wraparound and AArch64
@@ -121,7 +126,8 @@ Browser coverage follows observable workflows:
   use the real editor. Stale builds cannot annotate current source.
 - **Files and recovery:** draft unmount/reopen, corrupt scratch, exact exports,
   cancellation, failures, retries, import conflicts and callbacks after unmount.
-  Imported source reaches assembly unchanged; raw bytes remain inspection inputs.
+  Long imported source reaches assembly/export unchanged; importing raw bytes never
+  implicitly loads a machine.
 - **Instructions:** byte-based pagination, native offset validation, explicit
   analysis/retry, late success/failure, input changes and reversions, locale
   retention and narrow-panel return without another decode. Re-decoding clears
@@ -129,16 +135,23 @@ Browser coverage follows observable workflows:
 - **Initial setup:** target-specific inputs and locale retention, exact full-width
   scalar conversion, add/remove controls, and rejection of invalid values before load
   followed by successful correction.
-- **Execution:** assembly does not load, loading does not run, completion metadata
-  reaches the request, and rejected reset preserves the displayed machine.
+- **Execution:** assembly/import does not load, loading does not run, exact raw
+  placement and bytes reach the request for both targets. Invalid input stays local;
+  rejected replacements preserve the machine, and pending loads retain later edits
+  in both languages. Rejected reset/breakpoint changes preserve displayed state;
+  unchanged observed bytes retain the decoded table across controls and stream updates.
+  Changed bytes invalidate decoded instructions. Memory remains visible after
+  control replies without bytes and clears after successful reset. Inspect at PC
+  uses the memory form's constraints: empty/oversized lengths send no request,
+  and correcting the length submits the chosen PC and window together.
 
 Broader keyboard/screen-reader acceptance remains open, including toolbar focus
 when all actions begin disabled. Use Bits UI and native semantics without custom
 focus patches. Component fixtures do not establish native IPC, ELF validity or
-machine effects. Use browser HMR for visual acceptance at
-the default 1440×900 and the desktop minimum 880×600, then inspect narrow layouts,
-zoom, both languages, long values and keyboard focus. Do not publish synthetic
-fixture states as evidence of native behavior.
+machine effects. Use browser HMR for visual acceptance at the default 1440×900 and
+desktop minimum 880×600, then inspect 800px and 414px layouts, zoom, both languages,
+long values and keyboard focus. Do not publish synthetic fixture states as evidence
+of native behavior.
 
 The current Vitest/Vite combination warns that the mocks interceptor's
 `configureServer` hook is ignored. The suite uses explicit ports and passes without
@@ -171,9 +184,18 @@ upstream compatibility verification.
 - **Execution:** canonical registers, flags/alias effects, arithmetic properties,
   whole-REP stepping, instruction budgets, before-effect breakpoints/re-arming,
   reset, coherent memory, fault/environment outcomes and boundary completion.
+  Both bundled sorting programs run at two link addresses, preserving input data,
+  producing signed ordering and a wrapping sum checked against Rust arithmetic and
+  sorting, and reproducing them after reset. Expected results are derived from the
+  input data rather than copied from example comments.
 - **Worker:** actual binary transfers, cancellation with one outcome, controls during
   assembly, reserved capacity, shutdown barriers, writer loss, generations and full/delta
   subscriptions; invalid replacement preserves the current machine/subscription.
+  Raw sessions exercise explicit entry past a trap prefix, before-effect breakpoints,
+  exact memory, reset and failed replacement on both guests. Breakpoint changes
+  reach stream consumers through complete baselines; bounded Proptest histories
+  separately verify worker encoding and desktop cache reconstruction. Duplicate
+  breakpoint additions/removals are idempotent, and observed addresses stay sorted.
   ELF exports retain TLS symbols while the address view excludes their offsets.
 - **Files:** Proptest-generated binary/Unicode contents against standard filesystem
   I/O, explicit UTF-8/BOM/newline and size boundaries, missing/non-file paths, and
@@ -184,7 +206,8 @@ upstream compatibility verification.
 For UI changes, verify a fresh static desktop bundle as well as the browser:
 
 1. Build/load each architecture's example, step, run to completion and inspect the
-   expected register/memory effect (the built-in examples store 42).
+   sorted signed array in memory and the sum, 42, in RAX/X0. Inspect `total` for
+   the stored sum. Reset and run again; the original read-only input must remain intact.
 2. Configure initial registers and an extra mapped region for each guest; run code
    that consumes those values and stores a result. Reset and verify initial values,
    then reject an overlapping replacement without losing the machine. Exercise a
@@ -197,15 +220,19 @@ For UI changes, verify a fresh static desktop bundle as well as the browser:
    disappear. Analyze an instruction on each guest, switch locale and verify retained
    details without changing machine state. File selection/cancellation must not load
    or run a machine.
-5. Verify fonts, dynamic editor loading, both locales and focus behavior under the
+5. Load imported raw code with explicit base, entry and completion. Add a breakpoint,
+   run to it, inspect captured memory/PC, toggle a decoded row and resume. Reset must
+   restore initial registers and keep breakpoints; invalid entry must preserve the
+   machine. Repeat for both targets and languages without replacing source.
+6. Verify fonts, dynamic editor loading, both locales and focus behavior under the
    actual WebView origin/CSP. Test failure/restart when the supervisor changes.
 
 The [engine contract](engine.md) defines the supported runtime and metadata limits.
 Native execution requires permission for Unicorn JIT operations and host CPU/cache
-discovery. On Apple Silicon,
-Unicorn 2.1.5 queries `hw.cachelinesize`; denying that query can trigger an unsupported
-`CTR_EL0` fallback read and `SIGILL` before loading a guest. Run native tests with the
-required host access and report sandbox restrictions separately from test results.
+discovery. On Apple Silicon, Unicorn 2.1.5 queries `hw.cachelinesize`; denying that
+query can trigger an unsupported `CTR_EL0` fallback read and `SIGILL` before loading
+a guest. Run native tests with the required host access and report sandbox
+restrictions separately from test results.
 Browser success is not packaged-WebView success, and a local debug bundle is not
 installed/signed distribution evidence.
 
