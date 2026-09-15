@@ -1,6 +1,6 @@
-import { expect, test } from 'vitest';
-import fc from 'fast-check';
 import { readScratch, type Scratch } from '$lib/workbench/scratch';
+import fc from 'fast-check';
+import { expect, test } from 'vitest';
 
 const document: Scratch = {
   documentId: 'fixture',

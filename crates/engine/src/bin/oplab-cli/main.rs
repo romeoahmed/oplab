@@ -29,7 +29,7 @@ struct Cli {
 enum Operation {
     #[command(flatten)]
     Inspect(Inspection),
-    /// Execute a source document or static ELF image and report final machine state.
+    /// Execute source, ELF or raw code and report final machine state.
     #[command(subcommand)]
     Run(execute::Input),
 }

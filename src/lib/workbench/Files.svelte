@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
-  import { DropdownMenu } from 'bits-ui';
-  import { Binary, Box, ChevronDown, FileDown, FileUp, FolderOpen } from '@lucide/svelte';
   import type { FilePort } from '$lib/desktop/files';
-  import type { FileFormat } from '$lib/protocol/generated/FileFormat';
-  import type { Locale } from '$lib/paraglide/runtime';
   import * as m from '$lib/paraglide/messages.js';
+  import type { Locale } from '$lib/paraglide/runtime';
+  import type { FileFormat } from '$lib/protocol/generated/FileFormat';
+  import { Binary, Box, ChevronDown, FileDown, FileUp, FolderOpen } from '@lucide/svelte';
+  import { DropdownMenu } from 'bits-ui';
+  import { onDestroy } from 'svelte';
 
   const {
     port,

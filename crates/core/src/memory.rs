@@ -121,6 +121,12 @@ impl MemoryLayout {
         &self.0
     }
 
+    /// Consume the layout for revalidation with additional mappings, without copying bytes.
+    #[must_use]
+    pub fn into_regions(self) -> Vec<MemoryRegion> {
+        self.0
+    }
+
     /// Require one complete range to fit a single mapping with the requested access.
     ///
     /// # Errors

@@ -1,7 +1,7 @@
-import { expect, test } from 'vitest';
-import fc from 'fast-check';
-import { EditorState } from '@codemirror/state';
 import { sourceInfo, sourceLocation } from '$lib/workbench/editor/source';
+import { EditorState } from '@codemirror/state';
+import fc from 'fast-check';
+import { expect, test } from 'vitest';
 
 const encoder = new TextEncoder();
 

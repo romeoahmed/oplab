@@ -1,9 +1,12 @@
-import en from '../../messages/en.json';
-import { expect, test, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
-import { render } from 'vitest-browser-svelte';
-import Files from '$lib/workbench/Files.svelte';
 import type { FilePort } from '$lib/desktop/files';
+import Files from '$lib/workbench/Files.svelte';
+import { settled } from 'svelte';
+import { expect, test, vi } from 'vitest';
+import { render } from 'vitest-browser-svelte';
+import { page, userEvent } from 'vitest/browser';
+
+import en from '../../messages/en.json';
+
 import '$lib/styles/theme.css';
 import '$lib/workbench/workbench.css';
 
@@ -99,7 +102,7 @@ test.each(['contents', 'failure'])('an unmounted file view ignores late %s', asy
   if (outcome === 'contents') reply.resolve(new Uint8Array([0xc3]));
   else reply.reject(new Error('Picker failed'));
   await reply.promise.catch(() => {});
-  await render(Files, props());
+  await settled();
   expect(input.onbinary).not.toHaveBeenCalled();
   expect(input.onerror).toHaveBeenLastCalledWith(null);
 });

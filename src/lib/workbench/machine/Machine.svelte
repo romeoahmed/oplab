@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { Cpu, Keyboard } from '@lucide/svelte';
-  import Registers from './Registers.svelte';
-  import { stateLabel } from '../presentation';
-  import type { Observation } from '$lib/protocol/generated/Observation';
-  import type { Locale } from '$lib/paraglide/runtime';
   import * as m from '$lib/paraglide/messages.js';
+  import type { Locale } from '$lib/paraglide/runtime';
+  import type { Observation } from '$lib/protocol/generated/Observation';
+  import { Cpu, Keyboard } from '@lucide/svelte';
+
+  import { stateLabel } from '../presentation';
+  import Registers from './Registers.svelte';
   const {
     observation,
     loadedCurrent,

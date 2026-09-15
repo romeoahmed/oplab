@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { RefreshCw, ScanSearch, X } from '@lucide/svelte';
-  import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
-  import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
-  import type { DataAccess } from '$lib/protocol/generated/DataAccess';
-  import type { FlowControl } from '$lib/protocol/generated/FlowControl';
-  import type { Locale } from '$lib/paraglide/runtime';
-  import { problemLabel } from '../presentation';
   import * as m from '$lib/paraglide/messages.js';
+  import type { Locale } from '$lib/paraglide/runtime';
+  import type { DataAccess } from '$lib/protocol/generated/DataAccess';
+  import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
+  import type { FlowControl } from '$lib/protocol/generated/FlowControl';
+  import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
+  import { RefreshCw, ScanSearch, X } from '@lucide/svelte';
+
+  import { problemLabel } from '../presentation';
 
   const {
     instruction,

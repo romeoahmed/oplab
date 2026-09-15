@@ -1,8 +1,13 @@
 //! Keep native register identifiers inside the architecture adapter.
 
+use super::hooks::Monitor;
 use super::{Machine, MachineError};
-use oplab_core::{address::Address, registers::IntegerRegisters, target::Target};
-use unicorn_engine::{RegisterARM64, RegisterX86};
+use oplab_core::{
+    address::Address,
+    registers::{InitialRegisters, IntegerRegisters},
+    target::Target,
+};
+use unicorn_engine::{RegisterARM64, RegisterX86, Unicorn};
 
 impl Machine {
     /// Read canonical integer storage at one execution boundary.
@@ -15,24 +20,7 @@ impl Machine {
         match self.initial.target() {
             Target::X86_64 => {
                 use RegisterX86 as R;
-                let gpr = self.read_bank([
-                    R::RAX,
-                    R::RCX,
-                    R::RDX,
-                    R::RBX,
-                    R::RSP,
-                    R::RBP,
-                    R::RSI,
-                    R::RDI,
-                    R::R8,
-                    R::R9,
-                    R::R10,
-                    R::R11,
-                    R::R12,
-                    R::R13,
-                    R::R14,
-                    R::R15,
-                ])?;
+                let gpr = self.read_bank(X86_GPR)?;
                 let rflags = self
                     .native
                     .reg_read(R::RFLAGS)
@@ -45,39 +33,7 @@ impl Machine {
             }
             Target::Aarch64 => {
                 use RegisterARM64 as R;
-                let x = self.read_bank([
-                    R::X0,
-                    R::X1,
-                    R::X2,
-                    R::X3,
-                    R::X4,
-                    R::X5,
-                    R::X6,
-                    R::X7,
-                    R::X8,
-                    R::X9,
-                    R::X10,
-                    R::X11,
-                    R::X12,
-                    R::X13,
-                    R::X14,
-                    R::X15,
-                    R::X16,
-                    R::X17,
-                    R::X18,
-                    R::X19,
-                    R::X20,
-                    R::X21,
-                    R::X22,
-                    R::X23,
-                    R::X24,
-                    R::X25,
-                    R::X26,
-                    R::X27,
-                    R::X28,
-                    R::X29,
-                    R::X30,
-                ])?;
+                let x = self.read_bank(AARCH64_GPR)?;
                 let sp = self
                     .native
                     .reg_read(R::SP)
@@ -105,4 +61,85 @@ impl Machine {
         }
         Ok(values)
     }
+}
+
+const X86_GPR: [RegisterX86; 16] = [
+    RegisterX86::RAX,
+    RegisterX86::RCX,
+    RegisterX86::RDX,
+    RegisterX86::RBX,
+    RegisterX86::RSP,
+    RegisterX86::RBP,
+    RegisterX86::RSI,
+    RegisterX86::RDI,
+    RegisterX86::R8,
+    RegisterX86::R9,
+    RegisterX86::R10,
+    RegisterX86::R11,
+    RegisterX86::R12,
+    RegisterX86::R13,
+    RegisterX86::R14,
+    RegisterX86::R15,
+];
+const AARCH64_GPR: [RegisterARM64; 31] = [
+    RegisterARM64::X0,
+    RegisterARM64::X1,
+    RegisterARM64::X2,
+    RegisterARM64::X3,
+    RegisterARM64::X4,
+    RegisterARM64::X5,
+    RegisterARM64::X6,
+    RegisterARM64::X7,
+    RegisterARM64::X8,
+    RegisterARM64::X9,
+    RegisterARM64::X10,
+    RegisterARM64::X11,
+    RegisterARM64::X12,
+    RegisterARM64::X13,
+    RegisterARM64::X14,
+    RegisterARM64::X15,
+    RegisterARM64::X16,
+    RegisterARM64::X17,
+    RegisterARM64::X18,
+    RegisterARM64::X19,
+    RegisterARM64::X20,
+    RegisterARM64::X21,
+    RegisterARM64::X22,
+    RegisterARM64::X23,
+    RegisterARM64::X24,
+    RegisterARM64::X25,
+    RegisterARM64::X26,
+    RegisterARM64::X27,
+    RegisterARM64::X28,
+    RegisterARM64::X29,
+    RegisterARM64::X30,
+];
+
+pub(super) fn initialize(
+    native: &mut Unicorn<'_, Monitor>,
+    values: &InitialRegisters,
+) -> Result<(), MachineError> {
+    match values {
+        InitialRegisters::X86_64(values) => write_bank(native, X86_GPR, values),
+        InitialRegisters::Aarch64(values) => {
+            let [gpr @ .., sp] = values;
+            write_bank(native, AARCH64_GPR, gpr)?;
+            native
+                .reg_write(RegisterARM64::SP, *sp)
+                .map_err(|_| MachineError::Backend)
+        }
+    }
+}
+
+fn write_bank<R: Into<i32>, const N: usize>(
+    native: &mut Unicorn<'_, Monitor>,
+    registers: [R; N],
+    values: &[u64; N],
+) -> Result<(), MachineError> {
+    for (register, value) in registers.into_iter().zip(values) {
+        native
+            .reg_write(register, *value)
+            .map_err(|_| MachineError::Backend)?;
+    }
+    Ok(())
 }

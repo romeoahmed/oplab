@@ -1,8 +1,8 @@
-import { expect, test } from 'vitest';
-import fc from 'fast-check';
-import { initialMemory } from '$lib/workbench/machine/memory';
-import { formatAddress, parseAddress } from '$lib/protocol/scalars';
 import type { ImageInfo } from '$lib/protocol/generated/ImageInfo';
+import { formatAddress, parseAddress } from '$lib/protocol/scalars';
+import { initialMemory } from '$lib/workbench/machine/memory';
+import fc from 'fast-check';
+import { expect, test } from 'vitest';
 
 const maximum = (1n << 64n) - 1n;
 

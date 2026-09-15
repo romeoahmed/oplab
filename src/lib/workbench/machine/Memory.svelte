@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { MemoryWindow } from '$lib/protocol/generated/MemoryWindow';
-  import type { Locale } from '$lib/paraglide/runtime';
-  import { parseAddress, formatAddress } from '$lib/protocol/scalars';
   import * as m from '$lib/paraglide/messages.js';
+  import type { Locale } from '$lib/paraglide/runtime';
+  import type { MemoryWindow } from '$lib/protocol/generated/MemoryWindow';
+  import { parseAddress, formatAddress } from '$lib/protocol/scalars';
   const {
     window,
     bytes,

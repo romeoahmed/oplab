@@ -1,5 +1,5 @@
-import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { FileFormat } from '$lib/protocol/generated/FileFormat';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 /** Native dialogs retain paths; callers receive only bounded contents or cancellation. */
 export type FilePort = {

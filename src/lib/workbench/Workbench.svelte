@@ -1,7 +1,9 @@
 <script lang="ts">
   import '@fontsource-variable/jetbrains-mono/wght.css';
-  import { onMount, untrack } from 'svelte';
-  import { Toolbar, Tooltip, Popover, Tabs } from 'bits-ui';
+  import { desktopFiles, type FilePort } from '$lib/desktop/files';
+  import { createLocaleController } from '$lib/i18n/locale.svelte';
+  import * as m from '$lib/paraglide/messages.js';
+  import type { Diagnostic } from '@codemirror/lint';
   import {
     Hammer,
     Download,
@@ -22,21 +24,22 @@
     LocateFixed,
     RefreshCw,
   } from '@lucide/svelte';
-  import { desktopFiles, type FilePort } from '$lib/desktop/files';
-  import Files from './Files.svelte';
-  import Instructions from './instructions/Instructions.svelte';
-  import { segmentBytes } from './instructions/bytes';
-  import type { Diagnostic } from '@codemirror/lint';
+  import { Toolbar, Tooltip, Popover, Tabs } from 'bits-ui';
+  import { onMount, untrack } from 'svelte';
+
+  import Appearance from './Appearance.svelte';
+  import { createWorkbench, examples } from './controller.svelte';
   import { sourceInfo, sourceLocation } from './editor/source';
+  import Files from './Files.svelte';
+  import { segmentBytes } from './instructions/bytes';
+  import Instructions from './instructions/Instructions.svelte';
   import Machine from './machine/Machine.svelte';
   import Memory from './machine/Memory.svelte';
-  import ToolbarAction from './ToolbarAction.svelte';
-  import Appearance from './Appearance.svelte';
+  import Setup from './machine/Setup.svelte';
   import { defaultPreferences, readPreferences } from './preferences';
-  import { createLocaleController } from '$lib/i18n/locale.svelte';
-  import { createWorkbench, examples } from './controller.svelte';
   import { problemLabel } from './presentation';
-  import * as m from '$lib/paraglide/messages.js';
+  import ToolbarAction from './ToolbarAction.svelte';
+
   import './workbench.css';
 
   const {
@@ -299,7 +302,7 @@
           >
           <Popover.Portal>
             <Popover.Content
-              class="settings-popover"
+              class="settings-popover configuration-popover"
               sideOffset={10}
               align="end"
               aria-label={m.configuration({}, options)}
@@ -332,6 +335,7 @@
                 >
               </div>
               <p class="muted-note">{m.configuration_hint({}, options)}</p>
+              <Setup bind:value={work.setup} target={work.target} locale={language.current} />
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>

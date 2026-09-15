@@ -1,9 +1,10 @@
-import { expect, test } from 'vitest';
-import fc from 'fast-check';
-import { applyObservation } from '$lib/protocol/observations';
 import type { Observation } from '$lib/protocol/generated/Observation';
 import type { ObservationDelta } from '$lib/protocol/generated/ObservationDelta';
 import type { StreamEvent } from '$lib/protocol/generated/StreamEvent';
+import { applyObservation } from '$lib/protocol/observations';
+import fc from 'fast-check';
+import { expect, test } from 'vitest';
+
 import { observation } from '../fixtures/protocol';
 
 function baseline(): { observation: Observation; memory: Uint8Array } {

@@ -1,107 +1,110 @@
 # AGENTS.md
 
-## Project and boundaries
+Oplab is a Tauri 2 / Svelte 5 assembly workbench for x86_64 and AArch64.
+Read [the roadmap](docs/roadmap.md) before choosing work and
+[development](docs/development.md) before native builds. Keep implemented behavior,
+planned capabilities and verified platforms distinct.
 
-Oplab is a Tauri 2 / Svelte 5 desktop assembly workbench for x86_64 and AArch64.
-Read [the roadmap](docs/roadmap.md) for implemented scope and
-[the development guide](docs/development.md) before native build work.
-Keep planned capabilities distinct from shipped behavior.
+## Commands
 
-| Location                   | Owner                                                                  |
-| -------------------------- | ---------------------------------------------------------------------- |
-| `crates/core`              | Pure domain types, policies and authoritative wire DTOs                |
-| `crates/engine`            | LLVM MC/LLD C++23 bridge, ELF loader, Unicorn sessions, worker and CLI |
-| `src-tauri`                | Tauri commands, worker supervision, bounded IPC and native file I/O    |
-| `src/lib/workbench`        | Editor, document controller, machine/memory views and native CSS       |
-| `src/lib/desktop`          | Only frontend module allowed to import Tauri APIs                      |
-| `src/lib/protocol`         | Generated declarations plus pure wire/scalar/observation logic         |
-| `src/lib/i18n`, `messages` | Locale selection and bilingual catalogs                                |
-| `xtask`                    | Cross-tool checks, formatting, code generation and sidecar staging     |
+Run from the repository root. Install dependencies with `pnpm install --frozen-lockfile`.
+Native work needs stable Rust, C++23, LLVM 23 with matching LLD development files,
+libclang and the [remaining build prerequisites](docs/development.md#native-toolchain).
+Do not invent tool paths or patch generated headers to bypass missing dependencies.
 
-Assembly source reaches LLVM unchanged. Preserve standard ELF; protocol metadata
-must describe it, not replace its semantics. Document, artifact and loaded session
-have separate identities. Reject stale results and never replay an uncertain mutation.
-Native handles stay on their owning threads; queues and payloads stay bounded.
+| Command                                                     | Purpose                                                         |
+| ----------------------------------------------------------- | --------------------------------------------------------------- |
+| `pnpm dev`                                                  | Frontend HMR; browser preview cannot assemble or execute        |
+| `pnpm tauri dev`                                            | Stage the worker and start the desktop app plus Vite            |
+| `pnpm check` / `pnpm lint`                                  | Catalog/type checks; ESLint, Stylelint and Knip                 |
+| `pnpm test --project logic` / `pnpm test --project browser` | Focused frontend suites                                         |
+| `cargo xtask check`                                         | Workspace lints, types, generated-contract drift and formatting |
+| `cargo xtask test [--release]`                              | Rust workspace and frontend tests                               |
+| `cargo xtask fmt [--check]`                                 | Rust, web, documentation and C++ formatting                     |
+| `cargo xtask codegen [--check]`                             | Export or verify TypeScript DTOs without LLVM                   |
+| `cargo xtask sidecar [--release]`                           | Rebuild and stage the worker                                    |
 
-## Setup and commands
+Use one Vite server per checkout; stop standalone Vite before starting Tauri dev.
+Engine changes require worker staging and an app restart; Tauri's watcher does not
+rebuild the worker. Frontend recipes belong in package.json, cross-tool tasks in
+xtask. Preserve native Cargo/Vite/Tauri lifecycles instead of adding wrappers.
 
-- Install JavaScript dependencies with `pnpm install --frozen-lockfile`.
-- `pnpm dev` starts frontend HMR; preview cannot assemble or execute.
-- `pnpm tauri dev` stages the worker and starts the desktop app plus Vite. Reuse one
-  Vite server per checkout; stop a standalone server before starting Tauri dev.
-- Native builds require stable Rust, C++23, LLVM 23 with matching LLD development
-  files, libclang, CMake/build tools, pkg-config and the platform SDK. Follow
-  [native setup](docs/development.md#native-toolchain); do not invent paths or patch
-  generated headers to bypass setup.
-- `pnpm check`: catalogs and Svelte/TypeScript checks.
-- `pnpm lint`: ESLint, Stylelint and Knip.
-- `pnpm test [--project logic|browser]`: frontend tests.
-- `cargo xtask check`: complete workspace checks, including generated contract drift.
-- `cargo xtask test [--release]`: Rust workspace plus frontend tests.
-- `cargo xtask fmt [--check]`: rustfmt, Oxfmt and clang-format.
-- `cargo xtask codegen [--check]`: regenerate/verify TypeScript DTOs without LLVM.
-- `cargo xtask sidecar [--release]`: rebuild/stage the worker; engine changes also
-  need an app restart. Tauri's application watcher does not rebuild the worker.
+## Boundaries
 
-Keep frontend recipes in package.json and call them from xtask. Use native Cargo,
-Vite and Tauri lifecycles instead of adding duplicate wrappers or ad hoc scripts.
+Follow the [repository layout](docs/architecture.md#repository-layout).
 
-## Editing conventions
+- `crates/core` owns pure domain policy and authoritative wire DTOs.
+- `crates/engine` owns LLVM MC/LLD, decoding, ELF loading, Unicorn, worker and CLI.
+- `src-tauri` owns supervision, bounded IPC and user-selected native file I/O.
+- `src/lib/desktop` is the only frontend module allowed to import Tauri APIs.
+- `src/lib/protocol` owns generated declarations and pure wire transformations.
+- `src/lib/workbench` owns presentation and document state; group editor, machine
+  and instruction code with related CSS and pure helpers.
 
-- Keep SvelteKit/Tauri/Cargo entry points and root tool configurations in their
-  conventional locations. Follow the [repository layout](docs/architecture.md#repository-layout).
-  Group editor, machine and instruction code with related CSS and pure helpers;
-  mirror feature paths under `tests/`, with shared DTOs in `tests/fixtures`.
-- Components use PascalCase; TypeScript/CSS modules use lowercase descriptive names.
-  Rust modules use snake_case named entry files; integration targets use kebab-case.
-  Keep Cargo package/binary names distinct from concise workspace directory names.
-- Rust dependencies and lints inherit from workspace Cargo.toml. Use compatible
-  minor-version requirements; preserve lockfiles unless changing dependencies.
-  Project licensing is `MIT OR Apache-2.0`, inherited by every Rust package and
-  mirrored in package.json; keep both root license files and README aligned.
+Pass assembly to LLVM unchanged. Preserve standard ELF semantics; protocol metadata
+must describe artifacts rather than replace their layout or relocation rules.
+Keep document, artifact and session identities separate. Reject stale results and
+never replay an uncertain mutation. Native handles stay on their owning threads;
+queues, allocations and payloads stay bounded.
+
+Edit DTOs and exported comments in Rust, then run codegen. Never hand-edit
+`src/lib/protocol/generated`. The private protocol remains version 1 during
+development: evolve one schema and rebuild clients/workers together, without
+historical compatibility branches. Paraglide, SvelteKit, Tauri-generated output
+and staged worker binaries remain ignored.
+
+## Editing
+
+- Keep framework entry points and root configurations in conventional locations.
+  Components use PascalCase; TypeScript/CSS modules use descriptive lowercase names.
+  Use `.svelte.ts` for modules with runes. Rust modules use snake_case named entry
+  files; integration targets use kebab-case. Keep workspace directory names concise
+  and retain `oplab-` in Cargo package and executable names.
+- Inherit Rust dependencies and lints from workspace Cargo.toml. Use compatible
+  minor-version requirements and preserve lockfiles unless dependencies change.
+  Keep `MIT OR Apache-2.0`, both license files and package metadata aligned.
 - Clippy all/pedantic/nursery run with warnings denied. Fix findings; use a narrow,
-  reasoned `#[expect]` only when retaining the code is justified. Do not add `#[allow]`.
-  `redundant_pub_crate` is deliberately disabled; retain explicit scoped visibility.
-- Use typed enums/newtypes, pure transformations and explicit effect owners. Avoid
-  redundant derived state, unvalidated casts and speculative abstraction layers.
-- Svelte runes own presentation. `$derived` computes state; attachments own external
-  widgets and cleanup. Reconfigure CodeMirror compartments without replacing history.
-- Use semantic HTML, native CSS and native inputs. Bits UI owns composite keyboard
-  interactions; preserve its event/attachment composition and native disabled controls.
-  Avoid custom focus patches. Newly Baseline features still need WebView acceptance.
-- Update `messages/en.json` and `messages/zh-CN.json` together. Keep keys/placeholders
-  aligned, source text untouched and product copy concise and natural. Do not expose
-  raw host paths, raw diagnostic text or internal transport counters in ordinary UI.
-- Edit Rust DTOs, then run codegen; do not hand-edit `src/lib/protocol/generated`.
-  Paraglide, SvelteKit, Tauri schemas/permissions and staged binaries are ignored output.
-- Document contracts, units, ownership and failure behavior; ordinary comments explain
-  non-obvious constraints. Use TSDoc summaries with tags only where useful, and Rust
-  module/item docs with error sections and checked links. Preserve FFI safety reasons;
-  generated contract comments come from Rust. Do not restate signatures or add filler.
-- Keep tests under root `tests/` or Rust package `tests/`; private Rust tests use
-  `#[cfg(test)]` path modules without widening production APIs.
-- Keep machine-specific paths, secrets and local logs out of tracked files. The icon
-  master is `static/icon.svg`; follow [asset conversion and verification](docs/development.md#configuration-and-assets).
+  reasoned `#[expect]` only when justified, never `#[allow]`. Keep
+  `redundant_pub_crate` disabled and retain explicit scoped visibility.
+- Prefer typed enums/newtypes, pure transformations and explicit effect owners.
+  Avoid redundant state, unchecked casts and speculative abstractions.
+- Svelte runes own presentation; derive computed values and use attachments for
+  external widgets and cleanup. Reconfigure CodeMirror compartments without
+  replacing editor history.
+- Use semantic HTML, native CSS/inputs and Bits UI for composite interactions.
+  Preserve library event/attachment composition and native disabled behavior;
+  avoid custom focus patches. Newly Baseline features need real WebView acceptance.
+- Update both `messages/en.json` and `messages/zh-CN.json`. Keep keys/placeholders
+  aligned and wording concise and natural. Do not translate source or expose host
+  paths, raw backend diagnostics or internal delivery counters in ordinary UI.
+- Document units, ownership, invariants and failure behavior. Use concise TSDoc and
+  Rust item/module docs; retain useful error sections and FFI safety explanations.
+  Comments explain constraints, not signatures or obvious implementation steps.
+- Keep secrets, machine-specific paths and local logs out of tracked files.
+  `static/icon.svg` is the icon master; follow the documented
+  [conversion and visual checks](docs/development.md#configuration-and-assets).
 
 ## Verification and delivery
 
-Test behavior, invariants and independent architectural facts, not incidental DOM
-structure or internal implementation. Use Proptest/fast-check where they model a
-real invariant; keep minimized regressions. Coordinate async tests with events or
-promises and bound failures with deadlines.
+Keep tests under root or Rust package `tests/`, mirroring feature ownership.
+Private Rust tests use `#[cfg(test)]` path modules without widening production APIs.
+Test behavior, invariants and independent architectural facts. Avoid assertions tied
+to incidental DOM structure, internal implementation or translation wording. Use
+Proptest/fast-check for meaningful invariants and retain minimized regressions.
+Coordinate async tests with events/promises and bound failures with deadlines.
 
-Use only Playwright Chromium with new headless mode. Install it with
-`pnpm exec playwright install --with-deps --no-shell chromium`. Browser fixtures
-prove component behavior, not native IPC or guest execution. Test UI changes with
-both languages, keyboard navigation, realistic window sizes and retained editor state.
-Native changes need real worker/guest tests; desktop UI changes also need a fresh
-static-bundle check when relevant. Follow the [acceptance flows](docs/testing.md#native-evidence).
+Use Playwright Chromium in new headless mode only. Install it with
+`pnpm exec playwright install --with-deps --no-shell chromium`.
+Browser fixtures establish component behavior; native changes need real worker/guest
+evidence. UI changes need both languages, keyboard flows, realistic window sizes,
+retained editor state and a fresh static desktop bundle when relevant. Follow
+[testing and acceptance](docs/testing.md).
 
-Run checks proportionate to the change. Command/orchestration changes need the
-actual xtask flows; contracts need codegen verification; broad changes need workspace
-checks/tests. Report exactly what ran and any blocked or unverified platform work.
-Do not claim distribution readiness from a local debug bundle.
+Run checks proportionate to the change: actual xtask flows for orchestration,
+codegen verification for contracts, workspace checks/tests for broad changes.
+Report what ran and what remains unverified; a local debug bundle does not prove
+distribution readiness. Update the owning document and roadmap when scope changes.
 
-Inspect both staged and unstaged changes and preserve user work. Do not stage,
-commit, reset or discard changes unless requested. Update the owning documentation
-and roadmap when behavior or progress changes; avoid duplicate setup instructions.
+Inspect staged and unstaged changes and preserve user work. Do not stage, commit,
+reset or discard changes unless requested. Keep build recipes in development docs,
+contracts in their owning reference, and dated evidence in the roadmap.

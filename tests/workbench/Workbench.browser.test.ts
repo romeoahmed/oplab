@@ -1,15 +1,22 @@
-import en from '../../messages/en.json';
-import zh from '../../messages/zh-CN.json';
-import { show_diagnostic } from '$lib/paraglide/messages.js';
-import { afterEach, beforeEach, expect, test } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
-import { render } from 'vitest-browser-svelte';
-import Workbench from '$lib/workbench/Workbench.svelte';
-import type { FileFormat } from '$lib/protocol/generated/FileFormat';
 import type { WorkerPort } from '$lib/desktop/worker';
+import {
+  memory_region,
+  remove_mapping,
+  remove_register,
+  show_diagnostic,
+} from '$lib/paraglide/messages.js';
 import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { Command } from '$lib/protocol/generated/Command';
+import type { FileFormat } from '$lib/protocol/generated/FileFormat';
+import Workbench from '$lib/workbench/Workbench.svelte';
+import { afterEach, beforeEach, expect, test } from 'vitest';
+import { render } from 'vitest-browser-svelte';
+import { page, userEvent } from 'vitest/browser';
+
+import en from '../../messages/en.json';
+import zh from '../../messages/zh-CN.json';
 import { assembled, connection, observation, nopAnalysis } from '../fixtures/protocol';
+
 import '$lib/styles/theme.css';
 
 beforeEach(() => {
@@ -48,33 +55,55 @@ test('an open search panel adopts the new language without losing its query', as
     .toHaveValue('rax');
 });
 
-test('a late build for edited source cannot become loadable', async () => {
-  const { promise, resolve } = Promise.withResolvers<Awaited<ReturnType<WorkerPort['request']>>>();
-  let build: BuildIdentity | undefined;
-  await render(Workbench, {
-    portFactory: (): WorkerPort => ({
-      connect: () => Promise.resolve(connection()),
-      request: (command: Command) => {
-        if (command.type !== 'assemble') throw new Error(`Unexpected ${command.type}`);
-        build = command.data.identity;
-        return promise;
-      },
-      acknowledge: () => Promise.resolve(),
-      detach: () => {},
-    }),
-  });
-  const assemble = page.getByRole('button', { name: en.assemble, exact: true });
-  await expect.element(assemble).toBeEnabled();
-  await assemble.click();
-  const editor = page.getByRole('textbox', { name: en.editor_label });
-  await editor.click();
-  await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}nop');
-  if (build === undefined) throw new Error('Assembly request missing');
-  resolve(assembled(build));
-  await expect.element(assemble).toBeEnabled();
-  await expect.element(page.getByRole('button', { name: en.load_artifact })).toBeDisabled();
-  await expect.element(editor).toHaveTextContent('nop');
-});
+test.each(['artifact', 'diagnostic'] as const)(
+  'a late build %s cannot replace edited source',
+  async (outcome) => {
+    const { promise, resolve } =
+      Promise.withResolvers<Awaited<ReturnType<WorkerPort['request']>>>();
+    let build: BuildIdentity | undefined;
+    await render(Workbench, {
+      portFactory: (): WorkerPort => ({
+        connect: () => Promise.resolve(connection()),
+        request: (command: Command) => {
+          if (command.type !== 'assemble') throw new Error(`Unexpected ${command.type}`);
+          build = command.data.identity;
+          return promise;
+        },
+        acknowledge: () => Promise.resolve(),
+        detach: () => {},
+      }),
+    });
+    const assemble = page.getByRole('button', { name: en.assemble, exact: true });
+    await expect.element(assemble).toBeEnabled();
+    await assemble.click();
+    const editor = page.getByRole('textbox', { name: en.editor_label });
+    await editor.click();
+    await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}nop');
+    if (build === undefined) throw new Error('Assembly request missing');
+    resolve(
+      outcome === 'artifact'
+        ? assembled(build)
+        : {
+            response: {
+              id: '1',
+              result: {
+                type: 'error',
+                data: {
+                  code: 'assembly',
+                  address: null,
+                  source_offset: 0,
+                },
+              },
+            },
+            payloads: [],
+          },
+    );
+    await expect.element(assemble).toBeEnabled();
+    await expect.element(page.getByRole('button', { name: en.load_artifact })).toBeDisabled();
+    await expect.element(editor).toHaveTextContent('nop');
+    await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+  },
+);
 
 test('corrupt scratch recovery preserves the attached machine without replaying a mutation', async () => {
   localStorage.setItem('oplab.scratch.v1', '{');
@@ -305,41 +334,6 @@ test('build diagnostics locate Unicode source, follow locale and expire on edits
   await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
 });
 
-test('late diagnostics cannot annotate a newer source revision', async () => {
-  const reply = Promise.withResolvers<Awaited<ReturnType<WorkerPort['request']>>>();
-  await render(Workbench, {
-    portFactory: (): WorkerPort => ({
-      connect: () => Promise.resolve(connection()),
-      request: (command) => {
-        if (command.type !== 'assemble') throw new Error(`Unexpected ${command.type}`);
-        return reply.promise;
-      },
-      acknowledge: () => Promise.resolve(),
-      detach: () => {},
-    }),
-  });
-  const assemble = page.getByRole('button', { name: en.assemble, exact: true });
-  await assemble.click();
-  await page.getByRole('textbox', { name: en.editor_label }).click();
-  await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}nop');
-  reply.resolve({
-    response: {
-      id: '1',
-      result: {
-        type: 'error',
-        data: {
-          code: 'assembly',
-          address: null,
-          source_offset: 0,
-        },
-      },
-    },
-    payloads: [],
-  });
-  await expect.element(assemble).toBeEnabled();
-  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
-});
-
 test('imported source reaches assembly unchanged and binary inspection never loads a machine', async () => {
   const bytes = new Uint8Array([0x90, 0xc3]);
   const source = '\uFEFF// 中文 😀\r\n  nop\r\n';
@@ -428,4 +422,87 @@ test('imported source reaches assembly unchanged and binary inspection never loa
     .element(page.getByRole('region', { name: zh.instruction_analysis }))
     .toMatchTextContent('X64');
   await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+});
+
+test('initial setup is target-specific, survives locale changes and applies only on load', async () => {
+  const disclosure = (label: string) => {
+    const summary = Array.from(document.querySelectorAll('summary')).find((element) =>
+      element.textContent.includes(label),
+    );
+    if (summary === undefined) throw new Error('Missing setup disclosure');
+    return page.elementLocator(summary);
+  };
+  const commands: Command[] = [];
+  await render(Workbench, {
+    portFactory: (): WorkerPort => ({
+      connect: () => Promise.resolve(connection()),
+      request: (command) => {
+        commands.push(command);
+        if (command.type === 'assemble') return Promise.resolve(assembled(command.data.identity));
+        if (command.type === 'load')
+          return Promise.resolve({
+            response: { id: '2', result: { type: 'observed', data: observation() } },
+            payloads: [],
+          });
+        if (command.type === 'subscribe')
+          return Promise.resolve({
+            response: { id: '3', result: { type: 'subscribed', data: '3' } },
+            payloads: [],
+          });
+        throw new Error(`Unexpected ${command.type}`);
+      },
+      acknowledge: () => Promise.resolve(),
+      detach: () => {},
+    }),
+  });
+  await page.getByRole('button', { name: en.configuration, exact: true }).click();
+  await disclosure(en.initial_registers).click();
+  await page.getByRole('button', { name: en.add_register }).click();
+  await page.getByRole('textbox', { name: /RAX/ }).fill('0xffffffffffffffff');
+  await page.getByRole('button', { name: en.add_register }).click();
+  await page
+    .getByRole('button', { name: remove_register({ name: 'RCX' }, { locale: 'en' }) })
+    .click();
+  await disclosure(en.extra_memory).click();
+  await page.getByRole('button', { name: en.add_mapping }).click();
+  await page
+    .getByRole('group', { name: memory_region({ number: 1 }, { locale: 'en' }) })
+    .getByRole('textbox', { name: en.address, exact: true })
+    .fill('0x80000');
+  await page.getByRole('button', { name: en.add_mapping }).click();
+  await page.getByRole('button', { name: remove_mapping({ number: 2 }, { locale: 'en' }) }).click();
+  await page.getByRole('button', { name: en.close, exact: true }).click();
+  expect(commands).toEqual([]);
+  await page.getByRole('combobox', { name: en.target }).selectOptions('aarch64');
+  await page.getByRole('button', { name: en.configuration, exact: true }).click();
+  await disclosure(en.initial_registers).click();
+  await expect
+    .element(page.getByRole('combobox', { name: en.register_name, exact: true }))
+    .not.toBeInTheDocument();
+  await page.getByRole('button', { name: en.close, exact: true }).click();
+  await page.getByRole('combobox', { name: en.target }).selectOptions('x86_64');
+  await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
+  await page.getByRole('button', { name: zh.configuration, exact: true }).click();
+  await disclosure(zh.initial_registers).click();
+  await expect
+    .element(page.getByRole('textbox', { name: /RAX/ }))
+    .toHaveValue('0xffffffffffffffff');
+  await page.getByRole('textbox', { name: /RAX/ }).fill('0x10000000000000000');
+  await page.getByRole('button', { name: zh.close, exact: true }).click();
+  await page.getByRole('button', { name: zh.assemble, exact: true }).click();
+  await page.getByRole('button', { name: zh.load_artifact, exact: true }).click();
+  await expect.element(page.getByRole('alert')).toMatchTextContent(zh.error_input);
+  expect(commands.some((command) => command.type === 'load')).toBe(false);
+  await page.getByRole('button', { name: zh.configuration, exact: true }).click();
+  await disclosure(zh.initial_registers).click();
+  await page.getByRole('textbox', { name: /RAX/ }).fill('0xffffffffffffffff');
+  await page.getByRole('button', { name: zh.close, exact: true }).click();
+  await page.getByRole('button', { name: zh.load_artifact, exact: true }).click();
+  await expect.element(page.getByRole('button', { name: zh.step, exact: true })).toBeEnabled();
+  const load = commands.find((command) => command.type === 'load');
+  if (load?.type !== 'load') throw new Error('Missing load request');
+  expect(load.data.initial).toEqual({
+    registers: [{ name: 'rax', value: '18446744073709551615' }],
+    mappings: [{ address: '0x0000000000080000', length: 4096, flags: 6 }],
+  });
 });

@@ -1,5 +1,4 @@
-import { expect, test } from 'vitest';
-import fc from 'fast-check';
+import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import {
   formatAddress,
   formatCounter,
@@ -8,7 +7,8 @@ import {
   normalizeAddress,
   sameBuildIdentity,
 } from '$lib/protocol/scalars';
-import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
+import fc from 'fast-check';
+import { expect, test } from 'vitest';
 
 test('wire scalars match canonical decimal and hexadecimal without losing bits', () => {
   fc.assert(

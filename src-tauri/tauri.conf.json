@@ -12,7 +12,6 @@
   "app": {
     "windows": [
       {
-        "label": "main",
         "title": "Oplab",
         "width": 1440,
         "height": 900,
@@ -23,12 +22,11 @@
     ],
     "security": {
       "capabilities": ["default"],
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

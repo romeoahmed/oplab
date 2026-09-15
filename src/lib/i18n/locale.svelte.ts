@@ -1,5 +1,6 @@
-import { preferredLocale } from './match';
 import { localStorageKey, setLocale, type Locale } from '$lib/paraglide/runtime.js';
+
+import { preferredLocale } from './match';
 
 /**
  * Own locale selection and document metadata for the mounted application.

@@ -20,6 +20,9 @@ pub enum ValidationError {
     /// Two mappings occupy the same guest byte.
     #[error("memory regions overlap")]
     Overlap,
+    /// A register has more than one initial assignment.
+    #[error("register is initialized more than once")]
+    DuplicateRegister,
     /// A requested range is not contained by an appropriate mapping.
     #[error("memory range is unmapped or lacks required permissions")]
     Permission,
@@ -30,6 +33,6 @@ pub enum ValidationError {
     #[error("monotonic counter exhausted")]
     CounterExhausted,
     /// Target-specific constraints are not satisfied.
-    #[error("experiment does not satisfy the target profile")]
+    #[error("input does not satisfy the target profile")]
     Target,
 }

@@ -2,17 +2,6 @@
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "svelte": true,
   "singleQuote": true,
-  "sortImports": false,
-  "sortPackageJson": false,
-  "ignorePatterns": [
-    "Cargo.lock",
-    "pnpm-lock.yaml",
-    "src/lib/paraglide/**",
-    "src/lib/protocol/generated/**",
-    "src-tauri/gen/**",
-    "**/target/**",
-    "build/**",
-    ".svelte-kit/**",
-    "test-results/**"
-  ]
+  "sortImports": true,
+  "ignorePatterns": ["src/lib/protocol/generated/**"]
 }

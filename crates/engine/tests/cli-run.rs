@@ -303,9 +303,14 @@ fn stdin_limits_accept_the_boundary_and_reject_one_more_byte() -> TestResult {
             image(Target::X86_64, "nop")?,
             1_048_576,
         ),
+        (
+            vec!["run", "raw", "x86_64", "0x1000"],
+            vec![0x90],
+            1_048_576,
+        ),
     ] {
         let arguments = [arguments, vec!["--until", "0x1001", "--budget", "1"]].concat();
-        // Comments and trailing ELF bytes grow stdin without expanding guest memory.
+        // Source comments and trailing ELF bytes do not expand guest memory; raw bytes do.
         input.resize(limit, b' ');
         let (output, json) = run(&arguments, &input)?;
         assert!(output.status.success(), "{json}");
@@ -384,4 +389,191 @@ fn completion_symbols_preserve_absolute_values_and_reject_ambiguity() -> TestRes
     let name: [u8; 4] = image[done..done + 4].try_into()?;
     image[alias..alias + 4].copy_from_slice(&name);
     reject(&arguments, &image, "invalid_input")
+}
+
+#[test]
+fn raw_execution_uses_explicit_entry_registers_and_guest_mapping_permissions() -> TestResult {
+    for (guest, bytes, entry, completion, first, second, stack, bank) in [
+        // Skip the first instruction, then add and store at the explicit stack pointer.
+        (
+            "x86_64",
+            &[0x31, 0xc0, 0x48, 0x01, 0xc8, 0x48, 0x89, 0x04, 0x24][..],
+            "0x1002",
+            "0x1009",
+            "rax",
+            "rcx",
+            "rsp",
+            "gpr",
+        ),
+        (
+            "aarch64",
+            &[
+                0x00, 0x00, 0x80, 0xd2, 0x00, 0x00, 0x01, 0x8b, 0xe0, 0x03, 0x00, 0xf9,
+            ][..],
+            "0x1004",
+            "0x100c",
+            "x0",
+            "x1",
+            "sp",
+            "x",
+        ),
+    ] {
+        let first = format!("{first}=0xffffffffffffffff");
+        let second = format!("{second}=43");
+        let stack = format!("{stack}=0x8000");
+        for (mapping, expected) in [
+            ("0x8000:4096:rw", "completed"),
+            ("0x8000:0x1000:r", "guest_fault"),
+        ] {
+            let args = [
+                "run",
+                "raw",
+                guest,
+                "0x1000",
+                "--entry",
+                entry,
+                "--until",
+                completion,
+                "--budget",
+                "2",
+                "--register",
+                &first,
+                "--register",
+                &second,
+                "--register",
+                &stack,
+                "--map",
+                mapping,
+                "--memory",
+                "0x8000",
+                "--memory-bytes",
+                "8",
+            ];
+            let (output, json) = run(&args, bytes)?;
+            assert_eq!(output.status.success(), expected == "completed", "{json}");
+            assert_eq!(json["data"]["outcome"], expected);
+            assert_eq!(json["data"]["registers"]["data"][bank][0], "42");
+            let stored = if expected == "completed" { 42_u64 } else { 0 };
+            assert_eq!(
+                json["data"]["memory"]["bytes"],
+                serde_json::json!(stored.to_le_bytes())
+            );
+            if expected == "guest_fault" {
+                assert_eq!(json["data"]["fault"]["kind"]["type"], "protection");
+                assert_eq!(json["data"]["fault"]["kind"]["data"], "write");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn source_and_elf_setup_can_supply_stack_and_function_arguments() -> TestResult {
+    for (guest, target, source, registers, bank, result_index) in [
+        (
+            "x86_64",
+            Target::X86_64,
+            "push rdi\npop rax\ndone: nop",
+            ["rdi=0x000000000000000002a", "rsp=0x9000"],
+            "gpr",
+            0,
+        ),
+        (
+            "aarch64",
+            Target::Aarch64,
+            "str x0, [sp, #-16]!\nldr x1, [sp], #16\ndone: nop",
+            ["x0=42", "sp=0x9000"],
+            "x",
+            1,
+        ),
+    ] {
+        let image = image(target, source)?;
+        for (command, bytes) in [
+            (vec!["run", "source", guest, "0x1000"], source.as_bytes()),
+            (vec!["run", "elf", guest], image.as_slice()),
+        ] {
+            let args = [
+                command,
+                vec![
+                    "--until-symbol",
+                    "done",
+                    "--budget",
+                    "2",
+                    "--register",
+                    registers[0],
+                    "--register",
+                    registers[1],
+                    "--map",
+                    "0x8000:4096:rw",
+                ],
+            ]
+            .concat();
+            let (output, json) = run(&args, bytes)?;
+            assert!(output.status.success(), "{json}");
+            assert_eq!(json["data"]["registers"]["data"][bank][result_index], "42");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn invalid_setup_is_rejected_before_running() -> TestResult {
+    let command = [
+        "run", "raw", "x86_64", "0x1000", "--until", "0x1001", "--budget", "1",
+    ];
+    for setup in [
+        "--register rax=1 --register rax=2",
+        "--register x0=1",
+        "--register eax=1",
+        "--register rip=0x1001",
+        "--map 0x1000:4096:rw",
+        "--map 0x8001:4096:rw",
+        "--map 0x8000:1:rw",
+        "--map 0x8000:4096:rw --map 0x8000:4096:r",
+        "--map 0x8000:67108864:rw",
+        "--entry 0x1001",
+        "--entry 0xfff",
+    ] {
+        let args: Vec<_> = command
+            .into_iter()
+            .chain(setup.split_whitespace())
+            .collect();
+        reject(&args, &[0x90], "invalid_input")?;
+    }
+    reject(&command, &[], "invalid_input")?;
+    // An ELF-looking raw input still has no symbol-completion contract.
+    reject(
+        &[
+            "run",
+            "raw",
+            "x86_64",
+            "0x1000",
+            "--until-symbol",
+            "done",
+            "--budget",
+            "1",
+        ],
+        &image(Target::X86_64, "nop\ndone: nop")?,
+        "invalid_input",
+    )?;
+    for setup in [
+        "--register rax=18446744073709551616",
+        "--register rax=-1",
+        "--register rax=+1",
+        "--register rax=0x+1",
+        "--register rax=0x10000000000000000",
+        "--register rax",
+        "--map 0x8000:4096:xr",
+        "--map 0x8000:0:rw",
+        "--map 0xffffffffffffffff:4096:rw",
+    ] {
+        let args: Vec<_> = command
+            .into_iter()
+            .chain(setup.split_whitespace())
+            .collect();
+        let output = common::run(env!("CARGO_BIN_EXE_oplab-cli"), &args, &[])?;
+        assert_eq!(output.status.code(), Some(2), "{setup}");
+        assert!(output.stdout.is_empty());
+    }
+    Ok(())
 }

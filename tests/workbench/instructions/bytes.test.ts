@@ -1,6 +1,6 @@
-import { expect, test } from 'vitest';
-import fc from 'fast-check';
 import { decodeWindow, segmentBytes } from '$lib/workbench/instructions/bytes';
+import fc from 'fast-check';
+import { expect, test } from 'vitest';
 
 const windowInput = fc.uint8Array({ minLength: 1, maxLength: 256 }).chain((code) =>
   fc.record({

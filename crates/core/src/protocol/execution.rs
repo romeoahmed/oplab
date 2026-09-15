@@ -8,6 +8,38 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+/// Initial machine inputs applied only when loading, then retained for reset.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct InitialState {
+    /// Distinct canonical GPR names; omitted registers are zero. Maximum 32 entries.
+    pub registers: Vec<RegisterValue>,
+    /// Additional zero-filled regions, disjoint from image pages and each other.
+    pub mappings: Vec<Mapping>,
+}
+
+/// One exact initial general-purpose or stack-pointer value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RegisterValue {
+    /// Lowercase canonical target register; aliases, PC and flags are rejected.
+    pub name: String,
+    /// Unsigned 64-bit value, transported without JSON number rounding.
+    pub value: Counter,
+}
+
+/// Additional guest memory; no stack or other ABI role is inferred.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct Mapping {
+    /// Backend-page-aligned starting address.
+    pub address: HexAddress,
+    /// Nonzero byte length, a multiple of backend page size. Total memory <= 64 MiB.
+    pub length: u32,
+    /// Standard ELF permission bits: `PF_R=4`, `PF_W=2`, `PF_X=1`; zero is a guard region.
+    pub flags: u8,
+}
+
 /// A loaded session and reset generation, scoped to one worker connection.
 ///
 /// Load request IDs are not reused within a connection; reset preserves the session ID.

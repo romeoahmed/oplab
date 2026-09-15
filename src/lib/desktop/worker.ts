@@ -1,9 +1,9 @@
-import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
+import { decodeResponse, decodeStream, encodeCall } from '$lib/protocol/frames';
 import type { Command } from '$lib/protocol/generated/Command';
 import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
 import type { Counter } from '$lib/protocol/generated/Counter';
 import type { DesktopFailure } from '$lib/protocol/generated/DesktopFailure';
-import { decodeResponse, decodeStream, encodeCall } from '$lib/protocol/frames';
+import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 
 type Stream = ReturnType<typeof decodeStream>;
 /** A mounted view's worker attachment; requests are never retried automatically. */

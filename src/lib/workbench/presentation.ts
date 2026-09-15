@@ -1,6 +1,6 @@
-import type { Status } from '$lib/protocol/generated/Status';
-import type { Locale } from '$lib/paraglide/runtime';
 import * as m from '$lib/paraglide/messages.js';
+import type { Locale } from '$lib/paraglide/runtime';
+import type { Status } from '$lib/protocol/generated/Status';
 
 export function stateLabel(status: Status | undefined, locale: Locale): string {
   const options = { locale };

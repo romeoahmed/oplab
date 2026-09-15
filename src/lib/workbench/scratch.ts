@@ -1,5 +1,5 @@
-import { parseCounter } from '$lib/protocol/scalars';
 import type { Target } from '$lib/protocol/generated/Target';
+import { parseCounter } from '$lib/protocol/scalars';
 
 /** Recoverable editor inputs; incomplete human fields remain editable after restart. */
 export type Scratch = {

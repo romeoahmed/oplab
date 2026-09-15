@@ -1,8 +1,9 @@
 # Engine contract
 
-Assembly, instruction inspection, loading and execution are separate capabilities.
-LLVM acceptance does not establish decoder coverage or Unicorn execution support.
-The [roadmap](roadmap.md) tracks planned additions.
+This reference defines assembly syntax, static analysis, loading and execution.
+LLVM acceptance, decoder recognition and Unicorn execution support are separate
+capabilities. See [development](development.md#native-toolchain) for build setup and
+[protocol](protocol.md) for wire and CLI interfaces.
 
 ## Assembly
 
@@ -13,8 +14,8 @@ The artifact retains both complete files and a bounded ELF-derived image view.
 
 ### Language and layout
 
-Use LLVM's GNU-style language: Intel operands by default on x86_64 and native
-LLVM/GNU syntax on little-endian AArch64. Source reaches LLVM unchanged. There is
+Use LLVM's GNU-style assembly: Intel operands by default on x86_64 and LLVM/GNU
+syntax on little-endian AArch64. Source reaches LLVM unchanged. There is
 no NASM/MASM translation, custom preprocessor or per-instruction fallback.
 Declare x86 operand syntax explicitly in portable examples:
 
@@ -82,7 +83,7 @@ fabricated location. Macro expansion buffers can lack an original-source offset;
 link failures have no source point. An offset is not an instruction range or source
 map. DWARF is retained; macro provenance and source breakpoints remain planned.
 
-The C++23/CXX adapter owns resources through RAII and call-scoped borrows. MC
+The C++23/CXX adapter uses RAII ownership and call-scoped borrows. MC
 finalization runs exactly once, including pools, relaxation, layout, fixups and
 DWARF. Calling layout as an extra preflight can mutate state and is prohibited.
 CXX translates exceptions; native aborts/hangs require process supervision.
@@ -164,9 +165,8 @@ translation effects. Memory sizes describe operands, not measured traffic, total
 REP traffic or cache-line extents. Address expressions, branch conditions and
 effective addresses are not evaluated. A null branch target may mean indirect
 control or an unreported destination, not fallthrough.
-Aliases, system behavior, partial state and unreported effects prevent treating
-this metadata as a complete ISA model.
-It does not establish source provenance or retire-time effects.
+Unreported effects and partial state prevent treating this metadata as a complete
+ISA model, source provenance or evidence of retired instructions.
 
 ### Verified capability samples
 
@@ -186,8 +186,8 @@ not blanket extension-support claims. Exact dependency releases remain in lockfi
 
 CPUID identifiers describe x86 decoder requirements. Capstone groups are a different,
 incomplete taxonomy; no groups does not mean no extension is required. Neither
-selects an emulator CPU or guarantees execution. Raw-code loading, broader ISA
-coverage and an execution capability matrix remain planned.
+selects an emulator CPU or guarantees execution. Broader ISA coverage and an
+execution capability matrix remain planned.
 
 ## Loading
 
@@ -244,11 +244,47 @@ through `mem_write` does not grant guest write access to RX pages. Debugger read
 can inspect mapped execute-only/guard pages without altering guest permissions.
 Unmapped reads fail; they never synthesize zero bytes.
 
+### Raw code and initial conditions
+
+`Machine::load` accepts either an ELF image or an explicit `Image::Raw` byte extent.
+`LoadPlan::new` validates the complete setup against the backend's page size before
+mapping guest memory; `Session::new` binds the resulting machine to execution policy.
+ELF convenience constructors without an explicit register bank retain backend
+register defaults. Worker/CLI loads supply a bank and zero unspecified GPRs.
+
+Raw input is 1 byte–1 MiB, mapped RX at its supplied base without relocation or an
+ELF wrapper. The base need not be page-aligned. The aligned entry must fit the
+minimum instruction width entirely inside the actual input, not page padding.
+Pages round outward; surrounding bytes initialize to zero. This validates initial
+fetch geometry, not decoding or instruction boundaries. Completion remains explicit.
+The CLI exposes raw execution; desktop binary import remains inspection-only.
+
+`MachineSetup` optionally supplies an architecture-shaped `InitialRegisters` bank
+and additional `InitialMapping` regions. Canonical names are lowercase: the 16 x86
+GPRs (including `rsp`), or `x0`–`x30` and separate `sp`. Unspecified GPRs in an
+explicit bank are zero. Aliases, duplicate names, PC, flags and wrong-target banks
+are rejected.
+GPR values are arbitrary unsigned 64-bit bit patterns; a pointer value is not proof
+of a mapping or valid alignment for a later guest access. PC comes from the image;
+flags and other processor state retain backend defaults.
+
+Additional regions must be page-aligned, disjoint from each other and all image
+pages, and fit the combined 64-region/64-MiB budget. Permissions remain exact; zero
+permissions create a guard region. The engine API accepts initial bytes followed
+by implicit zero-fill; desktop and CLI additional regions are zero-filled. A mapping
+has no implicit ABI role. A stack requires both a region and an explicit RSP/SP value.
+ELF addresses, entry and permissions remain authoritative.
+
+Initialization failure drops the new native handle; worker replacement failure
+preserves the old session. The complete setup is retained for
+[reset](#breakpoints-observations-and-reset). Live register writes, executable
+patches and translated-code invalidation remain planned.
+
 ## Execution
 
-A `Session` binds a validated static image, a Unicorn machine and explicit policy.
-The native owner is neither `Send`, `Sync` nor cloneable; construct it on its execution
-thread. Drops clean up successful and partially initialized native state. Desktop
+A `Session` binds a loaded Unicorn machine to explicit execution policy.
+The native owner is neither `Send` nor `Sync` and cannot be cloned. Construct it on
+its execution thread. Drops clean up successful and partially initialized native state. Desktop
 code accesses it only through the worker.
 
 ### Control, completion and accounting

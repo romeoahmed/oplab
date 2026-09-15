@@ -1,6 +1,6 @@
 //! Native machine ownership. Construct and use a machine on its execution thread.
 
-use crate::load::{LoadError, LoadPlan};
+use crate::load::{Image, LoadError, LoadPlan, MachineSetup};
 use oplab_core::{
     address::{Address, AddressRange},
     diagnostic::ValidationError,
@@ -56,11 +56,25 @@ impl Machine {
     /// Rejects invalid images and native setup failures. Partial native allocations
     /// are released before returning an error.
     pub fn from_elf(image: &[u8], target: Target) -> Result<Self, MachineError> {
+        Self::load(Image::Elf(image), target, MachineSetup::default())
+    }
+
+    /// Load ELF or raw code with explicit initial registers and additional mappings.
+    ///
+    /// # Errors
+    ///
+    /// Rejects invalid initial conditions before mapping guest memory. A failed native
+    /// setup drops the entire new machine; no partially configured state escapes.
+    pub fn load(
+        image: Image<'_>,
+        target: Target,
+        setup: MachineSetup,
+    ) -> Result<Self, MachineError> {
         let native = open(target)?;
         let page_size = native
             .ctl_get_page_size()
             .map_err(|_| MachineError::Backend)?;
-        let initial = LoadPlan::from_elf(image, target, u64::from(page_size))?;
+        let initial = LoadPlan::new(image, target, u64::from(page_size), setup)?;
         let native = initialize(native, &initial)?;
         Ok(Self {
             native,
@@ -101,7 +115,7 @@ impl Machine {
         Ok(())
     }
 
-    /// Immutable initial contents and permissions, retained for reset planning.
+    /// Immutable initial memory, registers and permissions retained for reset.
     #[must_use]
     pub const fn initial(&self) -> &LoadPlan {
         &self.initial
@@ -167,6 +181,9 @@ fn initialize(
     native
         .set_pc(initial.entry().get())
         .map_err(|_| MachineError::Backend)?;
+    if let Some(values) = initial.registers() {
+        registers::initialize(&mut native, values)?;
+    }
     hooks::install(&mut native).map_err(|_| MachineError::Backend)?;
     Ok(native)
 }

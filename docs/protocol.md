@@ -1,9 +1,10 @@
-# Engine interfaces
+# Protocol and CLI
 
 This document defines the worker protocol, desktop boundary and CLI output.
 Rust declarations in `oplab-core::protocol` own the wire contracts;
 `cargo xtask codegen [--check]` exports or verifies their TypeScript declarations.
-[Engine](engine.md) defines machine semantics and artifact limits.
+[Engine](engine.md) owns machine semantics and artifact limits;
+[development](development.md#native-toolchain) owns CLI build requirements.
 
 ## Framing
 
@@ -17,20 +18,27 @@ Every frame begins with an eight-byte header:
 | 4–7    | Body length | Unsigned 32-bit little-endian                            |
 
 JSON bodies are bounded to 1 MiB and binary bodies to 64 KiB; empty bodies are
-invalid. Validate headers before allocating. Handle short reads/writes normally.
+invalid. Validate each header before reading its body and bound allocations by
+the frame and complete-payload budgets. Handle short reads/writes normally.
 EOF before a header is clean shutdown; EOF inside a frame or declared payload is
 failure. Malformed input closes the connection without scanning for another magic.
 Stdout contains protocol bytes only; stderr uses static failure categories.
 
-Version 1 transfers binary data only after the control/event declaring it. Complete
-messages are contiguous: no other reply or event can interleave payload frames.
+Binary data follows the control/event that declares it. Complete messages are
+contiguous: no other reply or event can interleave payload frames.
 A header or JSON reply alone never completes a message with outstanding binary data.
+Reject an unexpected payload kind or chunk length before waiting for its body.
 
 ## Negotiation and identity
 
+The private development protocol stays at version **1**. Desktop, CLI and worker
+are built together against one current schema; there is no compatibility or migration
+layer for earlier builds. Rebuild and restart native processes after contract changes.
+
 Send `hello` with version `1` first. The reply advertises targets, assembler identity,
-execution support and unavailable source mapping. An incompatible handshake receives
-an error and closes without waiting for stdin EOF.
+execution support and source-mapping availability. A mismatched handshake receives
+an error and closes without waiting for stdin EOF. This checks the protocol identifier,
+not build identity; version 1 alone does not establish cross-build compatibility.
 
 Request IDs are positive, strictly increasing canonical decimal strings scoped to
 a connection. Reuse closes the connection without a duplicate-ID reply. Tagged
@@ -62,11 +70,22 @@ The bounded image view exposes named address symbols, excluding undefined, file,
 section and TLS entries. TLS offsets remain in the complete ELF; they are not
 virtual addresses or desktop stop positions.
 
-`load` declares target, completion, instruction budget, image length and `replace`,
-followed by the same binary chunk format. No machine is allocated until transfer and
-loader validation succeed. `replace: null` requires no session; replacement requires
-the current exact key and a non-running state. Failure preserves the old machine.
+`load` declares target, completion, instruction budget, image length, `initial`
+and `replace`, followed by binary image chunks. No guest memory is mapped until
+the transfer and loader validation succeed. `replace: null` requires no session;
+replacement requires the current exact key and a non-running state. Failure
+preserves the old machine.
 Success uses the load request ID as session ID and starts generation zero.
+
+`initial` contains `registers: [{name, value}]` and
+`mappings: [{address, length, flags}]`. Register values are canonical decimal strings;
+names must be distinct lowercase canonical GPRs for the selected target. Omitted
+GPRs are zero. Both arrays are required, including when empty. Mapping addresses
+use canonical hexadecimal; lengths are byte counts. Flags use ELF `PF_R=4`,
+`PF_W=2`, `PF_X=1`; zero describes a guard region. Extra regions are zero-filled.
+The [loader](engine.md#raw-code-and-initial-conditions) checks page geometry,
+overlap, target and aggregate limits before native mapping.
+These values are load inputs, not live patches, and reset reapplies them.
 
 `execute` carries a session key and `run`, `step`, `pause`, `cancel`, `reset`,
 `breakpoint`, `observe` or `close`. Keys contain decimal `session` and `generation`.
@@ -260,7 +279,7 @@ Usage errors exit 2; operational or output failures exit 1.
 | ----------------------------------- | ------------------------ | --------------------------------------------- |
 | `assemble`                          | Complete linked ELF      | JSON diagnostic on stderr; stdout stays empty |
 | `capabilities`, `decode`, `analyze` | Correlated JSON response | JSON on stdout                                |
-| `run source`, `run elf`             | Batch JSON report        | JSON on stdout                                |
+| `run source`, `run elf`, `run raw`  | Batch JSON report        | JSON on stdout                                |
 
 For assembly and inspection, input read, size and encoding failures produce a static
 message on stderr. Batch execution reports those failures as JSON. JSON output ends
@@ -280,21 +299,27 @@ base, then executes that image. `run elf` accepts a complete static ELF64 execut
 (up to 1 MiB), checks the selected guest, and uses its program headers and `e_entry`
 without relocating it. Ordinary section headers are optional; symbol-based completion
 requires a symbol table, and extended program-header counts require section zero.
-Both use the desktop's [loader](engine.md#loading) and [session policy](engine.md#execution).
-Successful assembly alone does not imply a loadable runtime image.
+`run raw TARGET BASE` maps unchanged binary stdin (1 byte–1 MiB) RX. `--entry`
+defaults to BASE; it must be aligned and fit inside the input. Use `--until`, since
+raw bytes have no ELF symbols. All modes share [loading](engine.md#loading) and
+[session policy](engine.md#execution); successful assembly alone does not imply
+a loadable runtime image.
 
 ```sh
 cargo run --locked -p oplab-engine --bin oplab-cli -- run source x86_64 0x1000 --until-symbol done --budget 100 < experiment.s
 cargo run --locked -p oplab-engine --bin oplab-cli -- run elf aarch64 --until 0x1008 --budget 100 --memory 0x1000 --memory-bytes 8 < experiment.elf
 ```
 
-| Option                                    | Contract                                                                                                            |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `--until ADDRESS` / `--until-symbol NAME` | Exactly one is required. Stop before fetching the resolved address; it must be aligned and distinct from the entry. |
-| `--budget N`                              | Required instruction-start limit, 1–100,000,000. REP iterations count as one instruction.                           |
-| `--timeout-ms N`                          | Cooperative execution limit, 1–3,600,000 ms; default 10,000.                                                        |
-| `--memory ADDRESS`                        | Include one final mapped memory window; validated before execution.                                                 |
-| `--memory-bytes N`                        | 1–65,536 bytes, default 64 when observing memory. Explicit use requires `--memory`.                                 |
+| Option                                    | Contract                                                                                                                                  |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `--until ADDRESS` / `--until-symbol NAME` | Exactly one is required. Stop before fetching the resolved address; it must be aligned and distinct from the entry.                       |
+| `--entry ADDRESS`                         | Raw mode only: explicit initial fetch address, defaulting to BASE.                                                                        |
+| `--register NAME=VALUE`                   | Repeat for distinct canonical GPRs, including RSP/SP. Values accept decimal or `0x` hex; unspecified GPRs are zero.                       |
+| `--map ADDRESS:SIZE:PERMISSIONS`          | Repeat for additional zero-filled page-aligned regions. Size accepts decimal or `0x` hex. Permissions are `r`, `w`, `x` in order, or `-`. |
+| `--budget N`                              | Required instruction-start limit, 1–100,000,000. REP iterations count as one instruction.                                                 |
+| `--timeout-ms N`                          | Cooperative execution limit, 1–3,600,000 ms; default 10,000.                                                                              |
+| `--memory ADDRESS`                        | Include one final mapped memory window; validated before execution.                                                                       |
+| `--memory-bytes N`                        | 1–65,536 bytes, default 64 when observing memory. Explicit use requires `--memory`.                                                       |
 
 A completion symbol must name exactly one entry in the ordinary ELF symbol table,
 defined in an existing section or as an absolute value. Missing, undefined, unallocated
@@ -303,10 +328,14 @@ are rejected because their values are offsets, not virtual addresses. An explici
 address needs no symbols. Neither form establishes source provenance or an instruction
 boundary; completion is an explicit control policy.
 
-Each invocation owns one session and captures final state after execution. The PC
-comes from ELF, memory comes from the loader, and other registers retain the
-backend's initial state. No stack, return address, host ABI or system services are
-supplied implicitly.
+Each invocation owns one session and captures final state after execution. PC comes
+from ELF or the explicit raw entry; flags retain backend defaults. Added mappings
+cannot overlap image pages or widen their permissions. No stack, return address,
+host ABI or system services are supplied implicitly.
+
+For example, a source document can use `push rdi; pop rax` with `--register rdi=42`,
+`--register rsp=0x9000` and `--map 0x8000:4096:rw`, ending at its declared completion.
+The caller supplies the stack and argument; Oplab adds no call or return sequence.
 
 The timeout begins after input, assembly, loading and initial observation validation.
 It is checked between slices using Rust's monotonic `Instant`; a native call may
@@ -341,5 +370,6 @@ the 64 KiB decode-request budget.
 Dialogs select each path explicitly. Frontend callers supply a localized title and
 format, and receive contents or cancellation, never host paths. Errors are stable
 categories. Import is read-only; exports validate contents before replacing a
-selected file through a same-directory temporary file. No file operation implies
+selected file through a flushed same-directory temporary file. Replacement is
+atomic; directory crash durability is not guaranteed. No file operation implies
 assembly, execution or mutation of the current worker session.

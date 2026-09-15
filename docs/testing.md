@@ -2,9 +2,9 @@
 
 Tests should establish behavior, independent architectural facts and invariants.
 Prefer the smallest test at the boundary that can detect a meaningful regression.
-Do not freeze DOM structure, object identity, internal storage, independent reply
-order or formatter output. Test counts and coverage percentages are diagnostic
-information, not acceptance targets.
+Do not freeze DOM structure, object identity, internal storage, translation wording,
+independent reply order or formatter output. Test counts and coverage percentages
+are diagnostic information, not acceptance targets.
 [Development](development.md#commands-and-ownership) owns command recipes;
 [roadmap](roadmap.md#verification) owns dated results and outstanding gates.
 
@@ -37,10 +37,10 @@ implementation in the expected result or merely round-trip two production helper
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Addresses and wire scalars | Standard decimal/hex formatting and wider integer arithmetic                                                                       |
 | Memory access              | Complete containment in one mapping and a permission bit-set model                                                                 |
-| Framing                    | Published little-endian headers, binary chunk boundaries, arbitrary pipe fragmentation and truncated input                         |
+| Framing                    | Published little-endian headers, chunk boundaries, fragmented/truncated input and invalid-header rejection before body reads       |
 | ELF loading                | Hand-built ELF64 headers, page envelopes, file bytes and observed zero-fill                                                        |
 | Instruction analysis       | Fixed effects, generated MOV/signed-branch operands, full-width destinations and independent extension encodings                   |
-| Batch CLI                  | Full-width arithmetic and memory from source/ELF inputs; exit outcomes, sectionless ELF and completion symbols                     |
+| Batch CLI                  | Full-width arithmetic and memory from source/ELF/raw inputs; exit outcomes, sectionless ELF and completion symbols                 |
 | Guest execution            | Generated add/subtract/XOR programs compared with wrapping `u32` arithmetic on both guests                                         |
 | Build scheduling           | Latest valid request per document, cancellation and exactly-once delivery without assuming unrelated reply order                   |
 | Observations               | Generated full/delta histories, independent complete samples, exact counters, retained baselines and stale identities              |
@@ -52,8 +52,9 @@ implementation in the expected result or merely round-trip two production helper
 
 Properties use bounded inputs so failures remain small and reproducible. Fixed
 protocol boundaries use deterministic examples, not random selection from a short
-list of constants. File-budget tests state the documented limits independently of
-production constants; file I/O properties use standard filesystem reads/writes as
+list of constants. Bias wide-address generators toward the final page so overflow
+branches are exercised routinely. File-budget tests state documented limits independently
+of production constants; file I/O properties use standard filesystem reads/writes as
 the oracle in each direction. Native program generation has a lower case count
 than pure logic; it still executes real LLVM/Unicorn work. Repeated runs explore
 new inputs rather than pinning every property to one seed.
@@ -66,11 +67,9 @@ Do not ignore failures, retry until green or weaken a contract to accommodate a 
 
 ## Effects and fixtures
 
-Frontend feature tests mirror `src/lib` ownership; editor and machine tests live
-under their corresponding `tests/workbench` subdirectories. Shared DTO fixtures
-live in `tests/fixtures/protocol.ts`; they supply data rather than implementing a
-second worker or emulator. Browser ports reject unexpected commands. A component
-fixture proves the frontend's use of a contract, while actual process tests prove
+Frontend tests mirror feature ownership. Shared data in `tests/fixtures/protocol.ts`
+provides DTOs, not a second worker or emulator. Browser ports reject unexpected
+commands. A component fixture proves the frontend's use of a contract, while actual process tests prove
 that the native implementation fulfills it.
 
 Instruction analysis compares fixed encodings and generated operands with
@@ -97,8 +96,9 @@ state transition, and elapsed execution time is not a performance assertion.
 ## Browser coverage
 
 `vite.config.ts` defines a Node logic project and a real browser component project,
-both inheriting SvelteKit/Paraglide. Browser tests use Playwright **Chromium only**,
-`channel: 'chromium'`, `headless: true`: [new headless mode](https://playwright.dev/docs/browsers#chromium-new-headless-mode).
+both inheriting SvelteKit/Paraglide. Browser tests use
+Playwright **Chromium only**, with `channel: 'chromium'` and `headless: true`
+for [new headless mode](https://playwright.dev/docs/browsers#chromium-new-headless-mode).
 Install with `--no-shell`; do not add Firefox, WebKit or the separate headless shell.
 See [Vitest projects](https://vitest.dev/guide/projects) and
 [Svelte testing](https://svelte.dev/docs/svelte/testing).
@@ -126,15 +126,16 @@ Browser coverage follows observable workflows:
   analysis/retry, late success/failure, input changes and reversions, locale
   retention and narrow-panel return without another decode. Re-decoding clears
   selection. Workbench tests also exercise the complete request/reply adapter.
+- **Initial setup:** target-specific inputs and locale retention, exact full-width
+  scalar conversion, add/remove controls, and rejection of invalid values before load
+  followed by successful correction.
 - **Execution:** assembly does not load, loading does not run, completion metadata
   reaches the request, and rejected reset preserves the displayed machine.
 
 Broader keyboard/screen-reader acceptance remains open, including toolbar focus
 when all actions begin disabled. Use Bits UI and native semantics without custom
-focus patches.
-
-Worker ports are explicit component fixtures. They do not establish native IPC,
-ELF validity or actual machine effects. Use browser HMR for visual acceptance at
+focus patches. Component fixtures do not establish native IPC, ELF validity or
+machine effects. Use browser HMR for visual acceptance at
 the default 1440×900 and the desktop minimum 880×600, then inspect narrow layouts,
 zoom, both languages, long values and keyboard focus. Do not publish synthetic
 fixture states as evidence of native behavior.
@@ -156,6 +157,11 @@ upstream compatibility verification.
 - **Instruction inspection/CLI:** independent instruction bytes and static effects,
   bounded complete prefixes, exact single-instruction analysis, invalid-byte locations,
   raw stdin and separate usage errors.
+- **Initial conditions:** arbitrary raw-byte page envelopes against wide arithmetic,
+  fixed dual-architecture instructions against full-width arithmetic, initial memory
+  and reset. Guest stores independently verify every named GPR and its observation;
+  expected values do not reuse backend register tables. Rejected worker replacements
+  preserve an executed machine, including its registers, memory and execution counters.
 - **Batch CLI:** two arbitrary `u64` operands against wrapping arithmetic and exact
   memory, plus fixed precision/overflow boundaries. Separate cases cover exact stdin
   limits and one-byte overflow, sectionless entry handling, absolute/ambiguous/TLS
@@ -179,7 +185,10 @@ For UI changes, verify a fresh static desktop bundle as well as the browser:
 
 1. Build/load each architecture's example, step, run to completion and inspect the
    expected register/memory effect (the built-in examples store 42).
-2. Reset and verify initial state. Exercise a bounded loop, pause and stop.
+2. Configure initial registers and an extra mapped region for each guest; run code
+   that consumes those values and stores a result. Reset and verify initial values,
+   then reject an overlapping replacement without losing the machine. Exercise a
+   bounded loop, pause and stop.
 3. Edit source or change target; confirm the old machine remains distinct and stale
    artifacts cannot replace current work. Exercise an assembly error after Unicode
    source, navigate to its point and edit to clear it.
@@ -191,9 +200,9 @@ For UI changes, verify a fresh static desktop bundle as well as the browser:
 5. Verify fonts, dynamic editor loading, both locales and focus behavior under the
    actual WebView origin/CSP. Test failure/restart when the supervisor changes.
 
-These checks do not establish a full ISA/extension matrix, source mapping, TLS,
-OS/ABI support or general imported-executable support. Native execution requires
-permission for Unicorn JIT operations and host CPU/cache discovery. On Apple Silicon,
+The [engine contract](engine.md) defines the supported runtime and metadata limits.
+Native execution requires permission for Unicorn JIT operations and host CPU/cache
+discovery. On Apple Silicon,
 Unicorn 2.1.5 queries `hw.cachelinesize`; denying that query can trigger an unsupported
 `CTR_EL0` fallback read and `SIGILL` before loading a guest. Run native tests with the
 required host access and report sandbox restrictions separately from test results.
@@ -204,10 +213,10 @@ installed/signed distribution evidence.
 
 [Tauri's WebDriver guide](https://tauri.app/develop/tests/webdriver/) recommends
 WebdriverIO with `@wdio/tauri-service`. Its embedded provider supports Windows,
-Linux and macOS; direct upstream `tauri-driver` supports Windows/Linux. A future
-native harness should use real IPC and the actual worker, keep automation plugins
-behind a test-only feature and exclude them from production. Avoid duplicating
-renderer suites. No desktop WebDriver harness is installed yet.
+Linux and macOS; direct upstream `tauri-driver` supports Windows/Linux. No desktop
+WebDriver harness is installed yet. When adding one, follow the current plugin setup,
+exercise real IPC and the actual worker, and keep automation behind a test-only
+feature. Avoid duplicating renderer suites or including automation in production.
 
 The [release gates](roadmap.md#release-gates) track multi-host CI, installed-artifact
 acceptance, containment and performance work. Output bounds, cooperative cancellation,

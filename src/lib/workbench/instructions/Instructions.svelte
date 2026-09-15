@@ -1,16 +1,17 @@
 <script lang="ts">
   import './instructions.css';
-  import Analysis from './Analysis.svelte';
-  import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
-  import { onDestroy, type Snippet } from 'svelte';
-  import { ArrowRight, ListOrdered } from '@lucide/svelte';
-  import { normalizeAddress } from '$lib/protocol/scalars';
-  import { problemLabel } from '../presentation';
-  import { decodeWindow } from './bytes';
-  import type { Target } from '$lib/protocol/generated/Target';
-  import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
-  import type { Locale } from '$lib/paraglide/runtime';
   import * as m from '$lib/paraglide/messages.js';
+  import type { Locale } from '$lib/paraglide/runtime';
+  import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
+  import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
+  import type { Target } from '$lib/protocol/generated/Target';
+  import { normalizeAddress } from '$lib/protocol/scalars';
+  import { ArrowRight, ListOrdered } from '@lucide/svelte';
+  import { onDestroy, type Snippet } from 'svelte';
+
+  import { problemLabel } from '../presentation';
+  import Analysis from './Analysis.svelte';
+  import { decodeWindow } from './bytes';
 
   const {
     bytes,

@@ -27,5 +27,4 @@ Checks: >-
   readability-static-accessed-through-instance
 WarningsAsErrors: '*'
 HeaderFilterRegex: '(^|/)(crates/engine/)?native/'
-SystemHeaders: false
 FormatStyle: file

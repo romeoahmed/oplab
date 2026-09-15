@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+
 import english from '../../messages/en.json';
 import chinese from '../../messages/zh-CN.json';
 

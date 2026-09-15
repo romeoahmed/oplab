@@ -12,25 +12,6 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 
 type Frame = { kind: number; bytes: Uint8Array };
-function frame(kind: number, bytes: Uint8Array): Uint8Array {
-  const limit = kind === 1 ? binaryLimit : controlLimit;
-  if (bytes.length === 0 || bytes.length > limit) throw new RangeError('Invalid frame length');
-  const result = new Uint8Array(8 + bytes.length);
-  result.set([79, 80, kind, 0]);
-  new DataView(result.buffer).setUint32(4, bytes.length, true);
-  result.set(bytes, 8);
-  return result;
-}
-
-function join(parts: Uint8Array[]): Uint8Array {
-  const result = new Uint8Array(parts.reduce((length, part) => length + part.length, 0));
-  let offset = 0;
-  for (const part of parts) {
-    result.set(part, offset);
-    offset += part.length;
-  }
-  return result;
-}
 
 class Reader {
   private offset = 0;
@@ -96,11 +77,25 @@ export function encodeCall(call: DesktopCall, image: Uint8Array | null): Uint8Ar
   if (required !== (image?.length ?? null)) throw new RangeError('Mismatched load image');
   if (required !== null && (required < 1 || required > controlLimit))
     throw new RangeError('Invalid image length');
-  const parts = [frame(0, encoder.encode(JSON.stringify(call)))];
+  const metadata = encoder.encode(JSON.stringify(call));
+  if (metadata.length > controlLimit) throw new RangeError('Invalid frame length');
+  const imageLength = image?.length ?? 0;
+  const result = new Uint8Array(
+    8 + metadata.length + imageLength + 8 * Math.ceil(imageLength / binaryLimit),
+  );
+  const header = new DataView(result.buffer);
+  let offset = 0;
+  function write(kind: 0 | 1, bytes: Uint8Array): void {
+    result.set([79, 80, kind, 0], offset);
+    header.setUint32(offset + 4, bytes.length, true);
+    result.set(bytes, offset + 8);
+    offset += 8 + bytes.length;
+  }
+  write(0, metadata);
   if (image !== null)
-    for (let offset = 0; offset < image.length; offset += binaryLimit)
-      parts.push(frame(1, image.subarray(offset, offset + binaryLimit)));
-  return join(parts);
+    for (let start = 0; start < image.length; start += binaryLimit)
+      write(1, image.subarray(start, start + binaryLimit));
+  return result;
 }
 
 /**

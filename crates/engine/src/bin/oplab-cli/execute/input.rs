@@ -1,13 +1,16 @@
 //! clap owns argument relationships; ELF symbols retain their standard meaning.
 
-use super::super::{Guest, read_input};
+use super::{
+    super::{Guest, read_input},
+    setup::Setup,
+};
 use object::{Object, ObjectSymbol, SymbolKind, SymbolSection};
 use oplab_core::{
     address::Address,
     protocol::{Diagnostic, DiagnosticCode, MAX_OBJECT_BYTES, MAX_SOURCE_BYTES},
     target::Target,
 };
-use oplab_engine::assembly;
+use oplab_engine::{assembly, load::Image, machine::Machine, session::Session};
 
 #[derive(clap::Subcommand)]
 pub(crate) enum Input {
@@ -17,6 +20,8 @@ pub(crate) enum Input {
         input: super::super::Input,
         #[command(flatten)]
         policy: Policy,
+        #[command(flatten)]
+        setup: Setup,
     },
     /// Load and run a static ELF64 executable from stdin at its declared addresses.
     Elf {
@@ -25,6 +30,20 @@ pub(crate) enum Input {
         target: Guest,
         #[command(flatten)]
         policy: Policy,
+        #[command(flatten)]
+        setup: Setup,
+    },
+    /// Map exact raw machine code from stdin read/execute, with no implicit ABI.
+    Raw {
+        #[command(flatten)]
+        input: super::super::Input,
+        /// Initial hexadecimal instruction address; defaults to the raw base.
+        #[arg(long)]
+        entry: Option<Address>,
+        #[command(flatten)]
+        policy: Policy,
+        #[command(flatten)]
+        setup: Setup,
     },
 }
 
@@ -54,30 +73,60 @@ pub(crate) struct Policy {
 }
 
 impl Input {
-    pub(super) fn prepare(self) -> Result<(Vec<u8>, Target, Policy), Diagnostic> {
+    pub(super) fn prepare(self) -> Result<Prepared, Diagnostic> {
         match self {
-            Self::Source { input, policy } => {
+            Self::Source {
+                input,
+                policy,
+                setup,
+            } => {
                 let source = read_input(MAX_SOURCE_BYTES)?;
                 let source = std::str::from_utf8(&source)
                     .map_err(|_| Diagnostic::new(DiagnosticCode::InvalidInput))?;
                 let target = input.target.into();
                 let object = assembly::compile(target, source)?;
-                Ok((assembly::link(&object, input.base)?, target, policy))
+                let image = assembly::link(&object, input.base)?;
+                Prepared::new(Image::Elf(&image), target, setup, policy)
             }
-            Self::Elf { target, policy } => {
+            Self::Elf {
+                target,
+                policy,
+                setup,
+            } => {
                 let image = read_input(MAX_OBJECT_BYTES)?;
-                Ok((image, target.into(), policy))
+                Prepared::new(Image::Elf(&image), target.into(), setup, policy)
+            }
+            Self::Raw {
+                input,
+                entry,
+                policy,
+                setup,
+            } => {
+                let bytes = read_input(MAX_OBJECT_BYTES)?;
+                Prepared::new(
+                    Image::Raw {
+                        bytes: &bytes,
+                        base: input.base,
+                        entry: entry.unwrap_or(input.base),
+                    },
+                    input.target.into(),
+                    setup,
+                    policy,
+                )
             }
         }
     }
 }
 
 impl Policy {
-    pub(super) fn completion(&self, image: &[u8]) -> Result<Address, Diagnostic> {
+    fn completion(&self, image: Image<'_>) -> Result<Address, Diagnostic> {
         if let Some(address) = self.until {
             return Ok(address);
         }
         let invalid = || Diagnostic::new(DiagnosticCode::InvalidInput);
+        let Image::Elf(image) = image else {
+            return Err(invalid());
+        };
         let name = self.until_symbol.as_deref().ok_or_else(invalid)?;
         let file = object::File::parse(image).map_err(|_| invalid())?;
         let mut matches = file.symbols().filter(|symbol| symbol.name() == Ok(name));
@@ -93,5 +142,34 @@ impl Policy {
             _ => return Err(invalid()),
         }
         Ok(Address::new(symbol.address()))
+    }
+}
+
+pub(super) struct Prepared {
+    pub session: Session,
+    pub target: Target,
+    pub completion: Address,
+    pub policy: Policy,
+}
+
+impl Prepared {
+    fn new(
+        image: Image<'_>,
+        target: Target,
+        setup: Setup,
+        policy: Policy,
+    ) -> Result<Self, Diagnostic> {
+        let completion = policy.completion(image)?;
+        let setup = setup.build(target)?;
+        let machine =
+            Machine::load(image, target, setup).map_err(|error| super::diagnostic(&error))?;
+        let session = Session::new(machine, completion, policy.budget)
+            .map_err(|error| super::diagnostic(&error))?;
+        Ok(Self {
+            session,
+            target,
+            completion,
+            policy,
+        })
     }
 }

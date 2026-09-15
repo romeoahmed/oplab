@@ -1,7 +1,7 @@
-import { expect, test } from 'vitest';
-import fc from 'fast-check';
-import type { DesktopCall } from '$lib/protocol/generated/DesktopCall';
 import { encodeCall, decodeResponse, decodeStream } from '$lib/protocol/frames';
+import type { DesktopCall } from '$lib/protocol/generated/DesktopCall';
+import fc from 'fast-check';
+import { expect, test } from 'vitest';
 
 // Independent wire fixtures, including literal little-endian header lengths.
 const closed = new Uint8Array([
@@ -64,7 +64,7 @@ test('stream memory preserves arbitrary bytes and publishes only complete window
 });
 
 test('desktop load calls preserve every documented chunk boundary', () => {
-  for (const length of [1, 65535, 65536, 65537, 131073]) {
+  for (const length of [1, 65535, 65536, 65537, 131073, 1048576]) {
     const image = Uint8Array.from(
       { length },
       (_, index) => (index ^ (index >>> 8) ^ (index >>> 16)) & 255,
@@ -80,6 +80,7 @@ test('desktop load calls preserve every documented chunk boundary', () => {
           completion: '0x0000000000001008',
           instruction_budget: '100',
           image_bytes: length,
+          initial: { registers: [], mappings: [] },
         },
       },
     };

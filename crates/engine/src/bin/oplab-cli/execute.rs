@@ -1,11 +1,11 @@
 //! One-shot execution with caller-owned native state and bounded final output.
 
 mod input;
+mod setup;
 
 pub(super) use input::Input;
-use input::Policy;
+use input::Prepared;
 use oplab_core::{
-    address::Address,
     execution::{ExecutionState, Termination},
     protocol::{
         Diagnostic, DiagnosticCode,
@@ -14,7 +14,7 @@ use oplab_core::{
     },
     target::Target,
 };
-use oplab_engine::{machine::MachineError, session::Session};
+use oplab_engine::machine::MachineError;
 use serde::Serialize;
 use std::{
     io,
@@ -58,10 +58,7 @@ struct Memory {
 }
 
 pub(super) fn run(input: Input) -> ExitCode {
-    let result = input.prepare().and_then(|(image, target, policy)| {
-        let completion = policy.completion(&image)?;
-        execute(&image, target, completion, &policy)
-    });
+    let result = input.prepare().and_then(execute);
     let success = result
         .as_ref()
         .is_ok_and(|report| report.outcome == Outcome::Completed);
@@ -76,14 +73,13 @@ pub(super) fn run(input: Input) -> ExitCode {
     }
 }
 
-fn execute(
-    image: &[u8],
-    target: Target,
-    completion: Address,
-    policy: &Policy,
-) -> Result<Report, Diagnostic> {
-    let mut session = Session::from_elf(image, target, completion, policy.budget)
-        .map_err(|error| diagnostic(&error))?;
+fn execute(prepared: Prepared) -> Result<Report, Diagnostic> {
+    let Prepared {
+        mut session,
+        target,
+        completion,
+        policy,
+    } = prepared;
     // Validate the entire requested window before starting a mutating operation.
     if let Some(address) = policy.memory {
         session

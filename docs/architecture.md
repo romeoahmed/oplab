@@ -9,7 +9,7 @@ Its working loop is source → standard ELF → loaded machine → observable ef
 ```text
 Svelte workbench → Tauri supervisor → isolated worker
                                       ├─ assembly owner: LLVM MC → ELF object → LLD → ELF image
-                                      └─ execution owner: ELF loader → Unicorn → observations
+                                      └─ execution owner: validated image/setup → Unicorn → observations
 ```
 
 | Location                      | Responsibility                                                                             |
@@ -58,7 +58,7 @@ src/
     styles/                   # Application theme
     workbench/                # Composition, controller, scratch and preferences
       editor/                 # CodeMirror component, CSS and language support
-      machine/                # Machine/register/memory views and initial viewport
+      machine/                # Initial configuration, registers and memory views
       instructions/           # Byte windows, disassembly and static analysis
   routes/                     # SvelteKit entry points
 src-tauri/                    # Native application and supervisor
@@ -71,17 +71,10 @@ tests/                        # Frontend behavior and invariant tests
 xtask/                        # Repository tooling
 ```
 
-Use `PascalCase.svelte` for components, lowercase TypeScript/CSS module names, and
-`.svelte.ts` only for modules using Svelte runes. Name files for their responsibility:
-`scratch.ts` validates draft recovery, `editor/language.ts` supplies lexical assistance,
-and `machine/memory.ts` selects a memory viewport. Avoid generic `utils`, `shared`
-or `components` buckets.
-
-Rust modules use `snake_case.rs` with child modules in a sibling directory; module
-entry points have explicit names such as `worker.rs` and `supervisor.rs`. Integration
-targets use kebab-case, such as `worker-session.rs`. The test helper `common/mod.rs`
-remains a module rather than a Cargo integration target. Directory names omit the
-redundant project prefix; Cargo package names and executable names retain `oplab-`.
+Keep feature code and its CSS together; root tests mirror those feature paths.
+Private Rust tests use path modules under package `tests/unit`; `tests/common/mod.rs`
+provides integration helpers without becoming a separate Cargo test target.
+[AGENTS.md](../AGENTS.md) defines naming and editing conventions.
 
 ## Standards and state
 
@@ -105,12 +98,9 @@ instruction starts differ from retired instructions; raw flags do not imply defi
 Human addresses use ordinary hexadecimal input. Exact 64-bit JSON scalars use the
 canonical representation defined in [protocol](protocol.md).
 
-Use a functional core with explicit effect owners. Rust newtypes and tagged enums
-enforce domain constraints. TypeScript uses strict unions, exhaustive switches,
-`unknown` validation and pure transformations. Derive values rather than storing
-parallel copies; avoid casts that bypass validation or a generic framework around
-one operation. See the [Rust reference](https://doc.rust-lang.org/stable/reference/)
-and [TypeScript's functional guidance](https://www.typescriptlang.org/docs/handbook/typescript-in-5-minutes-func.html).
+A functional core validates inputs and computes state transitions. Native and UI
+owners perform effects. Rust newtypes and tagged enums enforce domain constraints;
+TypeScript uses strict unions, exhaustive switches and validation of `unknown` inputs.
 
 ## Technology decisions
 
@@ -136,77 +126,65 @@ root manifests own requirements and lockfiles own exact resolutions.
 
 ## Interface
 
-The source area, right-hand machine panel and bottom observations form a stable
-workbench. Assembly, loading and execution are separate actions. Configuration
-states when each input applies: link address on build, stop position and instruction
-limit on load. Appearance changes affect presentation only.
+The source editor, right-hand machine panel and bottom observations remain visible
+through the edit/build/execute loop. Configuration distinguishes build inputs from
+load inputs: changing the link address requires assembly; completion, budget,
+initial GPRs and extra mappings apply on load. Per-target setup survives target and
+locale switches for the current window without mutating an artifact or session.
 
-CodeMirror is dynamically imported through Svelte's
-[await block](https://svelte.dev/docs/svelte/await); Vite owns chunking. One
-[Svelte attachment](https://svelte.dev/docs/svelte/@attach) creates and destroys the
-editor. [Compartments](https://codemirror.net/examples/config/) update language,
-locale, accessibility and wrapping without replacing history. Svelte `$derived`
-owns computed presentation and `$state.raw` holds immutable snapshots; effects
-synchronize external state.
+### Editor and diagnostics
 
-The target-specific `StreamLanguage` uses Lezer tags for highlighting. Completion
-combines register/directive hints with deduplicated document words and is suppressed
-inside comments/strings. Comment commands distinguish x86 `#` from AArch64 `//`.
-This lexer is neither a complete grammar nor an instruction-validity database.
-Build errors retain their complete identity. Valid UTF-8 diagnostic offsets become
-UTF-16 point diagnostics through CodeMirror's lint extension, with gutter markers,
-F8 navigation and a localized location button. The frontend accounts for BOM,
-supplementary characters and CRLF/CR normalization without rewriting assembler
-input. Editing invalidates the build; points are cleared rather than remapped onto
-unverified source. Structural folding and source-to-instruction mapping remain open.
-Tab leaves the editor. Indentation, search, multiple selections and bracket matching
-use CodeMirror's native facilities.
+CodeMirror loads through a [Svelte await block](https://svelte.dev/docs/svelte/await).
+An [attachment](https://svelte.dev/docs/svelte/@attach) owns its lifetime;
+[compartments](https://codemirror.net/examples/config/) reconfigure language, locale
+and wrapping while preserving history. Svelte derives presentation from immutable
+snapshots; effects synchronize external state.
 
-Bits UI owns roving toolbar focus, tooltip dismissal, popover focus return, file
-menu interactions and tab navigation. Buttons retain native `disabled` behavior.
-File actions use `onSelect`; other handlers pass through the primitive to preserve
-event composition. [Tabs](https://www.bits-ui.com/docs/components/tabs) retain panel
-state and hide inactive content with `hidden`; CSS must preserve that behavior.
-Native number inputs validate required byte offsets and integer bounds before
-submission. Custom focus or form-validation layers are unnecessary.
+A target-specific `StreamLanguage` and Lezer tags provide lexical highlighting.
+Completion combines register/directive hints and document words, excluding comments
+and strings. Native CodeMirror commands handle search, history, comments, indentation,
+bracket matching and multiple selections. Tab leaves the editor. LLVM alone validates
+assembly; structural folding and source-to-instruction mapping remain planned.
 
-Use semantic landmarks, labelled fields, tables and definition lists. Native CSS
-uses Grid/Flexbox, logical properties, nesting, `oklch`, `color-mix` and dynamic
-viewport units. Newly Baseline features are eligible subject to actual WebView
-acceptance; Vite does not polyfill missing Web APIs. Follow
-[HTML semantics](https://html.spec.whatwg.org/multipage/) and
-[CSS specifications](https://www.w3.org/Style/CSS/Overview.en.html).
+Build-scoped UTF-8 offsets become validated UTF-16 point diagnostics, including
+BOM, supplementary characters and newline normalization. The lint extension owns
+markers and F8 navigation. Source edits clear diagnostics instead of remapping them
+onto unverified text. The original assembly input remains unchanged.
 
-JetBrains Mono defaults to 14px with ligatures disabled; preferences allow system
-monospace, 12–22px, wrapping and panel proportions. Settings do not enumerate local
-fonts. Focus mode hides inspectors without unmounting the editor or disconnecting
-the worker. The initial window is 1440×900 logical pixels, with Tauri's native
-`preventOverflow` fitting it to the monitor work area; the minimum remains 880×600.
-The machine panel defaults to 28% width and keeps the full workspace height. The
-observation panel defaults to 36% of the viewport height, with minimum row sizes
-protecting both it and the editor. Saved proportions remain in effect; Reset layout
-restores only panel sizes. Narrow layouts, zoom, visible focus and reduced motion
-require visual and keyboard acceptance.
+### Controls and layout
 
-Instruction inspection uses a [Svelte-derived](https://svelte.dev/docs/svelte/$derived)
-input identity to invalidate pages and selections when bytes, target, base or
-connection change, including changes back to earlier values. Per-field derivation
-keeps unrelated prop updates from replacing that identity. Selection and retry
-events own requests; a new decode explicitly clears the previous selection. The
-keyed analysis component delegates pending, error and result presentation to
-Svelte's await block. Locale changes retain the request and result.
-Analysis uses decoder facts independently of machine observations.
+Bits UI owns toolbar, tooltip, popover, menu and tab interactions. Native inputs
+own field validation; buttons retain `disabled`, and library event/attachment
+composition remains intact. Inactive tab panels use `hidden` without losing state.
+Use semantic landmarks, labelled fields, tables and definition lists.
 
-Source selection and decode controls share a wrapping toolbar. List and analysis
-scroll independently in wide panels. Below 760px of content width, a native CSS
-container query gives analysis the panel; Close restores the existing list and
-controls without another decode.
+Native CSS uses Grid/Flexbox, logical properties, nesting, `oklch`, `color-mix`,
+container queries and dynamic viewport units. Newly Baseline features require
+actual WebView acceptance; Vite does not polyfill missing Web APIs.
 
-The [roadmap](roadmap.md#next-product-work) tracks interface expansion. Add navigation
-when collections exist; coordinate source/instruction selection through verified
-provenance. The layout draws on
+The default window is 1440×900 logical pixels, fitted to the monitor work area by
+Tauri's `preventOverflow`, with an 880×600 minimum. The machine panel starts at
+28% width and the observation panel at 36% of viewport height. Minimum row sizes
+protect the editor and observations. Focus mode hides inspectors without unmounting
+the editor or disconnecting the worker; Reset layout restores only panel sizes.
+
+JetBrains Mono defaults to 14px with ligatures disabled. Preferences offer system
+monospace, 12–22px text and wrapping; the app does not enumerate installed fonts.
+Visual and keyboard acceptance covers narrow layouts, zoom, both locales and long
+values. The layout takes cues from
 [VS Code](https://code.visualstudio.com/docs/getstarted/userinterface) and
-[Binary Ninja](https://docs.binary.ninja/guide/index.html) while keeping this workflow compact.
+[Binary Ninja](https://docs.binary.ninja/guide/index.html).
+
+### Instruction inspection
+
+A derived input identity invalidates pages and selection when bytes, target, base
+or connection changes, including reversions. Unrelated prop or locale changes
+retain results. Selection/retry events request analysis; a keyed await block owns
+pending, error and result presentation. Re-decoding clears the selection.
+
+Lists and analysis scroll independently. Below 760px of content width, a CSS
+container query gives analysis the panel; Close restores the retained list without
+another decode. Static analysis remains separate from live machine observations.
 
 ## Localization and recovery
 
@@ -232,34 +210,26 @@ picker was open. Source exports preserve BOM and newline bytes until editing;
 CodeMirror edits use its normal LF representation. Binary imports are separate,
 transient inspection inputs and do not replace the loaded machine.
 
-The desktop file boundary uses Tauri's [dialog plugin](https://tauri.app/plugin/dialog/)
-and bounded Rust I/O. Only the main window can invoke import/export. The chosen
-path stays native; files are validated before publication, and exports use a
-flushed temporary file in the destination directory followed by
-[`NamedTempFile::persist`](https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist).
-This provides replacement atomicity, not a promise of crash durability for the
-containing directory. Cancellation is a normal outcome.
-No frontend filesystem scope or automatic write to an earlier path is granted.
+The desktop file boundary uses Tauri dialogs and bounded Rust I/O. Paths stay
+native; cancellation is normal. Exports validate contents before same-directory
+temporary-file replacement. This provides atomic replacement, not directory crash
+durability. No frontend filesystem scope or implicit write-back path is granted.
+The [file contract](protocol.md#desktop-file-boundary) owns formats and limits.
 
 ## Execution, performance and containment
 
-The batch CLI owns a `Session` on its calling thread and shares assembly, ELF loading
-and execution with the worker. Core supplies canonical register/fault conversions;
-the CLI owns batch outcomes and inline memory. clap validates arguments and Serde
-writes buffered JSON. [Protocol](protocol.md#batch-execution) defines the output contract.
+The CLI owns a session on its calling thread; the worker separates assembly,
+execution and blocking pipe I/O. Both share loading and execution policy. Native
+sessions are constructed on their owning threads; bounded queues keep controls
+independent of assembly. Coherent observations coalesce before delivery.
 
-Construct each native session on its execution thread. A separate owner handles
-assembly; bounded queues and independent pipe readers/writers keep controls usable.
-Observations coalesce only after coherent capture. The supervisor kills and reaps
-failed workers, reports uncertain outcomes and never retries an uncertain mutation.
-[Protocol](protocol.md) defines the identities and delivery guarantees.
-
-Measure assembly latency, execution throughput, IPC, rendering, startup and memory
-before optimizing. Bound work and payloads first. Traces, snapshots, replay, SIMD
-and static performance analysis each need explicit semantics and resource budgets.
+The supervisor kills and reaps failed workers, reports uncertain outcomes and never
+retries uncertain mutations. [Protocol](protocol.md) defines identities, deadlines,
+resource cutoffs and delivery guarantees. These measures are not a complete
+adversarial sandbox.
 
 Tauri capabilities restrict commands to the main window. The CSP permits necessary
-CodeMirror style injection and self-hosted fonts, without remote scripts. Native
-process isolation and sampled cutoffs are not a complete adversarial sandbox.
-Installed dependency bundling, licensing, signing/JIT policy and host containment
-remain [release gates](roadmap.md#release-gates).
+CodeMirror style injection and self-hosted fonts without remote scripts. Measure
+assembly, execution, IPC, rendering, startup and memory before optimizing.
+Native dependency bundling, licensing, signing/JIT policy and host containment remain
+[release gates](roadmap.md#release-gates).

@@ -1,6 +1,6 @@
+import type { BuildIdentity } from './generated/BuildIdentity';
 import type { Counter } from './generated/Counter';
 import type { HexAddress } from './generated/HexAddress';
-import type { BuildIdentity } from './generated/BuildIdentity';
 
 const maximum = (1n << 64n) - 1n;
 

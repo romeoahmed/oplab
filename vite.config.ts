@@ -1,7 +1,7 @@
-import { defineConfig } from 'vitest/config';
-import { playwright } from '@vitest/browser-playwright';
-import { sveltekit } from '@sveltejs/kit/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
+import { sveltekit } from '@sveltejs/kit/vite';
+import { playwright } from '@vitest/browser-playwright';
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [
@@ -32,6 +32,10 @@ export default defineConfig({
       },
       {
         extends: true,
+        // Scan the dynamic editor before tests start to avoid mid-test dependency reloads.
+        optimizeDeps: {
+          entries: ['tests/**/*.browser.test.ts', 'src/lib/workbench/editor/Editor.svelte'],
+        },
         test: {
           name: 'browser',
           include: ['tests/**/*.browser.test.ts'],

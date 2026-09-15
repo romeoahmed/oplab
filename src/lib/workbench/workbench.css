@@ -762,6 +762,10 @@
   background: var(--surface);
   box-shadow: 0 18px 60px #0006;
   font-size: 13px;
+
+  &.configuration-popover {
+    inline-size: min(440px, calc(100vw - 24px));
+  }
 }
 
 .popover-header {

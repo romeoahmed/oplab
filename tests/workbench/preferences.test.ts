@@ -1,6 +1,6 @@
-import { expect, test } from 'vitest';
-import fc from 'fast-check';
 import { defaultPreferences, readPreferences } from '$lib/workbench/preferences';
+import fc from 'fast-check';
+import { expect, test } from 'vitest';
 
 test('untrusted preferences always produce finite, usable layout and text sizes', () => {
   fc.assert(

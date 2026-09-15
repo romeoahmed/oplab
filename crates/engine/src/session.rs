@@ -39,8 +39,21 @@ impl Session {
         instruction_budget: u64,
     ) -> Result<Self, MachineError> {
         let machine = Machine::from_elf(image, target)?;
+        Self::new(machine, completion, instruction_budget)
+    }
+
+    /// Bind a newly loaded machine to explicit completion and instruction-start policy.
+    ///
+    /// # Errors
+    ///
+    /// Rejects invalid completion or budget. The supplied machine is dropped on failure.
+    pub fn new(
+        machine: Machine,
+        completion: Address,
+        instruction_budget: u64,
+    ) -> Result<Self, MachineError> {
         let policy = ExecutionPolicy::new(
-            target,
+            machine.initial().target(),
             machine.initial().entry(),
             completion,
             instruction_budget,

@@ -1,26 +1,10 @@
 <script lang="ts">
-  import type { Registers } from '$lib/protocol/generated/Registers';
-  import type { Locale } from '$lib/paraglide/runtime';
   import * as m from '$lib/paraglide/messages.js';
+  import type { Locale } from '$lib/paraglide/runtime';
+  import type { Registers } from '$lib/protocol/generated/Registers';
+
+  import { registerNames } from './setup';
   const { bank, locale }: { bank: Registers | null; locale: Locale } = $props();
-  const x86 = [
-    'RAX',
-    'RCX',
-    'RDX',
-    'RBX',
-    'RSP',
-    'RBP',
-    'RSI',
-    'RDI',
-    'R8',
-    'R9',
-    'R10',
-    'R11',
-    'R12',
-    'R13',
-    'R14',
-    'R15',
-  ];
   const values = $derived(
     bank === null
       ? []
@@ -28,7 +12,10 @@
         ? [
             { name: 'RIP', value: bank.data.rip },
             { name: 'RFLAGS', value: bank.data.rflags },
-            ...bank.data.gpr.map((value, index) => ({ name: x86[index] ?? '', value })),
+            ...bank.data.gpr.map((value, index) => ({
+              name: registerNames('x86_64')[index]?.toUpperCase() ?? '',
+              value,
+            })),
           ]
         : [
             { name: 'PC', value: bank.data.pc },

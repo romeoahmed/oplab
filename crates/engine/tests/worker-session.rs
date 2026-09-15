@@ -63,6 +63,7 @@ fn load(
 ) -> TestResult<Message> {
     client.request(
         Command::Load {
+            initial: oplab_core::protocol::execution::InitialState::default(),
             replace,
             target,
             completion,
@@ -466,6 +467,106 @@ fn subscriptions_stream_both_guests_and_restart_cleanly_after_reset() -> TestRes
         let (image, completion, output) = fixture(target, source)?;
         interactive::worker(|client| {
             exercise_subscription(client, target, &image, completion, output)
+        })?;
+    }
+    Ok(())
+}
+
+#[test]
+fn configured_loads_restore_initial_state_and_failed_replacements_preserve_the_machine()
+-> TestResult {
+    use oplab_core::protocol::execution::{InitialState, Mapping, RegisterValue};
+    for (target, source, first, stack) in [
+        (
+            Target::X86_64,
+            "add rax, 43\nmov [rsp], rax\ndone: nop\n.data\noutput: .quad 0",
+            "rax",
+            "rsp",
+        ),
+        (
+            Target::Aarch64,
+            "add x0, x0, #43\nstr x0, [sp]\ndone: nop\n.data\noutput: .quad 0",
+            "x0",
+            "sp",
+        ),
+    ] {
+        let (image, completion, _) = fixture(target, source)?;
+        interactive::worker(|client| {
+            client.request(Command::Hello { version: VERSION }, None)?;
+            let initial = InitialState {
+                registers: vec![
+                    RegisterValue {
+                        name: first.into(),
+                        value: Counter::new(u64::MAX),
+                    },
+                    RegisterValue {
+                        name: stack.into(),
+                        value: Counter::new(0x80000),
+                    },
+                ],
+                mappings: vec![Mapping {
+                    address: address(0x80000),
+                    length: 4096,
+                    flags: 6,
+                }],
+            };
+            let image_bytes = u32::try_from(image.len())?;
+            let command = |initial, replace| Command::Load {
+                initial,
+                replace,
+                target,
+                completion,
+                instruction_budget: Counter::new(2),
+                image_bytes,
+            };
+            let loaded = client.request(command(initial.clone(), None), Some(image.clone()))?;
+            let before = observed(&loaded)?;
+            let key = before.key;
+            assert_eq!(integer(before)?, u64::MAX);
+            let mut invalid = initial.clone();
+            invalid.mappings[0].address = address(0x1000);
+            let mut duplicates = initial.clone();
+            duplicates.registers.push(duplicates.registers[0].clone());
+            let mut flags = initial;
+            flags.mappings[0].flags = 8;
+            execute(client, key, SessionAction::Run)?;
+            let done = settle(client, key)?;
+            assert_eq!(
+                observed(&done)?.status,
+                Status::Terminated(Termination::Completed)
+            );
+            assert_eq!(integer(observed(&done)?)?, 42);
+            let observe_memory = SessionAction::Observe {
+                memory: Some(MemoryWindow {
+                    address: address(0x80000),
+                    length: 8,
+                }),
+            };
+            let stored = execute(client, key, observe_memory)?;
+            assert_eq!(stored.payloads, vec![42_u64.to_le_bytes().to_vec()]);
+            for rejected in [invalid, duplicates, flags] {
+                let reply = client.request(command(rejected, Some(key)), Some(image.clone()))?;
+                assert!(
+                    matches!(reply.response.result, Reply::Error(error) if error.code == DiagnosticCode::InvalidInput)
+                );
+                let current = execute(client, key, observe_memory)?;
+                let actual = observed(&current)?;
+                // Observation sequence advances; the loaded machine must not change.
+                let expected = Observation {
+                    sequence: actual.sequence,
+                    ..observed(&stored)?.clone()
+                };
+                assert_eq!(actual, &expected);
+                assert_eq!(current.payloads, stored.payloads);
+            }
+            let reset = execute(client, key, SessionAction::Reset)?;
+            let restored = observed(&reset)?;
+            assert_eq!(restored.registers, before.registers);
+            assert_ne!(restored.key.generation, key.generation);
+            let memory = execute(client, restored.key, observe_memory)?;
+            assert_eq!(memory.payloads, vec![vec![0; 8]]);
+            client.request(Command::Shutdown, None)?;
+            Ok(())
         })?;
     }
     Ok(())

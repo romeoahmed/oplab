@@ -1,8 +1,8 @@
+import type { WorkerPort } from '$lib/desktop/worker';
 import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
 import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
 import type { Observation } from '$lib/protocol/generated/Observation';
-import type { WorkerPort } from '$lib/desktop/worker';
 
 // Shared protocol data; native behavior is exercised by the Rust process tests.
 export function observation(sequence = '9007199254740993'): Observation {

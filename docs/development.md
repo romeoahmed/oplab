@@ -8,16 +8,16 @@ Run commands from the repository root. Manifests and lockfiles define dependenci
 
 | Task                                                | Requirements                                                                                                                                                    |
 | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend development, static build, types and lints | Node satisfying `package.json` (`>=24.21.0`), pnpm, installed JavaScript dependencies                                                                           |
+| Frontend development, static build, types and lints | Node satisfying `package.json`, pnpm, installed JavaScript dependencies                                                                                         |
 | Frontend tests                                      | The above plus Playwright Chromium and its host dependencies                                                                                                    |
-| Core tests and xtask compilation                    | Stable Rust satisfying workspace `rust-version` (`1.98` minimum)                                                                                                |
+| Core tests and xtask compilation                    | Stable Rust satisfying workspace `rust-version`                                                                                                                 |
 | Contract generation                                 | Rust, Node, pnpm and installed JavaScript dependencies; no LLVM                                                                                                 |
 | Engine, CLI and worker                              | Rust, C/C++ toolchain with C++23 support, LLVM 23 development installation, matching LLD development installation, libclang, CMake, a build tool and pkg-config |
 | Desktop and full workspace checks/tests             | All engine/frontend requirements plus the platform's Tauri prerequisites, rustfmt, Clippy, clang-format and clang-tidy                                          |
 | Icon regeneration only                              | ImageMagick and the project's Tauri CLI                                                                                                                         |
 
-`rust-toolchain.toml` selects stable and installs rustfmt/Clippy. Use a maintained
-Node release satisfying the manifest; pnpm 12 is the verified package manager.
+`rust-toolchain.toml` selects stable and installs rustfmt/Clippy. The manifests own
+minimum Rust and Node versions; pnpm 12 is the verified package manager.
 Keep both lockfiles. `pnpm install --frozen-lockfile` and Cargo's `--locked` reject
 dependency drift. No global Tauri CLI or external `cargo-xtask` installation is needed.
 
@@ -80,9 +80,8 @@ export UNICORN_NO_PKG_CONFIG=1
 ```
 
 Ensure Homebrew's executable directory is on `PATH`. These are shell settings,
-not repository configuration. LLVM and LLD are separate
-[Homebrew packages](https://formulae.brew.sh/formula/llvm); check the
-[LLD package](https://formulae.brew.sh/formula/lld) remains on the matching release.
+not repository configuration. LLVM and LLD are separate Homebrew packages; verify
+their reported release identities match before building.
 Keep the system SDK and C++ runtime unless a coherent alternative has been verified.
 
 For Linux or Windows, use development packages meeting the inventory above; package
@@ -156,14 +155,9 @@ across commands; do not patch generated native headers to hide a failed configur
 
 ## Commands and ownership
 
-Install dependencies, then choose browser or desktop development:
-
-```sh
-pnpm install --frozen-lockfile
-pnpm dev
-# Or, after native setup and with the standalone Vite server stopped:
-pnpm tauri dev
-```
+Install dependencies with `pnpm install --frozen-lockfile`. Use `pnpm dev` for
+frontend HMR or `pnpm tauri dev` after native setup. Stop standalone Vite before
+starting Tauri dev; both use the same configured port.
 
 Install the test browser separately when running component tests:
 
@@ -190,14 +184,15 @@ native arguments: `pnpm test --project logic`, `pnpm test --project browser` or
 `cargo test -p oplab-core --locked`.
 
 Check/test commands may compile dependencies, refresh ignored generated files
-and stage ignored binaries. They preserve lockfiles, tracked source and Git staging.
+and copy worker binaries into `src-tauri/binaries/`. They preserve lockfiles,
+tracked source and the Git index.
 Frontend and catalog changes use HMR; engine changes require worker staging and
 an app restart. Tauri's watcher does not rebuild the independent worker automatically.
+Protocol changes require rebuilding clients and worker together: the private
+[development contract](protocol.md#negotiation-and-identity) evolves in place at version 1.
 
 ## API documentation
 
-Document units, ownership, failures and invariants; keep implementation explanations
-beside the relevant code.
 TypeScript uses [TSDoc](https://tsdoc.org/) summaries, with `@remarks`, `@returns` or
 `@throws` when they add useful information; do not repeat declared types in tags.
 Rust uses [`//!` for modules and `///` for items](https://doc.rust-lang.org/reference/comments.html),
@@ -244,9 +239,17 @@ loader paths, licensing and signing/JIT policy before distribution. See the
 ## Configuration and assets
 
 Each tool owns one configuration. `vite.config.ts` contains SvelteKit, Paraglide and
-both Vitest projects. `svelte.config.ts` produces a static SPA; `tsconfig.json`
-extends SvelteKit's generated project. ESLint uses native ESM `.js`; Stylelint reads
-native CSS. There are no Svelte `<style>` blocks or PostCSS adapters.
+both Vitest projects. The browser project uses
+[Vite entry scanning](https://vite.dev/config/dep-optimization-options#optimizedeps-entries)
+for tests and the dynamic editor, avoiding dependency reloads during cold runs.
+`svelte.config.ts` produces a static SPA; `tsconfig.json` extends SvelteKit's generated project. ESLint uses native ESM
+`.js`; Stylelint reads native CSS. There are no Svelte `<style>` blocks or PostCSS adapters.
+
+Prefer tool defaults unless a project constraint requires an override. Oxfmt honors
+`.gitignore` and its built-in lockfile exclusions; its only additional exclusion is
+the committed Rust-generated contracts. Rustfmt records both edition and style edition
+so standalone editor formatting agrees with Cargo. Tauri retains explicit application
+identity, window geometry, build hooks and capabilities; bundle targets use platform defaults.
 
 The native bridge's `OUT_DIR` holds compilation metadata. xtask obtains it from
 Cargo and runs clang-tidy against the actual cc-rs/CXX compilation database.
@@ -254,9 +257,6 @@ C++ formatting uses the selected LLVM clang-format. Root Cargo dependencies and
 lints are inherited throughout the workspace. Knip declares the dynamically imported
 Svelte editor as an entry so its dependency tree remains checked. Its two dependency
 exceptions cover Oxfmt invoked by Rust and the inlang-owned message-format plugin.
-Tauri's dialog plugin supplies native file selection; bounded I/O remains in
-`src-tauri/src/files.rs`. It adds no external build tool or JavaScript filesystem
-permission.
 
 `static/icon.svg` is the application icon master and README logo. Review it in a
 browser at small and large sizes. To regenerate desktop formats:

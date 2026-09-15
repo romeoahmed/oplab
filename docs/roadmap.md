@@ -1,44 +1,26 @@
 # Roadmap
 
 The desktop assembly/execution loop works. Oplab is not yet a complete debugger or
-an independently distributable application. Checked items describe implementation;
+an independently distributable application. The inventory below describes implementation;
 [testing](testing.md) defines evidence and [development](development.md) owns setup.
 
 ## Implemented
 
-- [x] Rust core, engine and desktop boundaries; workspace dependencies/lints, stable
-      toolchain, clap CLI/xtask and native Cargo/Vite/Tauri build ownership.
-- [x] Strict Rust/C++/TypeScript/Svelte/CSS checks, formatting, dependency analysis
-      and Rust-owned TypeScript contract verification.
-- [x] LLVM 23 MC/LLD through CXX/C++23, unchanged GNU-style source, complete standard
-      ELF object/image output and separate compile/link operations.
-- [x] Validated addresses, permissions, program-header loading, BSS/padding and RX protection.
-- [x] Both guests, bounded execution slices, step/run/pause/stop/reset, address
-      breakpoints in the engine, integer/memory observations and explicit stop/fault outcomes.
-- [x] Bounded framing, correlated requests, build coalescing/cancellation, output
-      reservations, coherent full/delta subscriptions and orderly shutdown.
-- [x] Desktop leases, deadlines/RSS monitoring, unknown outcomes, bounded delivery,
-      kill/reap and explicit worker recovery.
-- [x] Source/machine/observation interface, stale-build handling, scratch recovery,
-      configuration, appearance, focus mode, adjustable panel proportions and layout reset.
-- [x] CodeMirror/Lezer lexical assistance, completion, comment/search/history commands,
-      bracket matching and multiple selections; dynamically imported editor.
-- [x] Build-scoped diagnostics, exact UTF-8 to UTF-16 positioning, CodeMirror point
-      markers and navigation; stale results cannot annotate newer source.
-- [x] Native UTF-8 source and raw-byte import/export, complete ELF exports, bounded
-      reads and temporary-file replacement; paths stay outside the frontend.
-- [x] Instruction inspection of raw bytes or individual file-backed ELF segments,
-      explicit byte offsets, bounded pages and stale-result rejection.
-- [x] On-demand analysis in the workbench, worker and CLI: register/memory metadata,
-      x86 control/flags/CPUID and AArch64 groups/writeback, with explicit metadata limits.
-- [x] Batch CLI execution from unchanged source or standard ELF, explicit completion
-      and instruction/time budgets, final registers/faults and optional bounded memory.
-- [x] English/Simplified Chinese, self-hosted JetBrains Mono/system monospace,
-      font size/wrap preferences, native CSS, Bits UI primitives and Lucide icons.
-- [x] Tests outside production directories, with independent Proptest/fast-check
-      oracles, generated guest programs and observation histories, scoped concurrency
-      probes and Chromium new-headless workbench flows.
-- [x] One application SVG master and PNG/ICO/ICNS assets with documented conversion.
+| Area          | Available behavior                                                                                                                                        |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Assembly      | LLVM 23 MC/LLD through CXX/C++23; unchanged GNU-style source, separate compile/link APIs and complete ELF object/image output                             |
+| Loading       | Validated static ELF64 program headers, entry, permissions, BSS and padding; raw-code loading in engine/CLI                                               |
+| Execution     | Both guests; step/run/pause/stop/reset, explicit completion and budgets, engine address breakpoints, integer/flags/memory observations and fault outcomes |
+| Initial state | Canonical GPRs and extra zero-filled mappings in desktop/worker/CLI; shared validation, failed-load preservation and reset to retained setup              |
+| Inspection    | Bounded raw/ELF-segment disassembly and on-demand instruction metadata in desktop/worker/CLI; static recognition remains distinct from execution support  |
+| Editor        | CodeMirror/Lezer lexical assistance, completion, search/history/comments and build-scoped diagnostics with verified Unicode positions                     |
+| Workbench     | Separate document/artifact/session state, stale-result rejection, local scratch recovery, configuration, focus mode and adjustable panels                 |
+| Files         | Native UTF-8 source and exact-byte import/export, complete ELF exports, bounded I/O and atomic replacement with paths kept native                         |
+| CLI           | Source/ELF/raw execution, explicit completion and instruction/time limits, final JSON registers/faults and optional bounded memory                        |
+| Delivery      | Bounded framing, correlated requests, assembly coalescing/cancellation, reserved output, full/delta observations and orderly shutdown                     |
+| Supervision   | View leases, deadlines/RSS monitoring, uncertain outcomes, bounded WebView delivery, kill/reap and explicit worker recovery                               |
+| Presentation  | English/Simplified Chinese, self-hosted/system monospace, native CSS, Bits UI, Lucide and application icon assets                                         |
+| Tooling       | Workspace dependencies/lints, clap CLI/xtask, native build lifecycles, strict checks, contract generation and isolated behavior/property tests            |
 
 ## Next product work
 
@@ -48,8 +30,9 @@ an independently distributable application. Checked items describe implementatio
 2. **Execution coverage:** extend the tested guest/extension matrix beyond static
    recognition; CPU selection, SIMD observations and precise unsupported behavior
    need explicit contracts.
-3. **Machine setup:** validated initial registers/mappings and explicit raw-code
-   loading, alias writes, executable patches and translated-code invalidation.
+3. **Live machine editing:** alias writes, executable patches and translated-code
+   invalidation; desktop raw-code loading with explicit configuration and identity.
+   Initial GPRs and additional mappings are implemented.
 4. **Workbench expansion:** multiple source documents, coordinated source/instruction
    focus, accessible draggable separators and large-data views as needed.
 
@@ -90,25 +73,19 @@ Add dependencies and modules when implementing a capability, not as placeholders
 Evidence is limited to Apple Silicon macOS development. Windows/Linux builds and
 signed, independently installed distributions remain unverified.
 
-Verified on **2026-09-15**:
+Recorded verification through **2026-09-15**:
 
-- `cargo xtask check` and `cargo xtask test`: 84 Rust unit/integration tests,
-  2 doctests and 60 frontend tests, including 36 Chromium cases. Rustdoc also
-  passed with warnings denied; generated TypeScript matches the Rust contracts.
-- Batch CLI source/ELF runs on both guests preserved arbitrary full-width arithmetic
-  and memory results, including precision/overflow boundaries. Tests covered exact
-  stdin limits, sectionless ELF entry handling, absolute/ambiguous symbols, rejected
-  TLS offsets, partial faults, environment stops, instruction limits and cooperative timeout.
-- Static frontend and Tauri debug builds through the normal hooks. Both guests
-  assembled, loaded, stepped and stored 42; reset restored state, failed assembly
-  preserved the machine, and a bounded loop paused/stopped.
-- Native Unicode diagnostic navigation, a byte-exact AArch64 source/code workflow,
-  and a 126,980-byte ELF segment exported unchanged and decoded through its end.
-  Static analysis preserved loaded-machine state and survived locale changes.
-- Browser and native layout review covered both languages, font/wrap preferences,
-  focus mode, layout reset, narrow instruction navigation and the larger default
-  window. Fonts and the dynamic editor loaded under the app origin/CSP.
+| Evidence                   | Result                                                                                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace checks           | `cargo xtask check`; strict Rust/C++/frontend checks, formatting and 45 generated TypeScript declarations verified                                            |
+| Automated tests            | `cargo xtask test`: 95 Rust unit/integration tests, 2 doctests and 63 frontend tests, including 37 Chromium cases                                             |
+| Rust documentation         | Rustdoc passed with warnings denied                                                                                                                           |
+| Native setup and execution | Both guests consumed full-width GPR inputs and explicit mappings; reset restored initial values, and invalid replacement preserved the existing machine       |
+| Desktop bundle             | Normal Tauri build hooks; both guests assembled, loaded, stepped and stored 42; reset, failed assembly and bounded pause/stop flows exercised                 |
+| Files and diagnostics      | Unicode diagnostic navigation, exact source/raw-byte transfers and a 126,980-byte ELF segment exported and decoded through its end                            |
+| Interface                  | Both languages, larger default window, fonts/wrapping, focus/layout reset and narrow instruction navigation; editor and fonts loaded under the app origin/CSP |
+| Icon conversion            | All 10 ICNS representations and 6 ICO layers matched PNG references on 2026-09-14                                                                             |
 
-All 10 ICNS representations and 6 ICO layers matched PNG references on
-**2026-09-14**. Test design, acceptance procedures and the known Vitest/Vite mock-hook
-warning are maintained in [testing](testing.md).
+These are recorded results, not a substitute for checks after later changes.
+[Testing](testing.md) defines coverage, acceptance procedures and the known Vitest/Vite
+mock-hook warning. No desktop WebDriver harness is installed.

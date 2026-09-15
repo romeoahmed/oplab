@@ -223,6 +223,7 @@ fn load_example(
         service,
         info,
         Command::Load {
+            initial: oplab_core::protocol::execution::InitialState::default(),
             replace: None,
             target,
             completion: symbol("done")?,

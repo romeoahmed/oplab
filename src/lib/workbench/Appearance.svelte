@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { Popover } from 'bits-ui';
-  import { RotateCcw, SlidersHorizontal, X } from '@lucide/svelte';
-  import type { Locale } from '$lib/paraglide/runtime';
-  import { defaultPreferences, type Preferences } from './preferences';
   import * as m from '$lib/paraglide/messages.js';
+  import type { Locale } from '$lib/paraglide/runtime';
+  import { RotateCcw, SlidersHorizontal, X } from '@lucide/svelte';
+  import { Popover } from 'bits-ui';
+
+  import { defaultPreferences, type Preferences } from './preferences';
   let {
     preferences = $bindable({ ...defaultPreferences }),
     locale,

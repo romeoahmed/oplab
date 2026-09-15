@@ -1,6 +1,17 @@
-import { readScratch } from './scratch';
-import { initialMemory } from './machine/memory';
 import { desktopWorker, type WorkerPort } from '$lib/desktop/worker';
+import type { Artifact } from '$lib/protocol/generated/Artifact';
+import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
+import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
+import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
+import type { DesktopFailure } from '$lib/protocol/generated/DesktopFailure';
+import type { Diagnostic } from '$lib/protocol/generated/Diagnostic';
+import type { DiagnosticCode } from '$lib/protocol/generated/DiagnosticCode';
+import type { FailureCode } from '$lib/protocol/generated/FailureCode';
+import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
+import type { Observation } from '$lib/protocol/generated/Observation';
+import type { SessionAction } from '$lib/protocol/generated/SessionAction';
+import type { StreamEvent } from '$lib/protocol/generated/StreamEvent';
+import type { Target } from '$lib/protocol/generated/Target';
 import { applyObservation } from '$lib/protocol/observations';
 import {
   normalizeAddress,
@@ -8,19 +19,10 @@ import {
   parseCounter,
   sameBuildIdentity,
 } from '$lib/protocol/scalars';
-import type { Artifact } from '$lib/protocol/generated/Artifact';
-import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
-import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
-import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
-import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
-import type { Diagnostic } from '$lib/protocol/generated/Diagnostic';
-import type { DiagnosticCode } from '$lib/protocol/generated/DiagnosticCode';
-import type { DesktopFailure } from '$lib/protocol/generated/DesktopFailure';
-import type { FailureCode } from '$lib/protocol/generated/FailureCode';
-import type { Observation } from '$lib/protocol/generated/Observation';
-import type { SessionAction } from '$lib/protocol/generated/SessionAction';
-import type { StreamEvent } from '$lib/protocol/generated/StreamEvent';
-import type { Target } from '$lib/protocol/generated/Target';
+
+import { initialMemory } from './machine/memory';
+import { initialState, type SetupInput } from './machine/setup';
+import { readScratch } from './scratch';
 
 type Stream = { event: StreamEvent; memory: Uint8Array | null };
 type Snapshot = { observation: Observation; memory: Uint8Array | null };
@@ -60,6 +62,10 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   let base = $state('0x1000');
   let completion = $state('done');
   let budget = $state('1000000');
+  const setups = $state<Record<Target, SetupInput>>({
+    x86_64: { registers: [], mappings: [] },
+    aarch64: { registers: [], mappings: [] },
+  });
   let memoryAddress = $state('0x2000');
   let memoryLength = $state(64);
   let revision = $state(0n);
@@ -354,6 +360,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
             completion: completionAddress(artifact.artifact),
             instruction_budget: formatCounter(maximum),
             image_bytes: artifact.image.length,
+            initial: initialState(setups[artifact.artifact.identity.target]),
           },
         },
         artifact.image,
@@ -483,6 +490,12 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     set completion(value: string) {
       completion = value;
       persist();
+    },
+    get setup() {
+      return setups[target];
+    },
+    set setup(value: SetupInput) {
+      setups[target] = value;
     },
     get budget() {
       return budget;

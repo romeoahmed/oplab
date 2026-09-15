@@ -67,6 +67,43 @@ fn truncated_and_oversized_frames_fail_before_use() -> Result<(), Box<dyn std::e
     let malicious = [b'O', b'P', 0, 0, 255, 255, 255, 255];
     assert!(transport::read_frame(&mut Cursor::new(malicious)).is_err());
     assert!(Header::new(Kind::Binary, 65_537).is_err());
+    // A declared payload must reject an incorrect header without waiting for its body.
+    let control = Header::new(Kind::Control, 1)?.encode();
+    assert!(matches!(
+        transport::read_payload(&mut control.as_slice(), 1),
+        Err(transport::TransportError::UnexpectedKind)
+    ));
+    let oversized = Header::new(Kind::Binary, 2)?.encode();
+    assert!(matches!(
+        transport::read_payload(&mut oversized.as_slice(), 1),
+        Err(transport::TransportError::PayloadLength)
+    ));
+    Ok(())
+}
+
+#[test]
+fn declared_payloads_preserve_chunk_boundaries_and_leave_the_next_frame_unread()
+-> Result<(), Box<dyn std::error::Error>> {
+    for length in [1, 65_535, 65_536, 65_537, 1_048_576] {
+        let payload = (0..length)
+            .map(|index| u8::try_from(index % 251))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut wire = Vec::new();
+        for chunk in payload.chunks(65_536) {
+            wire.extend_from_slice(&[b'O', b'P', 1, 0]);
+            wire.extend_from_slice(&u32::try_from(chunk.len())?.to_le_bytes());
+            wire.extend_from_slice(chunk);
+        }
+        let end = wire.len();
+        wire.extend_from_slice(&[b'O', b'P', 0, 0, 2, 0, 0, 0, b'{', b'}']);
+        let mut reader = Cursor::new(&wire);
+        assert_eq!(
+            transport::read_payload(&mut Fragmented(&mut reader, 7), length)?,
+            payload
+        );
+        assert_eq!(reader.position(), u64::try_from(end)?);
+        assert!(transport::read_payload(&mut Cursor::new(&wire[..end - 1]), length).is_err());
+    }
     Ok(())
 }
 
@@ -161,6 +198,7 @@ fn image_requests_require_complete_bounded_binary_transfers()
         request: Request {
             id: Counter::new(2),
             command: Command::Load {
+                initial: oplab_core::protocol::execution::InitialState::default(),
                 replace: None,
                 target: Target::X86_64,
                 completion: HexAddress::new(Address::new(0x2000)),

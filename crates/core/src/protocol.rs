@@ -16,7 +16,7 @@ use crate::target::Target;
 use execution::{MemoryWindow, Observation, SessionAction, SessionKey};
 use scalar::{Counter, HexAddress};
 
-/// Wire version required by the initial handshake.
+/// Development wire version; clients and workers must use the same application build.
 pub const VERSION: u32 = 1;
 /// Maximum UTF-8 source bytes, independent of expansion and output budgets.
 pub const MAX_SOURCE_BYTES: usize = 256 * 1024;
@@ -111,6 +111,8 @@ pub enum Command {
     },
     /// Bind a standard ELF image, supplied in binary frames after this request.
     Load {
+        /// Explicit initial GPRs and additional zero-filled mappings.
+        initial: execution::InitialState,
         /// Current session to replace; null requires no active session.
         replace: Option<SessionKey>,
         /// Required guest architecture, independently checked against ELF.

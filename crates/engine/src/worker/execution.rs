@@ -1,15 +1,23 @@
 //! One machine-owning thread. Only commands and immutable observations cross it.
 
 use super::{WorkerError, transport::Message};
-use crate::{machine::MachineError, session::Session};
+use crate::{
+    load::{Image, InitialMapping, MachineSetup},
+    machine::{Machine, MachineError},
+    session::Session,
+};
 use oplab_core::{
+    address::AddressRange,
     diagnostic::ValidationError,
     execution::{ExecutionState, PauseReason},
+    memory::{MAX_MAPPED_BYTES, MAX_REGIONS, Permissions},
     protocol::{
         Command, Diagnostic, DiagnosticCode, Reply, Response,
-        execution::{MemoryWindow, Observation, SessionAction, SessionKey, Status},
+        execution::{InitialState, MemoryWindow, Observation, SessionAction, SessionKey, Status},
         scalar::{Counter, HexAddress},
     },
+    registers::InitialRegisters,
+    target::Target,
 };
 use std::{
     sync::mpsc::{self, Receiver, SyncSender, TryRecvError},
@@ -206,6 +214,7 @@ fn dispatch(
 ) -> Result<(Reply, Vec<Vec<u8>>), Diagnostic> {
     match command {
         Command::Load {
+            initial,
             replace,
             target,
             completion,
@@ -222,13 +231,12 @@ fn dispatch(
                 return Err(Diagnostic::new(DiagnosticCode::InvalidState));
             }
             let image = image.ok_or_else(|| Diagnostic::new(DiagnosticCode::InvalidInput))?;
-            let machine = Session::from_elf(
-                &image,
-                *target,
-                completion.address(),
-                instruction_budget.get(),
-            )
-            .map_err(|error| diagnostic(&error))?;
+            let setup = setup(*target, initial).map_err(|error| diagnostic(&error))?;
+            let machine = Machine::load(Image::Elf(&image), *target, setup)
+                .and_then(|machine| {
+                    Session::new(machine, completion.address(), instruction_budget.get())
+                })
+                .map_err(|error| diagnostic(&error))?;
             let mut replacement = BoundSession {
                 id,
                 machine,
@@ -255,6 +263,45 @@ fn dispatch(
         }
         _ => Err(Diagnostic::new(DiagnosticCode::InvalidInput)),
     }
+}
+
+fn setup(target: Target, initial: &InitialState) -> Result<MachineSetup, MachineError> {
+    if initial.registers.len() > 32 || initial.mappings.len() >= MAX_REGIONS {
+        return Err(ValidationError::Length.into());
+    }
+    let registers = InitialRegisters::from_assignments(
+        target,
+        initial
+            .registers
+            .iter()
+            .map(|register| (register.name.as_str(), register.value.get())),
+    )?;
+    let mappings = initial
+        .mappings
+        .iter()
+        .map(|mapping| {
+            if mapping.flags > 7 {
+                return Err(ValidationError::Permission);
+            }
+            Ok(InitialMapping {
+                range: AddressRange::new(
+                    mapping.address.address(),
+                    u64::from(mapping.length),
+                    MAX_MAPPED_BYTES,
+                )?,
+                permissions: Permissions {
+                    read: mapping.flags & 4 != 0,
+                    write: mapping.flags & 2 != 0,
+                    execute: mapping.flags & 1 != 0,
+                },
+                bytes: Vec::new(),
+            })
+        })
+        .collect::<Result<_, ValidationError>>()?;
+    Ok(MachineSetup {
+        registers: Some(registers),
+        mappings,
+    })
 }
 
 fn apply(

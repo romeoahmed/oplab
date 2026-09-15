@@ -1,13 +1,15 @@
-import en from '../../../messages/en.json';
-import zh from '../../../messages/zh-CN.json';
-import { expect, test, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
-import { render } from 'vitest-browser-svelte';
-import Instructions from '$lib/workbench/instructions/Instructions.svelte';
-import { settled, type ComponentProps } from 'svelte';
 import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
 import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
+import Instructions from '$lib/workbench/instructions/Instructions.svelte';
+import { settled, type ComponentProps } from 'svelte';
+import { expect, test, vi } from 'vitest';
+import { render } from 'vitest-browser-svelte';
+import { page, userEvent } from 'vitest/browser';
+
+import en from '../../../messages/en.json';
+import zh from '../../../messages/zh-CN.json';
 import { nopAnalysis } from '../../fixtures/protocol';
+
 import '$lib/styles/theme.css';
 
 type Props = ComponentProps<typeof Instructions>;

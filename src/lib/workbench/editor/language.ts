@@ -1,3 +1,9 @@
+import type { Target } from '$lib/protocol/generated/Target';
+import {
+  completeFromList,
+  completeAnyWord,
+  type CompletionContext,
+} from '@codemirror/autocomplete';
 import {
   LanguageSupport,
   StreamLanguage,
@@ -5,13 +11,7 @@ import {
   HighlightStyle,
   syntaxHighlighting,
 } from '@codemirror/language';
-import {
-  completeFromList,
-  completeAnyWord,
-  type CompletionContext,
-} from '@codemirror/autocomplete';
 import { tags } from '@lezer/highlight';
-import type { Target } from '$lib/protocol/generated/Target';
 
 const registers: Record<Target, string[]> = {
   x86_64: [

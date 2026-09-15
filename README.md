@@ -6,87 +6,80 @@
 
 **Write assembly. Run it. Inspect the machine.**
 
-Oplab is a desktop workbench for **x86_64** and **AArch64**. Edit GNU-style assembly,
-build standard ELF with LLVM, and explore execution through registers and memory.
-The interface is available in English and Simplified Chinese.
+A desktop assembly workbench for **x86_64** and **AArch64**, available in English
+and Simplified Chinese. Build standard ELF with LLVM, execute it in Unicorn, and
+explore registers, memory and instruction effects.
 
-[Build and develop](docs/development.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md)
+**In development; not production-ready.** Native workflows have been verified on
+Apple Silicon macOS. Windows/Linux and independently installed distributions
+remain [release gates](docs/roadmap.md#release-gates).
 
-## What works
+[Build and develop](docs/development.md) · [Engine guide](docs/engine.md) · [Roadmap](docs/roadmap.md)
 
-- **Edit:** CodeMirror highlighting, register/directive and document-word completion,
-  search, undo, comment commands, bracket matching and multiple selections.
-  Assembly diagnostics mark and reveal verified source positions.
-- **Build:** Whole-document LLVM MC assembly and LLD linking, preserving standard
-  sections, symbols and relocations in complete ELF artifacts.
-- **Execute:** Load, step, run, pause, stop and reset an isolated Unicorn session.
-  Source edits stay separate from the loaded program.
-- **Inspect:** Integer registers, flags, memory and artifact metadata; bounded
-  disassembly of imported machine code or individual ELF segments. Select an
-  instruction for static register/memory effects, control flow and architecture metadata.
-- **Files:** Import/export UTF-8 assembly and exact machine bytes; export complete
-  ELF objects and images through native dialogs.
-- **Automate:** Run assembly or static ELF from stdin with explicit completion and
-  execution limits; receive final registers, faults and optional memory as JSON.
-- **Adjust:** Self-hosted JetBrains Mono or system monospace, font size, wrapping,
-  panel proportions and focus mode; local draft/settings recovery.
-
-Source-to-instruction mapping, editable machine setup and multiple documents remain
-planned. Imported raw bytes support inspection only; execution loads standard ELF.
-See the [current scope](docs/roadmap.md).
-
-## Get started
-
-For **frontend development**, install Node satisfying `package.json` and pnpm:
-
-```sh
-pnpm install --frozen-lockfile
-pnpm dev
-```
-
-Open Vite's local URL. Browser preview supports editing and interface development;
-native assembly and execution are available in the desktop app or CLI.
-
-For **desktop development**, follow the [native build setup](docs/development.md)
-for Rust, LLVM/LLD 23, C++23 and Tauri's platform prerequisites. Stop the standalone
-Vite server, then run:
-
-```sh
-pnpm tauri dev
-```
-
-Tauri hooks build and stage the worker and start the frontend automatically.
-Both guests have been exercised in an Apple Silicon macOS debug app. Windows/Linux
-and independently installed/signed distributions remain release gates; a local
-bundle may still depend on installed LLVM/LLD shared libraries.
-
-## Try an experiment
+## Explore an experiment
 
 1. Choose an architecture and **Load example**.
 2. **Assemble**, then **Load artifact**.
 3. **Step** (`F10`) or **Run** (`F5`). The example stores 42 in memory.
-4. Inspect registers and memory; **Reset** restores the loaded initial state.
+4. Inspect the result. **Reset** restores the loaded initial state.
 
-Use `Ctrl+Enter` / `⌘+Enter` to assemble. Configuration sets the link address, stop
-address/symbol and instruction limit. A link-address change needs a new build;
-stop position and limit apply when loading. The [engine contract](docs/engine.md)
-explains GNU syntax, alignment and execution boundaries.
+Use `Ctrl+Enter` / `⌘+Enter` to assemble. Configure the link address, completion
+address or symbol, instruction limit, initial registers and additional memory.
+Assembly, loading and execution are explicit actions; editing source leaves the
+loaded machine intact.
 
-For a terminal workflow, save an [assembly example](docs/engine.md#language-and-layout)
-with a `done` label and run:
+## Capabilities
+
+- **Edit and build:** CodeMirror highlighting, completion, search, history and
+  source diagnostics; unchanged GNU-style source assembled and linked by LLVM MC/LLD.
+- **Execute and inspect:** step, run, pause, stop and reset; integer registers,
+  flags and memory; bounded disassembly and static instruction analysis.
+- **Work with files:** import/export UTF-8 assembly and exact machine bytes;
+  export complete ELF objects and images through native dialogs.
+- **Automate:** run source, static ELF or raw code from stdin with explicit
+  completion and execution limits; receive final state as JSON.
+- **Make it comfortable:** self-hosted JetBrains Mono or system monospace,
+  font size, wrapping, panel proportions, focus mode and local draft recovery.
+
+Desktop execution loads ELF artifacts; imported raw bytes are for inspection.
+Raw-code execution is available in the CLI. Verified source-to-instruction mapping,
+live register/memory editing and multiple documents are [planned](docs/roadmap.md#next-product-work).
+Instruction recognition does not guarantee emulator support for every extension.
+
+## Build from source
+
+Install Node satisfying [package.json](package.json), pnpm and the
+[native toolchain](docs/development.md#native-toolchain): stable Rust, C++23,
+LLVM 23 with matching LLD development files, libclang, build tools and Tauri's
+platform prerequisites. Then run:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm tauri dev
+```
+
+Tauri builds and stages the worker and starts Vite automatically. Engine changes
+require rebuilding the worker and restarting the app; see the
+[development workflow](docs/development.md#commands-and-ownership).
+
+For frontend-only work, use `pnpm dev` instead. Browser preview supports editing
+and interface development but cannot assemble or execute. Use one Vite server
+per checkout.
+
+For a terminal experiment, save the [x86_64 example](docs/engine.md#language-and-layout)
+as `experiment.s`, then run:
 
 ```sh
 cargo run --locked -p oplab-engine --bin oplab-cli -- run source x86_64 0x1000 --until-symbol done --budget 100 < experiment.s
 ```
 
-The CLI requires the [native toolchain](docs/development.md#native-toolchain).
-Its [contract](docs/protocol.md#batch-execution) covers ELF input, memory output,
-exit codes and timeout limits.
+The [CLI reference](docs/protocol.md#cli) covers ELF/raw inputs, initial state,
+memory output and exit codes. No stack or operating-system services are supplied
+implicitly.
 
-## Contribute
+## Development
 
-Read the [development guide](docs/development.md) for setup and focused commands.
-Repository-wide verification uses Cargo xtask:
+After installing the native toolchain and JavaScript dependencies:
 
 ```sh
 pnpm exec playwright install --with-deps --no-shell chromium
@@ -94,28 +87,25 @@ cargo xtask check
 cargo xtask test
 ```
 
-`cargo xtask fmt` formats source and documentation. Include behavior tests and
-relevant validation; update both language catalogs and documentation when needed.
+Use `cargo xtask fmt` for formatting. Keep tests focused on behavior and invariants,
+update both language catalogs, and document changes to public behavior.
 
-## Project guide
+| Guide                                | Contents                                                       |
+| ------------------------------------ | -------------------------------------------------------------- |
+| [Development](docs/development.md)   | Requirements, toolchain discovery, commands, builds and icons  |
+| [Architecture](docs/architecture.md) | Repository layout, ownership and technology decisions          |
+| [Engine](docs/engine.md)             | Assembly syntax, ELF loading, analysis and execution semantics |
+| [Protocol and CLI](docs/protocol.md) | Framing, sessions, supervision, files and batch execution      |
+| [Testing](docs/testing.md)           | Test design and browser/native acceptance                      |
+| [Roadmap](docs/roadmap.md)           | Implemented scope, next work and verification limits           |
 
-| Document                             | Covers                                                            |
-| ------------------------------------ | ----------------------------------------------------------------- |
-| [Development](docs/development.md)   | Build requirements, native discovery, commands, outputs and icons |
-| [Architecture](docs/architecture.md) | Repository layout, ownership, technology and interface            |
-| [Engine](docs/engine.md)             | Assembly, instruction analysis, ELF loading and execution         |
-| [Protocol](docs/protocol.md)         | Framing, sessions, subscriptions, supervision and CLI             |
-| [Testing](docs/testing.md)           | Test design, browser/native acceptance and evidence limits        |
-| [Roadmap](docs/roadmap.md)           | Implemented work, next capabilities and release gates             |
-
-Built with Tauri, Svelte, LLVM/LLD, Unicorn, CodeMirror/Lezer and Bits UI. Inspired
-by [cemu](https://github.com/hugsy/cemu), with a newly designed architecture and interface.
+Built with Tauri, Svelte, LLVM/LLD, Unicorn, CodeMirror/Lezer and Bits UI.
+Inspired by [cemu](https://github.com/hugsy/cemu).
 
 ## Author and license
 
 Created by [Romeo Ahmed](https://github.com/romeoahmed). Copyright © 2026 Romeo Ahmed.
 
-Licensed under either the [MIT license](LICENSE-MIT) or the
-[Apache License, Version 2.0](LICENSE-APACHE), at your option (`MIT OR Apache-2.0`).
-Unless explicitly stated otherwise, contributions are provided under the same terms.
-Dependencies and bundled fonts retain their own licenses and notices.
+Licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+Unless explicitly stated otherwise, contributions use the same terms. Dependencies
+and bundled fonts retain their own licenses and notices.

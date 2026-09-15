@@ -1,6 +1,9 @@
-//! Plan static ELF64 mappings from program headers before allocating native memory.
+//! Validate ELF or raw-code mappings and initial conditions before native memory allocation.
 
 mod segment;
+mod setup;
+
+pub use setup::{Image, InitialMapping, MachineSetup};
 
 use object::{LittleEndian, elf, read::elf::FileHeader};
 use oplab_core::{
@@ -8,6 +11,7 @@ use oplab_core::{
     diagnostic::ValidationError,
     memory::{MAX_MAPPED_BYTES, MAX_REGIONS, MemoryLayout, MemoryRegion, Permissions},
     protocol::MAX_OBJECT_BYTES,
+    registers::InitialRegisters,
     target::Target,
 };
 use segment::Segment;
@@ -30,8 +34,8 @@ pub enum LoadError {
     /// Two distinct segment permissions would have to occupy the same native page.
     #[error("ELF segments require conflicting permissions on one page")]
     PagePermissions,
-    /// The entry is outside executable segment contents or is misaligned.
-    #[error("ELF entry is not an executable instruction address")]
+    /// The entry is outside executable contents or is misaligned.
+    #[error("entry is not an executable instruction address")]
     Entry,
     /// A checked domain limit or mapping invariant was violated.
     #[error(transparent)]
@@ -45,6 +49,7 @@ pub struct LoadPlan {
     entry: Address,
     page_size: u64,
     memory: MemoryLayout,
+    registers: Option<InitialRegisters>,
 }
 
 impl LoadPlan {
@@ -79,6 +84,7 @@ impl LoadPlan {
             entry,
             page_size,
             memory: MemoryLayout::new(regions)?,
+            registers: None,
         })
     }
 
@@ -88,7 +94,7 @@ impl LoadPlan {
         self.target
     }
 
-    /// Initial instruction address recorded in the ELF header.
+    /// Initial fetch address from ELF or the explicit raw-code input.
     #[must_use]
     pub const fn entry(&self) -> Address {
         self.entry
@@ -104,6 +110,12 @@ impl LoadPlan {
     #[must_use]
     pub const fn memory(&self) -> &MemoryLayout {
         &self.memory
+    }
+
+    /// Explicit general-purpose initialization, reapplied on reset.
+    #[must_use]
+    pub const fn registers(&self) -> Option<&InitialRegisters> {
+        self.registers.as_ref()
     }
 }
 

@@ -2,6 +2,7 @@
 import type { BuildIdentity } from './BuildIdentity.js';
 import type { Counter } from './Counter.js';
 import type { HexAddress } from './HexAddress.js';
+import type { InitialState } from './InitialState.js';
 import type { MemoryWindow } from './MemoryWindow.js';
 import type { SessionAction } from './SessionAction.js';
 import type { SessionKey } from './SessionKey.js';
@@ -83,6 +84,10 @@ export type Command =
   | {
       type: 'load';
       data: {
+        /**
+         * Explicit initial GPRs and additional zero-filled mappings.
+         */
+        initial: InitialState;
         /**
          * Current session to replace; null requires no active session.
          */

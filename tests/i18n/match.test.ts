@@ -1,6 +1,6 @@
-import { expect, test } from 'vitest';
-import fc from 'fast-check';
 import { preferredLocale } from '$lib/i18n/match';
+import fc from 'fast-check';
+import { expect, test } from 'vitest';
 
 test('resolves supported aliases and preserves user preference order', () => {
   expect(preferredLocale(['zh-Hans-SG', 'en-US'])).toBe('zh-CN');

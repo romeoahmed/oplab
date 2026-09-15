@@ -36,8 +36,8 @@ importers:
         specifier: ^1.2.3
         version: 1.2.3
       '@lucide/svelte':
-        specifier: ^1.45.0
-        version: 1.45.0(svelte@5.57.0(@typescript-eslint/types@8.70.0))
+        specifier: ^1.46.0
+        version: 1.46.0(svelte@5.57.0(@typescript-eslint/types@8.70.0))
       '@tauri-apps/api':
         specifier: ^2.11.1
         version: 2.11.1
@@ -370,8 +370,8 @@ packages:
   '@lix-js/sdk@0.16.1':
     resolution: {integrity: sha512-TphGW47tPJ52n8Umk46j56veeaz/uLoS9m1pWYWs0UnnbItsntu6hW/alxW/OX1WZA7vXk7d1OP6qIbmluc+kA==}
 
-  '@lucide/svelte@1.45.0':
-    resolution: {integrity: sha512-SBqLvcYGEDz82Lwz7meR4qM+SGeDKRU/RBo8BhAhARNUzIXTrykbFLabW9X1Fokp01Yw2kOFx/AsLUUIxj0NLA==}
+  '@lucide/svelte@1.46.0':
+    resolution: {integrity: sha512-Ru8jDjoCVLJ7J7pPRUdY+odSBV2BI6rj68JTmT+ENq/ZwYOPGPAiKVvKz+XLyAoK4HAwlRTzZHpsMvrHfsetqg==}
     peerDependencies:
       svelte: ^5
 
@@ -2606,7 +2606,7 @@ snapshots:
       '@lix-js/sdk-linux-x64': 0.16.1
       '@lix-js/sdk-win32-x64': 0.16.1
 
-  '@lucide/svelte@1.45.0(svelte@5.57.0(@typescript-eslint/types@8.70.0))':
+  '@lucide/svelte@1.46.0(svelte@5.57.0(@typescript-eslint/types@8.70.0))':
     dependencies:
       svelte: 5.57.0(@typescript-eslint/types@8.70.0)
 

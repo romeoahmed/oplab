@@ -46,6 +46,18 @@ pub enum TransportError {
 ///
 /// Rejects malformed/oversized frames and partial EOF without scanning for another header.
 pub fn read_frame(reader: &mut impl Read) -> Result<Option<Frame>, TransportError> {
+    let Some(header) = read_header(reader)? else {
+        return Ok(None);
+    };
+    let mut body = vec![0; header.length()];
+    reader.read_exact(&mut body)?;
+    Ok(Some(Frame {
+        kind: header.kind(),
+        body,
+    }))
+}
+
+fn read_header(reader: &mut impl Read) -> Result<Option<Header>, TransportError> {
     let mut bytes = [0_u8; HEADER_BYTES];
     loop {
         match reader.read(&mut bytes[..1]) {
@@ -56,13 +68,7 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<Frame>, TransportErro
         }
     }
     reader.read_exact(&mut bytes[1..])?;
-    let header = Header::decode(bytes)?;
-    let mut body = vec![0; header.length()];
-    reader.read_exact(&mut body)?;
-    Ok(Some(Frame {
-        kind: header.kind(),
-        body,
-    }))
+    Ok(Some(Header::decode(bytes)?))
 }
 
 /// Write and flush a complete frame; the caller serializes access to the stream.
@@ -89,14 +95,14 @@ pub fn write_json(writer: &mut impl Write, response: &Response) -> Result<(), Tr
     write_frame(writer, Kind::Control, &body)
 }
 
-/// Serialize response metadata to bounded JSON bytes without a header or newline.
+/// Serialize protocol metadata to bounded JSON bytes without a header or newline.
 ///
 /// # Errors
 ///
 /// Returns [`TransportError::OutputLimit`] if serialization fails or exceeds the control budget.
-pub fn encode_json(response: &Response) -> Result<Vec<u8>, TransportError> {
+pub fn encode_json(value: &impl serde::Serialize) -> Result<Vec<u8>, TransportError> {
     let mut buffer = LimitedBuffer(Vec::new());
-    serde_json::to_writer(&mut buffer, response).map_err(|_| TransportError::OutputLimit)?;
+    serde_json::to_writer(&mut buffer, value).map_err(|_| TransportError::OutputLimit)?;
     Ok(buffer.0)
 }
 
@@ -241,9 +247,8 @@ pub fn write_request(
     message: &RequestMessage,
 ) -> Result<(), TransportError> {
     validate_request(message)?;
-    let mut body = LimitedBuffer(Vec::new());
-    serde_json::to_writer(&mut body, &message.request).map_err(|_| TransportError::OutputLimit)?;
-    write_frame(writer, Kind::Control, &body.0)?;
+    let body = encode_json(&message.request)?;
+    write_frame(writer, Kind::Control, &body)?;
     if let Some(image) = &message.image {
         for chunk in image.chunks(MAX_BINARY_BYTES) {
             write_frame(writer, Kind::Binary, chunk)?;
@@ -289,17 +294,17 @@ pub fn read_payload(reader: &mut impl Read, length: usize) -> Result<Vec<u8>, Tr
     if !(1..=MAX_OBJECT_BYTES).contains(&length) {
         return Err(TransportError::PayloadLength);
     }
-    let mut bytes = Vec::with_capacity(length);
-    while bytes.len() < length {
-        let frame =
-            read_frame(reader)?.ok_or_else(|| io::Error::from(io::ErrorKind::UnexpectedEof))?;
-        if frame.kind != Kind::Binary {
+    let mut bytes = vec![0; length];
+    for chunk in bytes.chunks_mut(MAX_BINARY_BYTES) {
+        let header =
+            read_header(reader)?.ok_or_else(|| io::Error::from(io::ErrorKind::UnexpectedEof))?;
+        if header.kind() != Kind::Binary {
             return Err(TransportError::UnexpectedKind);
         }
-        if frame.body.len() != (length - bytes.len()).min(MAX_BINARY_BYTES) {
+        if header.length() != chunk.len() {
             return Err(TransportError::PayloadLength);
         }
-        bytes.extend_from_slice(&frame.body);
+        reader.read_exact(chunk)?;
     }
     Ok(bytes)
 }
@@ -346,9 +351,8 @@ pub fn write_stream(
     if stream_length(event)? != memory.map(<[u8]>::len) {
         return Err(TransportError::PayloadLength);
     }
-    let mut body = LimitedBuffer(Vec::new());
-    serde_json::to_writer(&mut body, event).map_err(|_| TransportError::OutputLimit)?;
-    write_frame(writer, Kind::Observation, &body.0)?;
+    let body = encode_json(event)?;
+    write_frame(writer, Kind::Observation, &body)?;
     if let Some(memory) = memory {
         write_frame(writer, Kind::Binary, memory)?;
     }

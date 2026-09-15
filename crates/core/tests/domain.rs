@@ -122,3 +122,39 @@ fn faults_are_terminal_and_running_mutations_require_explicit_pause() -> Result<
     );
     Ok(())
 }
+
+#[test]
+fn initial_registers_reject_ambiguous_or_noncanonical_assignments() -> Result<(), ValidationError> {
+    use oplab_core::{registers::InitialRegisters, target::Target};
+    for (target, name) in [
+        (Target::X86_64, "eax"),
+        (Target::X86_64, "RAX"),
+        (Target::X86_64, "rip"),
+        (Target::X86_64, "rflags"),
+        (Target::X86_64, "x0"),
+        (Target::Aarch64, "w0"),
+        (Target::Aarch64, "x31"),
+        (Target::Aarch64, "xzr"),
+        (Target::Aarch64, "lr"),
+        (Target::Aarch64, "pc"),
+        (Target::Aarch64, "nzcv"),
+    ] {
+        assert_eq!(
+            InitialRegisters::from_assignments(target, [(name, 1)]),
+            Err(ValidationError::Target)
+        );
+    }
+    for (target, name) in [(Target::X86_64, "rax"), (Target::Aarch64, "sp")] {
+        assert_eq!(
+            InitialRegisters::from_assignments(target, [(name, 1), (name, 1)]),
+            Err(ValidationError::DuplicateRegister)
+        );
+    }
+    let mut expected = [0; 16];
+    expected[0] = u64::MAX;
+    assert_eq!(
+        InitialRegisters::from_assignments(Target::X86_64, [("rax", u64::MAX)])?,
+        InitialRegisters::X86_64(expected)
+    );
+    Ok(())
+}

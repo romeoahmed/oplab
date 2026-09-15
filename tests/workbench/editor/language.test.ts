@@ -1,10 +1,10 @@
-import { expect, test } from 'vitest';
-import fc from 'fast-check';
-import { EditorState } from '@codemirror/state';
-import { ensureSyntaxTree } from '@codemirror/language';
-import { classHighlighter, highlightTree } from '@lezer/highlight';
-import { assembly } from '$lib/workbench/editor/language';
 import type { Target } from '$lib/protocol/generated/Target';
+import { assembly } from '$lib/workbench/editor/language';
+import { ensureSyntaxTree } from '@codemirror/language';
+import { EditorState } from '@codemirror/state';
+import { classHighlighter, highlightTree } from '@lezer/highlight';
+import fc from 'fast-check';
+import { expect, test } from 'vitest';
 
 function highlighted(source: string, target: Target) {
   const state = EditorState.create({ doc: source, extensions: [assembly(target)] });

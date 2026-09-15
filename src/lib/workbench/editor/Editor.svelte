@@ -1,6 +1,22 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import * as m from '$lib/paraglide/messages.js';
+
   import './editor.css';
+  import type { Locale } from '$lib/paraglide/runtime.js';
+  import type { Target } from '$lib/protocol/generated/Target';
+  import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
+  import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+  import { bracketMatching, indentUnit } from '@codemirror/language';
+  import { lintGutter, nextDiagnostic, setDiagnostics, type Diagnostic } from '@codemirror/lint';
+  import {
+    searchKeymap,
+    searchPanelOpen,
+    closeSearchPanel,
+    openSearchPanel,
+    getSearchQuery,
+    setSearchQuery,
+    highlightSelectionMatches,
+  } from '@codemirror/search';
   import { Annotation, Compartment, EditorState } from '@codemirror/state';
   import {
     EditorView,
@@ -14,23 +30,9 @@
     crosshairCursor,
     dropCursor,
   } from '@codemirror/view';
-  import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-  import {
-    searchKeymap,
-    searchPanelOpen,
-    closeSearchPanel,
-    openSearchPanel,
-    getSearchQuery,
-    setSearchQuery,
-    highlightSelectionMatches,
-  } from '@codemirror/search';
-  import { bracketMatching, indentUnit } from '@codemirror/language';
-  import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
-  import { lintGutter, nextDiagnostic, setDiagnostics, type Diagnostic } from '@codemirror/lint';
+  import { untrack } from 'svelte';
+
   import { assembly, assemblyHighlighting } from './language';
-  import type { Target } from '$lib/protocol/generated/Target';
-  import type { Locale } from '$lib/paraglide/runtime.js';
-  import * as m from '$lib/paraglide/messages.js';
 
   const {
     value,
