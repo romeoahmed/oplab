@@ -11,7 +11,7 @@ Keep planned capabilities distinct from shipped behavior.
 | -------------------------- | ---------------------------------------------------------------------- |
 | `crates/core`              | Pure domain types, policies and authoritative wire DTOs                |
 | `crates/engine`            | LLVM MC/LLD C++23 bridge, ELF loader, Unicorn sessions, worker and CLI |
-| `src-tauri`                | Tauri commands, worker supervision and bounded IPC delivery            |
+| `src-tauri`                | Tauri commands, worker supervision, bounded IPC and native file I/O    |
 | `src/lib/workbench`        | Editor, document controller, machine/memory views and native CSS       |
 | `src/lib/desktop`          | Only frontend module allowed to import Tauri APIs                      |
 | `src/lib/protocol`         | Generated declarations plus pure wire/scalar/observation logic         |
@@ -49,7 +49,7 @@ Vite and Tauri lifecycles instead of adding duplicate wrappers or ad hoc scripts
 
 - Keep SvelteKit/Tauri/Cargo entry points and root tool configurations in their
   conventional locations. Follow the [repository layout](docs/architecture.md#repository-layout).
-  Group workbench editor and machine code with their related CSS and pure helpers;
+  Group editor, machine and instruction code with related CSS and pure helpers;
   mirror feature paths under `tests/`, with shared DTOs in `tests/fixtures`.
 - Components use PascalCase; TypeScript/CSS modules use lowercase descriptive names.
   Rust modules use snake_case named entry files; integration targets use kebab-case.
@@ -70,7 +70,7 @@ Vite and Tauri lifecycles instead of adding duplicate wrappers or ad hoc scripts
   Avoid custom focus patches. Newly Baseline features still need WebView acceptance.
 - Update `messages/en.json` and `messages/zh-CN.json` together. Keep keys/placeholders
   aligned, source text untouched and product copy concise and natural. Do not expose
-  raw host paths, source diagnostics or internal transport counters in ordinary UI.
+  raw host paths, raw diagnostic text or internal transport counters in ordinary UI.
 - Edit Rust DTOs, then run codegen; do not hand-edit `src/lib/protocol/generated`.
   Paraglide, SvelteKit, Tauri schemas/permissions and staged binaries are ignored output.
 - Document contracts, units, ownership and failure behavior; ordinary comments explain

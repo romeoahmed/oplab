@@ -16,17 +16,22 @@ The interface is available in English and Simplified Chinese.
 
 - **Edit:** CodeMirror highlighting, register/directive and document-word completion,
   search, undo, comment commands, bracket matching and multiple selections.
+  Assembly diagnostics mark and reveal verified source positions.
 - **Build:** Whole-document LLVM MC assembly and LLD linking, preserving standard
   sections, symbols and relocations in complete ELF artifacts.
 - **Execute:** Load, step, run, pause, stop and reset an isolated Unicorn session.
   Source edits stay separate from the loaded program.
-- **Inspect:** Canonical integer registers, flags, memory bytes and artifact metadata.
+- **Inspect:** Integer registers, flags, memory and artifact metadata; bounded
+  disassembly of imported machine code or individual ELF segments.
+- **Files:** Import/export UTF-8 assembly and exact machine bytes; export complete
+  ELF objects and images through native dialogs.
 - **Adjust:** Self-hosted JetBrains Mono or system monospace, font size, wrapping,
   panel proportions and focus mode; local draft/settings recovery.
 
-The core desktop loop is implemented. Source debugging, instruction views, editable
-machine setup and complete save/reopen experiments are still planned. The CLI builds
-and decodes; it does not yet execute experiments. See the [current scope](docs/roadmap.md).
+The core desktop loop is implemented. Source-to-instruction mapping, editable machine
+setup and multiple documents remain planned. Imported raw bytes can be inspected;
+they do not yet have an execution setup. The CLI builds and decodes; it does not
+yet execute programs. See the [current scope](docs/roadmap.md).
 
 ## Get started
 

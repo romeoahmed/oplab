@@ -79,3 +79,17 @@ impl DesktopFailure {
         }
     }
 }
+
+/// File contents selected explicitly by the user; no project-specific container format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum FileFormat {
+    /// Original UTF-8 assembly text.
+    Source,
+    /// Exact raw machine bytes, without an implied address or architecture.
+    Binary,
+    /// Complete relocatable ELF output.
+    Object,
+    /// Complete linked ELF output.
+    Image,
+}

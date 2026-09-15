@@ -6,7 +6,7 @@ use super::{
 };
 use oplab_core::protocol::{
     Response,
-    desktop::{ConnectionInfo, DesktopCall, DesktopFailure},
+    desktop::{ConnectionInfo, DesktopCall, DesktopFailure, FileFormat},
     stream::StreamEvent,
 };
 use std::{collections::BTreeSet, fs, path::Path};
@@ -22,6 +22,7 @@ pub(super) fn generate(check: bool) -> Result {
     DesktopCall::export_all(&config)?;
     ConnectionInfo::export_all(&config)?;
     DesktopFailure::export_all(&config)?;
+    FileFormat::export_all(&config)?;
     run(pnpm()
         .args(["exec", "oxfmt", "--config", ".oxfmtrc.json"])
         .arg(temporary.path()))?;

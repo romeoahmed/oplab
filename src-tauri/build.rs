@@ -7,6 +7,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "worker_request",
             "worker_ack",
             "worker_detach",
+            "import_file",
+            "export_file",
         ]),
     ))?;
     Ok(())

@@ -7,6 +7,8 @@
     "allow-worker-connect",
     "allow-worker-request",
     "allow-worker-ack",
-    "allow-worker-detach"
+    "allow-worker-detach",
+    "allow-import-file",
+    "allow-export-file"
   ]
 }

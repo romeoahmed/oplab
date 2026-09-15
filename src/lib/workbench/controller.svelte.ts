@@ -3,7 +3,7 @@ import { initialMemory } from './machine/memory';
 import { desktopWorker, type WorkerPort } from '$lib/desktop/worker';
 import { applyObservation } from '$lib/protocol/observations';
 import {
-  formatAddress,
+  normalizeAddress,
   formatCounter,
   parseCounter,
   sameBuildIdentity,
@@ -11,6 +11,8 @@ import {
 import type { Artifact } from '$lib/protocol/generated/Artifact';
 import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
+import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
+import type { Diagnostic } from '$lib/protocol/generated/Diagnostic';
 import type { DiagnosticCode } from '$lib/protocol/generated/DiagnosticCode';
 import type { DesktopFailure } from '$lib/protocol/generated/DesktopFailure';
 import type { FailureCode } from '$lib/protocol/generated/FailureCode';
@@ -23,7 +25,10 @@ type Stream = { event: StreamEvent; memory: Uint8Array | null };
 type Snapshot = { observation: Observation; memory: Uint8Array | null };
 type Problem = DiagnosticCode | FailureCode | 'completion' | 'input';
 class RequestError extends Error {
-  constructor(readonly code: Problem) {
+  constructor(
+    readonly code: Problem,
+    readonly address: string | null = null,
+  ) {
     super(code);
   }
 }
@@ -59,7 +64,9 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   let revision = $state(0n);
   let documentId = $state<string>(crypto.randomUUID());
   let info = $state.raw<ConnectionInfo | null>(null);
-  let candidate = $state.raw<{ artifact: Artifact; image: Uint8Array } | null>(null);
+  let candidate = $state.raw<{ artifact: Artifact; object: Uint8Array; image: Uint8Array } | null>(
+    null,
+  );
   let loaded = $state.raw<BuildIdentity | null>(null);
   let snapshot = $state.raw<Snapshot | null>(null);
   let connected = $state(false);
@@ -67,6 +74,10 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   let building = $state(false);
   let controlling = $state(false);
   let problem = $state<string | null>(null);
+  let buildFailure = $state.raw<{ identity: BuildIdentity; diagnostic: Diagnostic } | null>(null);
+  const diagnostic = $derived(
+    buildFailure !== null && matches(buildFailure.identity) ? buildFailure.diagnostic : null,
+  );
   let storageFailed = $state(false);
   let unknown = $state(false);
   let subscription: string | null = null;
@@ -81,17 +92,13 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   const port = factory(receive, failed);
 
-  function humanAddress(value: string): string {
-    if (!/^(?:0x)?[\da-f]+$/i.test(value.trim())) throw new RangeError('Invalid address');
-    return formatAddress(BigInt(`0x${value.trim().replace(/^0x/i, '')}`));
-  }
   function identity(): BuildIdentity {
     if (info === null) throw new Error('No worker');
     return {
       document: documentId,
       revision: formatCounter(revision),
       target,
-      base: humanAddress(base),
+      base: normalizeAddress(base),
       assembler: info.capabilities.assembler,
     };
   }
@@ -198,7 +205,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
           data: {
             session: key,
             memory: memoryRequested
-              ? { address: humanAddress(memoryAddress), length: memoryLength }
+              ? { address: normalizeAddress(memoryAddress), length: memoryLength }
               : null,
           },
         });
@@ -228,6 +235,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     try {
       const next = await port.connect(restart);
       lifetime.signal.throwIfAborted();
+      buildFailure = null;
       info = next;
       connected = true;
       // A retained native session does not prove which local source produced it.
@@ -251,6 +259,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   async function assemble(): Promise<void> {
     if (port === null || !connected || building) return;
     building = true;
+    buildFailure = null;
     problem = null;
     unknown = false;
     try {
@@ -258,23 +267,51 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       const message = await port.request({ type: 'assemble', data: { identity: build, source } });
       if (lifetime.signal.aborted || !matches(build)) return;
       const result = message.response.result;
-      if (result.type === 'error') throw new RequestError(result.data.code);
+      if (result.type === 'error') {
+        buildFailure = { identity: build, diagnostic: result.data };
+        return;
+      }
+      const object = message.payloads[0];
       const image = message.payloads[1];
       if (
         result.type !== 'assembled' ||
+        object === undefined ||
         image === undefined ||
         !sameBuildIdentity(result.data.identity, build)
       )
         throw new Error('Invalid artifact');
-      candidate = { artifact: result.data, image };
+      candidate = { artifact: result.data, object, image };
     } catch (error) {
       report(error);
     } finally {
       building = false;
     }
   }
+  async function decode(
+    bytes: Uint8Array,
+    guest: Target,
+    address: string,
+  ): Promise<DecodedInstruction[]> {
+    if (port === null || !connected) throw new RequestError('unavailable');
+    const message = await port.request({
+      type: 'decode',
+      data: {
+        target: guest,
+        base: normalizeAddress(address),
+        bytes: Array.from(bytes),
+        limit: 256,
+      },
+    });
+    lifetime.signal.throwIfAborted();
+    if (message.response.result.type === 'error') {
+      const failure = message.response.result.data;
+      throw new RequestError(failure.code, failure.address);
+    }
+    if (message.response.result.type !== 'decoded') throw new RequestError('protocol');
+    return message.response.result.data;
+  }
   function completionAddress(artifact: Artifact): string {
-    if (/^(?:0x)?[\da-f]+$/i.test(completion.trim())) return humanAddress(completion);
+    if (/^(?:0x)?[\da-f]+$/i.test(completion.trim())) return normalizeAddress(completion);
     const values = artifact.image.symbols
       .filter((symbol) => symbol.name === completion.trim())
       .map((symbol) => symbol.address);
@@ -396,6 +433,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     void connect();
   }
   return {
+    decode,
     get source() {
       return source;
     },
@@ -465,7 +503,10 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       return controlling;
     },
     get problem() {
-      return problem ?? (storageFailed ? 'storage' : null);
+      return problem ?? diagnostic?.code ?? (storageFailed ? 'storage' : null);
+    },
+    get diagnostic() {
+      return diagnostic;
     },
     get unknown() {
       return unknown;

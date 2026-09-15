@@ -16,8 +16,8 @@ Svelte workbench → Tauri supervisor → isolated worker
 | ----------------------------- | ------------------------------------------------------------------------------------------ |
 | `crates/core`                 | Validated domain types, memory/execution policy and wire contracts; no native dependencies |
 | `crates/engine`               | Assembly, linking, decoding, loading, sessions, worker and CLI                             |
-| `src-tauri`                   | Window-scoped commands, worker lifetime, deadlines, leases and delivery                    |
-| `src/lib/workbench`           | Document controller, editor, machine and memory presentation                               |
+| `src-tauri`                   | Window-scoped commands, worker supervision, bounded delivery and user-selected file I/O    |
+| `src/lib/workbench`           | Document controller, editor, machine, memory and instruction presentation                  |
 | `src/lib/desktop`             | Sole frontend entry to Tauri; no native execution in browser preview                       |
 | `src/lib/protocol`            | Rust-generated declarations and pure framing/scalar/observation logic                      |
 | `src/lib/i18n`, `messages`    | Locale selection and English/Simplified Chinese catalogs                                   |
@@ -59,6 +59,7 @@ src/
     workbench/                # Composition, controller, scratch and preferences
       editor/                 # CodeMirror component, CSS and language support
       machine/                # Machine/register/memory views and initial viewport
+      instructions/           # Static byte windows and bounded disassembly
   routes/                     # SvelteKit entry points
 src-tauri/                    # Native application and supervisor
 static/                       # Application icon master
@@ -66,7 +67,7 @@ messages/                     # English and Simplified Chinese catalogs
 project.inlang/               # Localization project configuration
 tests/                        # Frontend behavior and invariant tests
   fixtures/                   # Shared DTO fixtures
-  workbench/                  # Mirrors editor/machine feature ownership
+  workbench/                  # Mirrors editor/machine/instruction ownership
 xtask/                        # Repository tooling
 ```
 
@@ -121,7 +122,7 @@ and [TypeScript's functional guidance](https://www.typescriptlang.org/docs/handb
 | iced-x86, Capstone AArch64                  | Decoding and instruction metadata; recognition does not guarantee emulation support         |
 | `object`                                    | ELF inspection; explicit project policy still validates loading                             |
 | CodeMirror 6, Lezer                         | Transactional editing, lexical syntax assistance and completion; LLVM remains the assembler |
-| Bits UI                                     | Composite toolbar, tooltip, tab and popover behavior; native form controls elsewhere        |
+| Bits UI                                     | Composite toolbar, tooltip, tab, menu and popover behavior; native fields elsewhere         |
 | Fontsource JetBrains Mono Variable          | Bundled offline WOFF2 with an optional system monospace preference                          |
 | Paraglide                                   | Compiled bilingual messages and explicit locale selection                                   |
 | Native CSS, Lucide                          | Platform layout and a tree-shaken interface icon family                                     |
@@ -154,14 +155,22 @@ The target-specific `StreamLanguage` uses Lezer tags for highlighting. Completio
 combines register/directive hints with deduplicated document words and is suppressed
 inside comments/strings. Comment commands distinguish x86 `#` from AArch64 `//`.
 This lexer is neither a complete grammar nor an instruction-validity database.
-Structural folding, source diagnostics and source-to-instruction mapping need
-separate verified implementations. Tab leaves the editor; indentation commands,
-search, multiple selections and bracket matching use CodeMirror's native facilities.
+Build errors retain their complete identity. Valid UTF-8 diagnostic offsets become
+UTF-16 point diagnostics through CodeMirror's lint extension, with gutter markers,
+F8 navigation and a localized location button. The frontend accounts for BOM,
+supplementary characters and CRLF/CR normalization without rewriting assembler
+input. Editing invalidates the build; points are cleared rather than remapped onto
+unverified source. Structural folding and source-to-instruction mapping remain open.
+Tab leaves the editor. Indentation, search, multiple selections and bracket matching
+use CodeMirror's native facilities.
 
-Bits UI owns roving toolbar focus, tooltip dismissal, popover focus return and tab
-navigation. Buttons retain native `disabled` behavior. Pass application handlers
-through the primitive so its own handlers remain composed. Follow the library's
-standard usage; custom focus management is not part of the current workbench.
+Bits UI owns roving toolbar focus, tooltip dismissal, popover focus return, file
+menu interactions and tab navigation. Buttons retain native `disabled` behavior.
+File actions use `onSelect`; other handlers pass through the primitive to preserve
+event composition. [Tabs](https://www.bits-ui.com/docs/components/tabs) retain panel
+state and hide inactive content with `hidden`; CSS must preserve that behavior.
+Native number inputs validate required byte offsets and integer bounds before
+submission. Custom focus or form-validation layers are unnecessary.
 
 Use semantic landmarks, labelled fields, tables and definition lists. Native CSS
 uses Grid/Flexbox, logical properties, nesting, `oklch`, `color-mix` and dynamic
@@ -176,11 +185,11 @@ fonts. Focus mode hides inspectors without unmounting the editor or disconnectin
 the worker. Narrow layouts, zoom, visible focus and reduced motion require visual
 and keyboard acceptance.
 
-The future interface extends these regions: multiple documents and instructions in
-the center; registers, flags and watches on the right; memory, diagnostics and traces
-below. Introduce navigators only when collections exist, and coordinate source and
-instruction selection through real provenance. No inert controls or empty views
-stand in for planned capabilities. The layout draws on
+The observation area includes static instruction inspection. Planned expansion
+adds multiple documents and coordinated instructions in the center, watches on the
+right, and diagnostics/traces below. Introduce navigators only when collections
+exist, and coordinate source/instruction selection through real provenance. Do not
+add inert controls or empty views for planned capabilities. The layout draws on
 [VS Code](https://code.visualstudio.com/docs/getstarted/userinterface) and
 [Binary Ninja](https://docs.binary.ninja/guide/index.html) while keeping this workflow compact.
 
@@ -191,7 +200,10 @@ locale, supported system preference, then English. `Intl.Locale` validates tags
 and distinguishes Hans/Hant; Traditional Chinese is not silently treated as Simplified.
 [Paraglide](https://paraglidejs.com/strategy) messages, document language, editor
 phrases and accessible names update without reloading or losing edits/search state.
-Source identifiers and assembly syntax are not translated.
+Message calls receive the active locale explicitly. Source identifiers, assembly
+syntax, register names, file extensions and standard units are not translated.
+Application-supplied file-dialog titles follow the selected locale; system-owned
+dialog controls follow the host's language settings.
 
 Product copy names actions and observable state, distinguishes builds from sessions,
 and gives useful recovery steps. Internal delivery counters, host paths and raw
@@ -199,9 +211,20 @@ backend diagnostics stay out of ordinary views. Both languages are edited for
 natural, concise wording; keys and placeholders must agree.
 
 Browser storage retains a bounded scratch document and validated display preferences.
-This is not a complete experiment save format. Saved experiments need versioned
-validation, atomic replacement, conflict detection and save/reopen acceptance.
-Use standard source and ELF alongside structured setup metadata where possible.
+Files use standard UTF-8 assembly, raw bytes and ELF; no saved-experiment container
+is planned. Import replaces the current source only if it has not changed while the
+picker was open. Source exports preserve BOM and newline bytes until editing;
+CodeMirror edits use its normal LF representation. Binary imports are separate,
+transient inspection inputs and do not replace the loaded machine.
+
+The desktop file boundary uses Tauri's [dialog plugin](https://tauri.app/plugin/dialog/)
+and bounded Rust I/O. Only the main window can invoke import/export. The chosen
+path stays native; files are validated before publication, and exports use a
+flushed temporary file in the destination directory followed by
+[`NamedTempFile::persist`](https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist).
+This provides replacement atomicity, not a promise of crash durability for the
+containing directory. Cancellation is a normal outcome.
+No frontend filesystem scope or automatic write to an earlier path is granted.
 
 ## Execution, performance and containment
 

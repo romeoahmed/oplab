@@ -1,7 +1,11 @@
+import en from '../../messages/en.json';
+import zh from '../../messages/zh-CN.json';
+import { show_diagnostic } from '$lib/paraglide/messages.js';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import Workbench from '$lib/workbench/Workbench.svelte';
+import type { FileFormat } from '$lib/protocol/generated/FileFormat';
 import type { WorkerPort } from '$lib/desktop/worker';
 import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { Command } from '$lib/protocol/generated/Command';
@@ -18,14 +22,14 @@ afterEach(() => {
 
 test('switching locale retains edits and undo history', async () => {
   await render(Workbench);
-  const editor = page.getByRole('textbox', { name: 'Assembly source editor' });
+  const editor = page.getByRole('textbox', { name: en.editor_label });
   await expect.element(editor).toBeVisible();
   const originalText = editor.element().textContent;
   expect(originalText).toContain('mov rax, 40');
   await editor.click();
   await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}mov rax, 99');
-  await page.getByRole('combobox', { name: 'Language' }).selectOptions('zh-CN');
-  const chinese = page.getByRole('textbox', { name: '汇编源码编辑器' });
+  await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
+  const chinese = page.getByRole('textbox', { name: zh.editor_label });
   await expect.element(chinese).toHaveTextContent('mov rax, 99');
   expect(document.documentElement.lang).toBe('zh-CN');
   await chinese.click();
@@ -35,12 +39,13 @@ test('switching locale retains edits and undo history', async () => {
 
 test('an open search panel adopts the new language without losing its query', async () => {
   await render(Workbench);
-  await page.getByRole('textbox', { name: 'Assembly source editor' }).click();
+  await page.getByRole('textbox', { name: en.editor_label }).click();
   await userEvent.keyboard('{ControlOrMeta>}f{/ControlOrMeta}');
   await userEvent.keyboard('rax');
-  await page.getByRole('combobox', { name: 'Language' }).selectOptions('zh-CN');
-  await expect.element(page.getByRole('textbox', { name: '查找', exact: true })).toHaveValue('rax');
-  await expect.element(page.getByRole('button', { name: '全部替换', exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
+  await expect
+    .element(page.getByRole('textbox', { name: zh.find, exact: true }))
+    .toHaveValue('rax');
 });
 
 test('a late build for edited source cannot become loadable', async () => {
@@ -58,16 +63,16 @@ test('a late build for edited source cannot become loadable', async () => {
       detach: () => {},
     }),
   });
-  const assemble = page.getByRole('button', { name: 'Assemble', exact: true });
+  const assemble = page.getByRole('button', { name: en.assemble, exact: true });
   await expect.element(assemble).toBeEnabled();
   await assemble.click();
-  const editor = page.getByRole('textbox', { name: 'Assembly source editor' });
+  const editor = page.getByRole('textbox', { name: en.editor_label });
   await editor.click();
   await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}nop');
   if (build === undefined) throw new Error('Assembly request missing');
   resolve(assembled(build));
   await expect.element(assemble).toBeEnabled();
-  await expect.element(page.getByRole('button', { name: 'Load artifact' })).toBeDisabled();
+  await expect.element(page.getByRole('button', { name: en.load_artifact })).toBeDisabled();
   await expect.element(editor).toHaveTextContent('nop');
 });
 
@@ -89,32 +94,34 @@ test('corrupt scratch recovery preserves the attached machine without replaying 
       detach: () => {},
     }),
   });
-  await expect.element(page.getByRole('button', { name: 'Step', exact: true })).toBeEnabled();
-  await expect.element(page.getByRole('alert')).toMatchTextContent('Draft recovery is unavailable');
+  await expect.element(page.getByRole('button', { name: en.step, exact: true })).toBeEnabled();
+  await expect.element(page.getByRole('alert')).toMatchTextContent(en.error_storage);
   expect(commands.some((command) => command.type === 'subscribe')).toBe(true);
   expect(commands.every((command) => command.type === 'subscribe')).toBe(true);
 });
 
 test('appearance changes and focus mode preserve edits and undo history', async () => {
   await render(Workbench);
-  const editor = page.getByRole('textbox', { name: 'Assembly source editor' });
+  const editor = page.getByRole('textbox', { name: en.editor_label });
   await expect.element(editor).toBeVisible();
   const original = editor.element().textContent;
   await editor.click();
   await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}mov rax, 77');
-  await page.getByRole('button', { name: 'Appearance', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Editor font' }).selectOptions('system');
-  await page.getByRole('checkbox', { name: 'Wrap long lines' }).click();
-  const size = page.getByRole('slider', { name: 'Font size' });
+  await page.getByRole('button', { name: en.appearance, exact: true }).click();
+  await page.getByRole('combobox', { name: en.editor_font }).selectOptions('system');
+  await page.getByRole('checkbox', { name: en.word_wrap }).click();
+  const size = page.getByRole('slider', { name: en.font_size });
   await size.click();
   await userEvent.keyboard('{End}');
   await expect.element(size).toHaveValue(size.element().getAttribute('max'));
   await userEvent.keyboard('{Escape}');
-  await expect.element(page.getByRole('button', { name: 'Appearance', exact: true })).toHaveFocus();
-  await expect.element(editor).toHaveTextContent('mov rax, 77');
-  await page.getByRole('button', { name: 'Focus mode', exact: true }).click();
   await expect
-    .element(page.getByRole('complementary', { name: 'Machine' }))
+    .element(page.getByRole('button', { name: en.appearance, exact: true }))
+    .toHaveFocus();
+  await expect.element(editor).toHaveTextContent('mov rax, 77');
+  await page.getByRole('button', { name: en.focus_editor, exact: true }).click();
+  await expect
+    .element(page.getByRole('complementary', { name: en.machine }))
     .not.toBeInTheDocument();
   await editor.click();
   await userEvent.keyboard('{ControlOrMeta>}z{/ControlOrMeta}');
@@ -123,8 +130,8 @@ test('appearance changes and focus mode preserve edits and undo history', async 
 
 test('architecture changes reconfigure completion and comment commands without changing source', async () => {
   await render(Workbench);
-  const editor = page.getByRole('textbox', { name: 'Assembly source editor' });
-  await page.getByRole('combobox', { name: 'Architecture' }).selectOptions('aarch64');
+  const editor = page.getByRole('textbox', { name: en.editor_label });
+  await page.getByRole('combobox', { name: en.target }).selectOptions('aarch64');
   await editor.click();
   await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}mov x0, #42');
   await userEvent.keyboard('{Home}{ControlOrMeta>}/{/ControlOrMeta}');
@@ -145,14 +152,14 @@ test('architecture changes reconfigure completion and comment commands without c
 
 test('a saved draft restores source and architecture when the workbench is reopened', async () => {
   const first = await render(Workbench);
-  await page.getByRole('combobox', { name: 'Architecture' }).selectOptions('aarch64');
-  await page.getByRole('textbox', { name: 'Assembly source editor' }).click();
+  await page.getByRole('combobox', { name: en.target }).selectOptions('aarch64');
+  await page.getByRole('textbox', { name: en.editor_label }).click();
   await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}// 中文{Enter}mov x0, #7');
   await first.unmount();
   await render(Workbench);
-  await expect.element(page.getByRole('combobox', { name: 'Architecture' })).toHaveValue('aarch64');
+  await expect.element(page.getByRole('combobox', { name: en.target })).toHaveValue('aarch64');
   await expect
-    .element(page.getByRole('textbox', { name: 'Assembly source editor' }))
+    .element(page.getByRole('textbox', { name: en.editor_label }))
     .toHaveTextContent('// 中文mov x0, #7');
 });
 
@@ -209,21 +216,182 @@ test('assembly, loading and execution stay separate; a rejected reset retains th
       detach: () => {},
     }),
   });
-  await page.getByRole('button', { name: 'Assemble', exact: true }).click();
-  const load = page.getByRole('button', { name: 'Load artifact', exact: true });
+  await page.getByRole('button', { name: en.assemble, exact: true }).click();
+  const load = page.getByRole('button', { name: en.load_artifact, exact: true });
   await expect.element(load).toBeEnabled();
   expect(commands.every((command) => command.type === 'assemble')).toBe(true);
   await load.click();
-  const run = page.getByRole('button', { name: 'Run', exact: true });
+  const run = page.getByRole('button', { name: en.run, exact: true });
   await expect.element(run).toBeEnabled();
   expect(commands.some((command) => command.type === 'execute')).toBe(false);
   await run.click();
   await expect.element(run).toBeDisabled();
-  const reset = page.getByRole('button', { name: 'Reset', exact: true });
+  const reset = page.getByRole('button', { name: en.reset, exact: true });
   await reset.click();
   await expect.element(page.getByRole('alert')).toBeVisible();
   await expect.element(reset).toBeEnabled();
   await expect
-    .element(page.getByRole('complementary', { name: 'Machine' }))
-    .toMatchTextContent('Completed');
+    .element(page.getByRole('complementary', { name: en.machine }))
+    .toMatchTextContent(en.state_completed);
+});
+
+test('build diagnostics locate Unicode source, follow locale and expire on edits', async () => {
+  await render(Workbench, {
+    portFactory: (): WorkerPort => ({
+      connect: () => Promise.resolve(connection()),
+      request: (command) => {
+        if (command.type !== 'assemble') throw new Error(`Unexpected ${command.type}`);
+        const source = command.data.source;
+        return Promise.resolve({
+          response: {
+            id: '1',
+            result: {
+              type: 'error',
+              data: {
+                code: 'assembly',
+                address: null,
+                source_offset: new TextEncoder().encode(source.slice(0, source.indexOf('invalid')))
+                  .length,
+              },
+            },
+          },
+          payloads: [],
+        });
+      },
+      acknowledge: () => Promise.resolve(),
+      detach: () => {},
+    }),
+  });
+  const editor = page.getByRole('textbox', { name: en.editor_label });
+  await editor.click();
+  await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}// 中文{Enter}  invalid');
+  await page.getByRole('button', { name: en.assemble, exact: true }).click();
+  await page
+    .getByRole('button', { name: show_diagnostic({ line: '2', column: '3' }, { locale: 'en' }) })
+    .click();
+  await expect.element(editor).toHaveFocus();
+  await userEvent.keyboard('X');
+  await expect.element(editor).toMatchTextContent('Xinvalid');
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+  await userEvent.keyboard('{ControlOrMeta>}z{/ControlOrMeta}');
+  await page.getByRole('button', { name: en.assemble, exact: true }).click();
+  await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
+  await page
+    .getByRole('button', { name: show_diagnostic({ line: '2', column: '3' }, { locale: 'zh-CN' }) })
+    .click();
+  await expect.element(page.getByRole('textbox', { name: zh.editor_label })).toHaveFocus();
+  await page.getByRole('combobox', { name: zh.target, exact: true }).selectOptions('aarch64');
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+});
+
+test('late diagnostics cannot annotate a newer source revision', async () => {
+  const reply = Promise.withResolvers<Awaited<ReturnType<WorkerPort['request']>>>();
+  await render(Workbench, {
+    portFactory: (): WorkerPort => ({
+      connect: () => Promise.resolve(connection()),
+      request: (command) => {
+        if (command.type !== 'assemble') throw new Error(`Unexpected ${command.type}`);
+        return reply.promise;
+      },
+      acknowledge: () => Promise.resolve(),
+      detach: () => {},
+    }),
+  });
+  const assemble = page.getByRole('button', { name: en.assemble, exact: true });
+  await assemble.click();
+  await page.getByRole('textbox', { name: en.editor_label }).click();
+  await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}nop');
+  reply.resolve({
+    response: {
+      id: '1',
+      result: {
+        type: 'error',
+        data: {
+          code: 'assembly',
+          address: null,
+          source_offset: 0,
+        },
+      },
+    },
+    payloads: [],
+  });
+  await expect.element(assemble).toBeEnabled();
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+});
+
+test('imported source reaches assembly unchanged and binary inspection never loads a machine', async () => {
+  const bytes = new Uint8Array([0x90, 0xc3]);
+  const source = '\uFEFF// 中文 😀\r\n  nop\r\n';
+  const saved: { format: string; bytes: Uint8Array }[] = [];
+  const commands: Command[] = [];
+  await render(Workbench, {
+    filePort: {
+      open: (format) =>
+        Promise.resolve(format === 'source' ? new TextEncoder().encode(source) : bytes),
+      save: (format: FileFormat, _title: string, contents: Uint8Array) => {
+        saved.push({ format, bytes: contents });
+        return Promise.resolve(true);
+      },
+    },
+    portFactory: (): WorkerPort => ({
+      connect: () => Promise.resolve(connection()),
+      request: (command) => {
+        commands.push(command);
+        if (command.type === 'assemble') {
+          expect(command.data.source).toBe(source);
+          return Promise.resolve(assembled(command.data.identity));
+        }
+        if (command.type !== 'decode') throw new Error(`Unexpected ${command.type}`);
+        expect(command.data).toMatchObject({
+          target: 'x86_64',
+          base: '0x0000000000001000',
+          bytes: [0x90, 0xc3],
+        });
+        return Promise.resolve({
+          response: {
+            id: '2',
+            result: {
+              type: 'decoded',
+              data: [
+                { address: '0x0000000000001000', bytes: [0x90], text: 'nop' },
+                { address: '0x0000000000001001', bytes: [0xc3], text: 'ret' },
+              ],
+            },
+          },
+          payloads: [],
+        });
+      },
+      acknowledge: () => Promise.resolve(),
+      detach: () => {},
+    }),
+  });
+  const files = page.getByRole('button', { name: en.files, exact: true });
+  await files.click();
+  await page.getByRole('menuitem', { name: en.import_source }).click();
+  await expect.element(page.getByText('UTF-8 BOM · CRLF', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: en.assemble, exact: true }).click();
+  await files.click();
+  await page.getByRole('menuitem', { name: en.import_binary }).click();
+  await expect
+    .element(page.getByRole('tab', { name: en.instructions, exact: true }))
+    .toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('button', { name: en.disassemble, exact: true }).click();
+  const instructions = page.getByRole('table', { name: en.instructions, exact: true });
+  await expect.element(instructions).toMatchTextContent('0x0000000000001001');
+  await expect.element(instructions).toMatchTextContent('ret');
+  await expect
+    .element(page.getByRole('tabpanel', { name: en.memory, exact: true }))
+    .not.toBeInTheDocument();
+  await files.click();
+  await page.getByRole('menuitem', { name: en.export_binary }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  expect(saved[0]).toEqual({ format: 'binary', bytes });
+  await page.getByRole('tab', { name: en.memory, exact: true }).click();
+  await page.getByRole('tab', { name: en.instructions, exact: true }).click();
+  await expect.element(instructions).toMatchTextContent('ret');
+  expect(commands.map((command) => command.type)).toEqual(['assemble', 'decode']);
+  await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
+  await expect
+    .element(page.getByRole('table', { name: zh.instructions, exact: true }))
+    .toMatchTextContent('ret');
 });

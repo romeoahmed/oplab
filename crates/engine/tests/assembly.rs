@@ -47,23 +47,12 @@ fn integer_and_backward_branch_encodings_match_architecture_fixtures()
 }
 
 #[test]
-fn assembly_rejects_limits_unknown_labels_and_mismatched_settings() {
+fn assembly_rejects_limits_and_mismatched_settings() {
     for target in [Target::X86_64, Target::Aarch64] {
         let oversized = assembly::assemble(build(target), ".space 1048576");
         assert_eq!(
             oversized.map(|_| ()).map_err(|error| error.code),
             Err(DiagnosticCode::ResourceLimit)
-        );
-        let mnemonic = if target == Target::X86_64 {
-            "jmp missing"
-        } else {
-            "b missing"
-        };
-        assert_eq!(
-            assembly::assemble(build(target), mnemonic)
-                .map(|_| ())
-                .map_err(|error| error.code),
-            Err(DiagnosticCode::Assembly)
         );
         let mut identity = build(target);
         identity.assembler.version = "unknown".into();
@@ -170,8 +159,8 @@ fn assembler_filesystem_is_empty_and_failure_does_not_poison_the_next_call()
 }
 
 #[test]
-fn standard_section_layout_preserves_origin_alignment_and_utf8_diagnostics()
--> Result<(), Box<dyn std::error::Error>> {
+fn standard_section_layout_preserves_origin_and_alignment() -> Result<(), Box<dyn std::error::Error>>
+{
     for target in [Target::X86_64, Target::Aarch64] {
         for directive in [".org", "\".org\""] {
             let source = format!("{directive} 16, 0x42\ndone: nop");
@@ -180,6 +169,18 @@ fn standard_section_layout_preserves_origin_alignment_and_utf8_diagnostics()
             assert_eq!(text(&artifact)?.get(..16), Some(&[0x42; 16][..]));
             assert_eq!(symbol(&artifact, "done")?, 0x1010);
         }
+        // Section alignment can make a legal PT_LOAD extent exceed a decode window.
+        let artifact = assembly::assemble(
+            build(target),
+            ".text\nnop\n.section .code,\"ax\"\n.p2align 17\ndone: nop",
+        )
+        .map_err(|error| format!("{error:?}"))?;
+        let file = object::File::parse(artifact.image.as_slice())?;
+        assert!(
+            file.segments()
+                .any(|segment| segment.file_range().1 > 65536)
+        );
+        assert_eq!(symbol(&artifact, "done")?, 0x20000);
     }
     let source = "nop\n.p2align 4\ndone: ret";
     let result = assembly::assemble(build(Target::X86_64), source);
@@ -198,18 +199,44 @@ fn standard_section_layout_preserves_origin_alignment_and_utf8_diagnostics()
             .map_err(|error| error.code),
         Err(DiagnosticCode::InvalidInput)
     );
-    let source = "// 中文\ninvalid_opcode";
-    let error = assembly::assemble(build(Target::X86_64), source).err();
-    assert_eq!(
-        error.as_ref().map(|error| error.code),
-        Some(DiagnosticCode::Assembly)
-    );
-    assert_eq!(
-        error
-            .and_then(|error| error.source_offset)
-            .map(|offset| offset as usize),
-        source.find("invalid_opcode")
-    );
+    Ok(())
+}
+
+#[test]
+fn diagnostics_refer_to_original_utf8_source_or_have_no_location()
+-> Result<(), Box<dyn std::error::Error>> {
+    for target in [Target::X86_64, Target::Aarch64] {
+        for newline in ["\n", "\r\n"] {
+            let source = format!("// 中文 😀e\u{301}{newline}  invalid_opcode");
+            let error = assembly::compile(target, &source)
+                .err()
+                .ok_or("invalid opcode accepted")?;
+            assert_eq!(error.code, DiagnosticCode::Assembly);
+            assert_eq!(
+                error.source_offset.map(|offset| offset as usize),
+                source.find("invalid_opcode")
+            );
+        }
+        let source = ".macro broken\ninvalid_opcode\n.endm\nbroken";
+        let error = assembly::compile(target, source)
+            .err()
+            .ok_or("invalid macro accepted")?;
+        assert_eq!(error.code, DiagnosticCode::Assembly);
+        // Expanded macro buffers have no verified original-source location.
+        assert!(error.source_offset.is_none());
+        let error = assembly::assemble(
+            build(target),
+            if target == Target::X86_64 {
+                "jmp missing_symbol"
+            } else {
+                "b missing_symbol"
+            },
+        )
+        .err()
+        .ok_or("undefined symbol accepted")?;
+        assert_eq!(error.code, DiagnosticCode::Assembly);
+        assert!(error.source_offset.is_none());
+    }
     Ok(())
 }
 

@@ -5,6 +5,17 @@ import type { BuildIdentity } from './generated/BuildIdentity';
 const maximum = (1n << 64n) - 1n;
 
 /**
+ * Normalize hexadecimal user input, with optional prefix and surrounding whitespace.
+ *
+ * @throws RangeError - The input is empty, nonhexadecimal or outside the unsigned 64-bit range.
+ */
+export function normalizeAddress(value: string): HexAddress {
+  const digits = value.trim().replace(/^0x/i, '');
+  if (!/^[\da-f]+$/i.test(digits)) throw new RangeError('Invalid address');
+  return formatAddress(BigInt(`0x${digits}`));
+}
+
+/**
  * Parse `0x` followed by exactly sixteen lowercase hexadecimal digits.
  *
  * @throws RangeError - The address is not in canonical wire form.

@@ -37,6 +37,18 @@ export function stateLabel(status: Status | undefined, locale: Locale): string {
 export function problemLabel(code: string, locale: Locale): string {
   const options = { locale };
   switch (code) {
+    case 'file_encoding':
+      return m.error_file_encoding({}, options);
+    case 'file_size':
+      return m.error_file_size({}, options);
+    case 'file_conflict':
+      return m.error_file_conflict({}, options);
+    case 'file_read':
+      return m.error_file_read({}, options);
+    case 'file_write':
+      return m.error_file_write({}, options);
+    case 'decode':
+      return m.error_decode({}, options);
     case 'assembly':
       return m.error_assembly({}, options);
     case 'completion':

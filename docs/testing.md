@@ -15,7 +15,7 @@ are diagnostic information, not acceptance targets.
 | `crates/core/tests`                               | Scalar/schema validity, address/permission rules, fragmented and incomplete framing |
 | `crates/engine/tests`                             | Exact encodings, ELF geometry, real guest effects, CLI and worker processes         |
 | `crates/engine/tests/unit`                        | Private scheduling, output reservations, cancellation and stream baselines          |
-| `src-tauri/tests/unit`                            | Real worker supervision, leases, reattachment, unknown outcomes and kill/reap       |
+| `src-tauri/tests/unit`                            | Worker supervision, leases, unknown outcomes, kill/reap and bounded file I/O        |
 | `tests/protocol`, `tests/i18n`, `tests/workbench` | Frontend properties, catalogs, recovery and browser interaction                     |
 
 Rust `tests/unit` files are private `#[cfg(test)]` modules included through `#[path]`;
@@ -43,12 +43,18 @@ implementation in the expected result or merely round-trip two production helper
 | Build scheduling           | Latest valid request per document, cancellation and exactly-once delivery without assuming unrelated reply order                   |
 | Observations               | Generated full/delta histories, independent complete samples, exact counters, retained baselines and stale identities              |
 | Editor language            | Target-specific literal/comment examples and incremental parsing compared with a fresh parse after generated edits                 |
+| Source locations           | Unicode byte boundaries against CodeMirror text/line positions, explicit CRLF/BOM cases and invalid-boundary rejection             |
+| File inspection            | Exact ELF extents, arbitrary 64-bit byte windows, standard filesystem I/O and documented size/encoding boundaries                  |
 | Recovery                   | Unicode and incomplete inputs survive; source budgets count UTF-8 bytes; valid preferences survive independently of corrupt fields |
 | Localization               | Catalog key/parameter agreement and ordered supported-language preferences                                                         |
 
-Properties use bounded inputs so failures remain small and reproducible. Native
-program generation has a lower case count than pure logic; it still executes real
-LLVM/Unicorn work. Repeated runs must explore new inputs rather than permanently
+Properties use bounded inputs so failures remain small and reproducible. Fixed
+protocol boundaries use deterministic examples, not random selection from a short
+list of constants. File-budget tests state the documented limits independently of
+production constants; file I/O properties use standard filesystem reads/writes as
+the oracle in each direction. Native program generation has a lower case count
+than pure logic; it still executes real LLVM/Unicorn work. Repeated runs must
+explore new inputs rather than permanently
 pinning every property to one seed.
 
 For a failure, preserve the minimized input and the printed replay information.
@@ -92,12 +98,23 @@ and [Playwright best practices](https://playwright.dev/docs/best-practices): use
 semantic locators, real input and awaited visible outcomes. Use the renderer's
 [automatic cleanup](https://vitest.dev/api/browser/svelte) and clear storage between
 cases; explicitly unmount only when testing lifecycle behavior.
+Read accessible names from the locale catalogs. Do not snapshot translations or
+hard-code product wording in assertions; copy edits must not break behavior tests.
 
 Coverage includes locale changes with retained text/history/search, late builds,
 corrupt scratch reattachment, actual draft unmount/reopen, appearance/focus mode,
-completion/comment commands and native disabled controls. A workbench flow verifies
-that assembling does not load, loading does not run, ELF completion metadata reaches
-the load request, and a rejected reset retains the displayed machine. Further
+completion/comment commands and native disabled controls. Diagnostic cases cover
+Unicode navigation, language changes and rejection of late build failures. Focused
+`Files` tests cover exact export payloads, unavailable actions, cancellation,
+read/write/encoding failures, retries, import conflicts and unmounted callbacks.
+The workbench file flow verifies source reaches assembly unchanged and raw-byte
+inspection stays separate from machine loading. Instruction tests use variable-length
+instructions to distinguish byte advancement from row counting, preserve failure
+categories, and reject pending successes/errors after bytes, architecture, base or
+connection changes. Native offset validation and panel/locale retention are exercised
+through user controls. The execution flow verifies that assembling does not load,
+loading does not run, ELF completion metadata reaches the load request, and a
+rejected reset retains the displayed machine. Further
 keyboard/screen-reader acceptance, including toolbar focus when all actions begin
 disabled, remains open. Use Bits UI
 and native semantics; do not add a custom focus framework to satisfy a test.
@@ -130,6 +147,9 @@ upstream compatibility verification.
 - **Worker:** actual binary transfers, cancellation with one outcome, controls during
   assembly, reserved capacity, shutdown barriers, writer loss, generations and full/delta
   subscriptions; invalid replacement preserves the current machine/subscription.
+- **Files:** Proptest-generated binary/Unicode contents against standard filesystem
+  I/O, explicit UTF-8/BOM/newline and size boundaries, missing/non-file paths, and
+  preservation of the old file on rejected replacement.
 - **Desktop:** leases, real execution, withheld frontend credit, reattachment without
   mutation replay and nonresponsive children producing unknown outcomes before kill/reap.
 
@@ -139,8 +159,12 @@ For UI changes, verify a fresh static desktop bundle as well as the browser:
    expected register/memory effect (the built-in examples store 42).
 2. Reset and verify initial state. Exercise a bounded loop, pause and stop.
 3. Edit source or change target; confirm the old machine remains distinct and stale
-   artifacts cannot replace current work. Exercise an assembly error.
-4. Verify fonts, dynamic editor loading, both locales and focus behavior under the
+   artifacts cannot replace current work. Exercise an assembly error after Unicode
+   source, navigate to its point and edit to clear it.
+4. Import/export UTF-8 text and raw code; compare exact bytes. Inspect a known ELF
+   code segment and imported bytes, change target/base, and verify stale results
+   disappear. File selection/cancellation must not load or run a machine.
+5. Verify fonts, dynamic editor loading, both locales and focus behavior under the
    actual WebView origin/CSP. Test failure/restart when the supervisor changes.
 
 These checks do not establish a full ISA/extension matrix, source mapping, TLS,

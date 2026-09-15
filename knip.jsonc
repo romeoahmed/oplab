@@ -1,5 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Svelte's dynamically imported editor is a separate production entry.
+  "entry": ["src/lib/workbench/editor/Editor.svelte"],
   "ignoreDependencies": [
     // Invoked by cargo xtask; Knip does not inspect Rust task commands.
     "oxfmt",

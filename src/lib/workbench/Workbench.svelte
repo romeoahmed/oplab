@@ -18,7 +18,16 @@
     Box,
     ArrowRight,
     CircleCheck,
+    ListOrdered,
+    LocateFixed,
+    RefreshCw,
   } from '@lucide/svelte';
+  import { desktopFiles, type FilePort } from '$lib/desktop/files';
+  import Files from './Files.svelte';
+  import Instructions from './instructions/Instructions.svelte';
+  import { segmentBytes } from './instructions/bytes';
+  import type { Diagnostic } from '@codemirror/lint';
+  import { sourceInfo, sourceLocation } from './editor/source';
   import Machine from './machine/Machine.svelte';
   import Memory from './machine/Memory.svelte';
   import ToolbarAction from './ToolbarAction.svelte';
@@ -30,22 +39,75 @@
   import * as m from '$lib/paraglide/messages.js';
   import './workbench.css';
 
-  const { portFactory }: { portFactory?: Parameters<typeof createWorkbench>[0] } = $props();
+  const {
+    portFactory,
+    filePort = desktopFiles(),
+  }: { portFactory?: Parameters<typeof createWorkbench>[0]; filePort?: FilePort | null } = $props();
   const language = createLocaleController();
   const work = createWorkbench(untrack(() => portFactory));
+  let editor = $state<{ revealDiagnostic: () => void }>();
+  const options = $derived({ locale: language.current });
+  let imported = $state.raw<Uint8Array>();
+  let byteSource = $state('');
+  let observationTab = $state('memory');
+  let fileProblem = $state<string | null>(null);
+  const artifactSources = $derived(
+    work.candidate?.artifact.image.segments
+      .flatMap((segment, index) => {
+        if (segment.file_bytes === 0 || work.candidate === null) return [];
+        return [
+          {
+            id: `segment-${String(index)}`,
+            label: `${segment.address} · ${segment.flags & 4 ? 'R' : '-'}${segment.flags & 2 ? 'W' : '-'}${segment.flags & 1 ? 'X' : '-'} · ${String(segment.file_bytes)} B`,
+            executable: (segment.flags & 1) !== 0,
+            bytes: segmentBytes(work.candidate.image, segment),
+            target: work.candidate.artifact.identity.target,
+            base: segment.address,
+          },
+        ];
+      })
+      .toSorted((left, right) => Number(right.executable) - Number(left.executable)) ?? [],
+  );
+  const byteSources = $derived([
+    ...(imported === undefined
+      ? []
+      : [
+          {
+            id: 'imported',
+            label: m.imported_binary({}, options),
+            bytes: imported,
+            target: work.target,
+            base: work.base,
+          },
+        ]),
+    ...artifactSources,
+  ]);
+  const selectedBytes = $derived(
+    byteSources.find((item) => item.id === byteSource) ?? byteSources[0],
+  );
   let initialized = $state(false);
   let preferences = $state({ ...defaultPreferences });
   let preferencesFailed = $state(false);
   let focused = $state(false);
   let cursor = $state({ line: 1, column: 1 });
-  const options = $derived({ locale: language.current });
+  const location = $derived(sourceLocation(work.source, work.diagnostic?.source_offset ?? null));
+  const diagnostic = $derived<Diagnostic | null>(
+    location === null || work.diagnostic === null
+      ? null
+      : {
+          from: location.position,
+          to: location.position,
+          severity: 'error',
+          message: problemLabel(work.diagnostic.code, language.current),
+        },
+  );
   const observation = $derived(work.snapshot?.observation);
   const running = $derived(observation?.status.type === 'running');
   const resumable = $derived(
     observation !== undefined &&
       ['ready', 'paused', 'stepped', 'breakpoint'].includes(observation.status.type),
   );
-  const lines = $derived(work.source.split('\n').length);
+  const sourceDetails = $derived(sourceInfo(work.source));
   const actions = $derived([
     {
       label: work.building ? m.assembling({}, options) : m.assemble({}, options),
@@ -175,6 +237,26 @@
             >oplab<span class="brand-period">.</span></strong
           >
         </div>
+        <Files
+          port={filePort}
+          locale={language.current}
+          source={work.source}
+          object={work.candidate?.object}
+          image={work.candidate?.image}
+          binary={selectedBytes?.bytes}
+          onsource={(source: string) => {
+            work.setSource(source);
+          }}
+          onbinary={(bytes: Uint8Array) => {
+            imported = bytes;
+            byteSource = 'imported';
+            observationTab = 'instructions';
+            focused = false;
+          }}
+          onerror={(code: string | null) => {
+            fileProblem = code;
+          }}
+        />
         <div class="experiment-title">
           <h1>{m.experiment({}, options)}</h1>
           <span class="local-badge">{m.local_scratch({}, options)}</span>
@@ -259,7 +341,7 @@
           <header class="pane-header source-header">
             <div class="file-heading">
               <FileCode size={17} aria-hidden="true" />
-              <h2>experiment.asm</h2>
+              <h2>experiment.s</h2>
               <span class="revision-tag">r{work.revision}</span>
             </div>
             <div class="pane-tools">
@@ -299,6 +381,8 @@
               <p class="editor-message muted-note" role="status">{m.editor_loading({}, options)}</p>
             {:then { default: Editor }}
               <Editor
+                bind:this={editor}
+                {diagnostic}
                 value={work.source}
                 locale={language.current}
                 target={work.target}
@@ -339,11 +423,16 @@
           loadedRevision={work.loadedRevision}
           locale={language.current}
         />
-        <Tabs.Root value="memory" class="observation-pane">
+        <Tabs.Root bind:value={observationTab} class="observation-pane">
           <div class="pane-header">
             <Tabs.List class="panel-tabs" aria-label={m.observation_views({}, options)}
               ><Tabs.Trigger value="memory"
                 ><Database size={15} aria-hidden="true" />{m.memory({}, options)}</Tabs.Trigger
+              ><Tabs.Trigger value="instructions"
+                ><ListOrdered size={15} aria-hidden="true" />{m.instructions(
+                  {},
+                  options,
+                )}</Tabs.Trigger
               ><Tabs.Trigger value="artifact"
                 ><Box size={15} aria-hidden="true" />{m.artifact({}, options)}</Tabs.Trigger
               ></Tabs.List
@@ -380,6 +469,31 @@
               window={observation?.memory ?? null}
               bytes={work.snapshot?.memory ?? null}
               locale={language.current}
+            />
+          </Tabs.Content>
+          <Tabs.Content value="instructions" class="instructions-content">
+            {#if byteSources.length > 0}<label class="byte-source"
+                >{m.byte_source({}, options)}
+                <select
+                  value={selectedBytes?.id}
+                  onchange={(event) => {
+                    byteSource = event.currentTarget.value;
+                  }}
+                >
+                  {#each byteSources as item (item.id)}<option value={item.id}>{item.label}</option
+                    >{/each}
+                </select>
+                {#if selectedBytes?.id !== 'imported' && !work.artifactCurrent}<span class="stale"
+                    >{m.artifact_stale({}, options)}</span
+                  >{/if}
+              </label>{/if}
+            <Instructions
+              bytes={selectedBytes?.bytes}
+              target={selectedBytes?.target ?? work.target}
+              base={selectedBytes?.base ?? work.base}
+              connected={work.connected}
+              locale={language.current}
+              decode={work.decode}
             />
           </Tabs.Content>
           <Tabs.Content value="artifact" class="artifact-content">
@@ -427,13 +541,25 @@
           <span
             >{problemLabel(work.problem, language.current)}
             {work.unknown ? m.unknown_outcome({}, options) : ''}</span
-          >{#if !work.connected && !work.preview}<button
+          >{#if location !== null}<button
+              onclick={() => {
+                editor?.revealDiagnostic();
+              }}
+              ><LocateFixed size={14} aria-hidden="true" />{m.show_diagnostic(
+                { line: String(location.line), column: String(location.column) },
+                options,
+              )}</button
+            >{/if}{#if !work.connected && !work.preview}<button
               onclick={() => {
                 void work.connect(true);
               }}
-              disabled={work.connecting}>{m.reconnect({}, options)}</button
+              disabled={work.connecting}
+              ><RefreshCw size={14} aria-hidden="true" />{m.reconnect({}, options)}</button
             >{/if}
         </div>{/if}
+      {#if fileProblem !== null}<p class="error-banner" role="alert">
+          {problemLabel(fileProblem, language.current)}
+        </p>{/if}
       {#if language.failed || preferencesFailed}<p class="error-banner" role="alert">
           {language.failed ? m.locale_failed({}, options) : m.preferences_failed({}, options)}
         </p>{/if}
@@ -447,7 +573,11 @@
               : work.connected
                 ? m.connected({}, options)
                 : m.state_crashed({}, options)}</span
-        ><span>{m.line_count({ count: String(lines) }, options)}</span><span>UTF-8 · LF</span>
+        ><span>{m.line_count({ count: String(sourceDetails.lines) }, options)}</span><span
+          >UTF-8{work.source.startsWith('\uFEFF') ? ' BOM' : ''} · {sourceDetails.ending === 'mixed'
+            ? m.mixed_newlines({}, options)
+            : sourceDetails.ending}</span
+        >
       </footer>
     </main>
   </Tooltip.Provider>

@@ -5,6 +5,7 @@ import {
   formatCounter,
   parseAddress,
   parseCounter,
+  normalizeAddress,
   sameBuildIdentity,
 } from '$lib/protocol/scalars';
 import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
@@ -18,6 +19,8 @@ test('wire scalars match canonical decimal and hexadecimal without losing bits',
       expect(formatCounter(value)).toBe(decimal);
       expect(parseAddress(hex)).toBe(value);
       expect(parseCounter(decimal)).toBe(value);
+      for (const input of [value.toString(16), ` 0X${value.toString(16).toUpperCase()} `])
+        expect(normalizeAddress(input)).toBe(hex);
     }),
   );
   for (const invalid of ['01', '-1', '+1', '1.0', '18446744073709551616'])
@@ -27,6 +30,8 @@ test('wire scalars match canonical decimal and hexadecimal without losing bits',
     expect(() => formatCounter(invalid)).toThrow(RangeError);
   }
   expect(() => parseAddress('0x00000000000000FF')).toThrow(RangeError);
+  for (const invalid of ['', ' ', '0x', '+1', '-1', '1.5', '0b10z', '1 2', '10000000000000000'])
+    expect(() => normalizeAddress(invalid)).toThrow(RangeError);
 });
 
 test('complete build identity rejects cross-document and stale settings', () => {

@@ -13,7 +13,7 @@ The artifact retains both complete files and a bounded ELF-derived image view.
 
 ### Language and layout
 
-Use LLVM's GNU-style language: initially Intel operands on x86_64 and native
+Use LLVM's GNU-style language: Intel operands by default on x86_64 and native
 LLVM/GNU syntax on little-endian AArch64. Source reaches LLVM unchanged. There is
 no NASM/MASM translation, custom preprocessor or per-instruction fallback.
 Declare x86 operand syntax explicitly in portable examples:
@@ -70,13 +70,16 @@ There are no optimization passes. LLVM still selects legal encodings, expands
 aliases/pseudo-instructions and relaxes assembler branches for final layout.
 Optional LLD relaxation is disabled. `mov rax, 42` retains a 64-bit operand;
 `movabs rax, 42` explicitly requests the 64-bit immediate form. Textual round trips
-need not reproduce original instruction bytes. A future byte-import workflow must
-preserve exact bytes directly.
+need not reproduce original instruction bytes. Raw-byte import/export preserves
+the original bytes directly.
 
 Warnings fail assembly. Diagnostics expose stable categories and an original UTF-8
 byte offset when available, with no raw host paths, source excerpts or macro stacks.
-An offset is not a complete source map. DWARF is retained, but editor ranges,
-macro provenance and source breakpoints are not implemented.
+The desktop converts valid offsets to CodeMirror UTF-16 positions, marks the point
+and offers navigation. Invalid/missing offsets produce a general error without a
+fabricated location. Macro expansion buffers can lack an original-source offset;
+link failures have no source point. An offset is not an instruction range or source
+map. DWARF is retained; macro provenance and source breakpoints remain planned.
 
 The C++23/CXX adapter owns resources through RAII and call-scoped borrows. MC
 finalization runs exactly once, including pools, relaxation, layout, fixups and
@@ -102,6 +105,29 @@ Section size/alignment checks occur after normal finalization. Output storage bo
 do not limit internal LLVM allocations or expansion work. Cancellation cannot
 interrupt an active LLVM/LLD call. [Supervisor cutoffs](protocol.md#desktop-integration)
 provide recovery, not OS-enforced quotas or a complete adversarial sandbox.
+
+## Instruction inspection
+
+The decoder accepts 1–65,536 bytes at an explicit base, with an instruction
+limit of 1–4,096. The desktop requests at most 256 instructions per view and advances
+by the returned instruction lengths. Addresses cannot wrap; AArch64 starts must be
+four-byte aligned. Invalid or incomplete instructions before the limit fail the call
+at the reported address. Bytes beyond the instruction limit remain unexamined.
+
+Inputs are imported raw bytes or one [ELF segment](https://gabi.xinuos.com/elf/07-pheader.html)'s
+exact `p_filesz` extent, up to 1 MiB. Exports retain the entire extent; decode
+requests take at most 64 KiB from the chosen offset. This window exceeds 256
+maximum-length instructions on either target, so paging cannot truncate an
+instruction before the page limit. The view lists segment permissions and
+initially prefers an executable segment. It
+never concatenates disjoint segments, synthesizes BSS/padding, infers boundaries
+from symbols or reconstructs bytes from formatted text. ELF headers and embedded
+data remain data even if a decoder recognizes their bytes as instructions.
+
+Imported bytes use the selected architecture and base; ELF bytes retain their build
+identity. Changing bytes, target or base invalidates the visible decode result.
+These are static file bytes, not a live machine view or verified source mapping.
+Static effects, raw-code loading and broader ISA coverage remain planned.
 
 ## Loading
 

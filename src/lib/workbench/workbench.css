@@ -556,7 +556,7 @@
   border-block-end-color: var(--accent);
 }
 
-.memory-content {
+.memory-content:not([hidden]) {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -957,4 +957,63 @@
 
 .editor-message {
   padding: 20px;
+}
+
+.file-menu {
+  min-inline-size: 220px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 12px 32px #0005;
+  font-size: 13px;
+  z-index: 30;
+
+  [role='menuitem'] {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    border-radius: 4px;
+    cursor: default;
+  }
+
+  [data-highlighted] {
+    background: var(--selection);
+    outline: none;
+  }
+
+  [data-disabled] {
+    color: var(--muted);
+    opacity: 0.5;
+  }
+
+  [role='separator'] {
+    block-size: 1px;
+    margin: 4px 6px;
+    background: var(--border);
+  }
+}
+
+.instructions-content:not([hidden]) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
+  overflow: auto;
+}
+
+.byte-source {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 18px 0;
+  font-size: 12px;
+  color: var(--muted);
+
+  select {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
 }

@@ -178,7 +178,8 @@ engine APIs; the pipe runtime owns process-level lifetime.
 
 ## Desktop integration
 
-The main window has four Tauri commands:
+Four main-window Tauri commands manage the worker. Two separate commands handle
+[file import/export](#desktop-file-boundary).
 
 | Command          | Responsibility                                                                                                               |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -222,10 +223,24 @@ operation failures also exit nonzero.
 
 ```sh
 cargo run --locked -p oplab-engine --bin oplab-cli -- capabilities
-cargo run --locked -p oplab-engine --bin oplab-cli -- assemble x86_64 0x1000 < experiment.asm > experiment.elf
+cargo run --locked -p oplab-engine --bin oplab-cli -- assemble x86_64 0x1000 < experiment.s > experiment.elf
 cargo run --locked -p oplab-engine --bin oplab-cli -- decode aarch64 0x1000 < code.bin
 ```
 
 CLI addresses accept ordinary hexadecimal input, including `0x1000` and `0XFF`.
-These commands do not execute guests. CLI experiment execution and saved projects
-remain planned; current execution is available through the engine and framed worker.
+These commands do not execute guests. CLI execution remains planned; current
+execution is available through the engine and framed worker.
+
+## Desktop file boundary
+
+`import_file` and `export_file` use the Tauri command boundary independently of the
+worker's binary stream. `FileFormat` is generated from Rust alongside the other
+frontend contracts.
+Source is valid UTF-8 up to 256 KiB. Raw binary files and complete ELF exports
+contain 1 byte to 1 MiB. The file budget is independent of the 64 KiB decode-request budget.
+
+Dialogs select each path explicitly. Frontend callers supply a localized title and
+format, and receive contents or cancellation, never host paths. Errors are stable
+categories. Import is read-only; exports validate contents before replacing a
+selected file through a same-directory temporary file. No file operation implies
+assembly, execution or mutation of the current worker session.

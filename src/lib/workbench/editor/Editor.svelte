@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import './editor.css';
-  import { Compartment, EditorState } from '@codemirror/state';
+  import { Annotation, Compartment, EditorState } from '@codemirror/state';
   import {
     EditorView,
     keymap,
@@ -26,6 +26,7 @@
   } from '@codemirror/search';
   import { bracketMatching, indentUnit } from '@codemirror/language';
   import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
+  import { lintGutter, nextDiagnostic, setDiagnostics, type Diagnostic } from '@codemirror/lint';
   import { assembly, assemblyHighlighting } from './language';
   import type { Target } from '$lib/protocol/generated/Target';
   import type { Locale } from '$lib/paraglide/runtime.js';
@@ -36,6 +37,7 @@
     locale,
     target,
     wrap,
+    diagnostic,
     oncursor,
     onchange,
   }: {
@@ -43,9 +45,22 @@
     locale: Locale;
     target: Target;
     wrap: boolean;
+    diagnostic: Diagnostic | null;
     oncursor: (line: number, column: number) => void;
     onchange: (source: string) => void;
   } = $props();
+
+  let currentView: EditorView | undefined;
+
+  /** Reveal the current build diagnostic without replacing editor state or history. */
+  export function revealDiagnostic() {
+    if (currentView === undefined) return;
+    nextDiagnostic(currentView);
+    currentView.dispatch({
+      effects: EditorView.scrollIntoView(currentView.state.selection.main.head),
+    });
+    currentView.focus();
+  }
 
   function translations() {
     const options = { locale };
@@ -75,6 +90,7 @@
 
   /** Own the editor for this attachment; compartment updates preserve editing state. */
   function attachEditor(element: HTMLElement) {
+    const externalSource = Annotation.define<boolean>();
     const language = new Compartment();
     const syntax = new Compartment();
     const wrapping = new Compartment();
@@ -85,6 +101,7 @@
         doc: untrack(() => value),
         extensions: [
           lineNumbers(),
+          lintGutter(),
           history(),
           drawSelection(),
           highlightSpecialChars(),
@@ -94,7 +111,13 @@
           EditorState.allowMultipleSelections.of(true),
           highlightActiveLine(),
           highlightActiveLineGutter(),
-          keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+          keymap.of([
+            ...closeBracketsKeymap,
+            ...defaultKeymap,
+            ...historyKeymap,
+            ...searchKeymap,
+            { key: 'F8', run: nextDiagnostic },
+          ]),
           bracketMatching(),
           closeBrackets(),
           autocompletion(),
@@ -106,7 +129,12 @@
           language.of([]),
           accessibility.of([]),
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) onchange(update.state.doc.toString());
+            if (
+              update.transactions.some(
+                (transaction) => transaction.docChanged && !transaction.annotation(externalSource),
+              )
+            )
+              onchange(update.state.doc.toString());
             if (update.docChanged || update.selectionSet) {
               const position = update.state.selection.main.head;
               const line = update.state.doc.lineAt(position);
@@ -117,6 +145,7 @@
         ],
       }),
     });
+    currentView = view;
     $effect(() => {
       view.dispatch({ effects: syntax.reconfigure(assembly(target)) });
     });
@@ -125,9 +154,16 @@
     });
     $effect(() => {
       const next = value;
-      if (view.state.doc.toString() !== next) {
-        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next } });
+      if (!view.state.doc.eq(view.state.toText(next))) {
+        // Preserve original BOM/newlines in the document owner until the user edits.
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: next },
+          annotations: externalSource.of(true),
+        });
       }
+    });
+    $effect(() => {
+      view.dispatch(setDiagnostics(view.state, diagnostic === null ? [] : [diagnostic]));
     });
     $effect(() => {
       // CodeMirror's built-in panel reads phrases only when constructed.
@@ -152,6 +188,7 @@
       }
     });
     return () => {
+      currentView = undefined;
       view.destroy();
     };
   }

@@ -190,8 +190,9 @@ build/dev command. Use `cargo xtask --help` and subcommand help for options. Foc
 runs use native tool arguments, such as `pnpm test --project logic`,
 `pnpm test --project browser`, or `cargo test -p oplab-core --locked`.
 
-Checks may compile dependencies, refresh ignored generated files, and stage ignored
-binaries. They do not update lockfiles, format tracked source, or change Git staging.
+Verification commands may compile dependencies, refresh ignored generated files
+and stage ignored binaries. They do not update lockfiles, format tracked source
+or change Git staging.
 Use one Vite server per checkout. Frontend and catalog changes use HMR; engine
 changes require worker staging and an app restart. Tauri's watcher does not rebuild
 the independent worker automatically.
@@ -253,8 +254,12 @@ native CSS. There are no Svelte `<style>` blocks or PostCSS adapters.
 The native bridge's `OUT_DIR` holds compilation metadata. xtask obtains it from
 Cargo and runs clang-tidy against the actual cc-rs/CXX compilation database.
 C++ formatting uses the selected LLVM clang-format. Root Cargo dependencies and
-lints are inherited throughout the workspace. Knip's two exceptions document
-Oxfmt invoked by Rust tooling and the inlang-owned message-format plugin.
+lints are inherited throughout the workspace. Knip declares the dynamically imported
+Svelte editor as an entry so its dependency tree remains checked. Its two dependency
+exceptions cover Oxfmt invoked by Rust and the inlang-owned message-format plugin.
+Tauri's dialog plugin supplies native file selection; bounded I/O remains in
+`src-tauri/src/files.rs`. It adds no external build tool or JavaScript filesystem
+permission.
 
 `static/icon.svg` is the application icon master and README logo. Review it in a
 browser at small and large sizes. To regenerate desktop formats:

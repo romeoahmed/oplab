@@ -76,7 +76,7 @@
         </p>{/if}
       <dl class="execution-counts">
         <div>
-          <dt>{m.instructions({}, options)}</dt>
+          <dt>{m.instructions_started({}, options)}</dt>
           <dd>{observation.instructions}</dd>
         </div>
       </dl>

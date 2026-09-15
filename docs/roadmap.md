@@ -25,6 +25,12 @@ an independently distributable application. Checked items describe implementatio
       configuration, appearance, focus mode and adjustable panel proportions.
 - [x] CodeMirror/Lezer lexical assistance, completion, comment/search/history commands,
       bracket matching and multiple selections; dynamically imported editor.
+- [x] Build-scoped diagnostics, exact UTF-8 to UTF-16 positioning, CodeMirror point
+      markers and navigation; stale results cannot annotate newer source.
+- [x] Native UTF-8 source and raw-byte import/export, complete ELF exports, bounded
+      reads and temporary-file replacement; paths stay outside the frontend.
+- [x] Instruction inspection of raw bytes or individual file-backed ELF segments,
+      explicit byte offsets, bounded pages and stale-result rejection.
 - [x] English/Simplified Chinese, self-hosted JetBrains Mono/system monospace,
       font size/wrap preferences, native CSS, Bits UI primitives and Lucide icons.
 - [x] Standard component event composition and native disabled controls; no custom
@@ -36,17 +42,20 @@ an independently distributable application. Checked items describe implementatio
 
 ## Next product work
 
-1. **Diagnostics and provenance:** map UTF-8 diagnostic offsets to UTF-16 editor
-   positions, then derive verified MC/DWARF source/instruction relationships, including
-   macros, duplicate locations, Unicode, data and padding.
-2. **Instruction inspection:** bounded machine-code import, disassembly/static effects
-   and a tested target/extension capability matrix.
-3. **Machine setup:** validated initial registers/mappings, alias writes, executable
-   patches and translated-code invalidation.
-4. **Saved experiments:** versioned setup/source/policy format, atomic save/reopen,
-   conflicts and recovery; CLI execution using the same model.
-5. **Workbench expansion:** multiple documents, coordinated source/instruction focus,
-   accessible draggable separators and large-data views when those capabilities exist.
+1. **Source provenance:** derive verified MC/DWARF source/instruction relationships,
+   including macros, duplicate locations, Unicode, data and padding. Diagnostic
+   points are implemented; they are not instruction provenance.
+2. **Instruction analysis:** static effects and a tested target/extension capability
+   matrix. Raw-byte import and bounded disassembly are implemented.
+3. **Machine setup:** validated initial registers/mappings and explicit raw-code
+   loading, alias writes, executable patches and translated-code invalidation.
+4. **CLI execution:** use standard source/binary inputs and explicit machine policy.
+   There is no planned saved-experiment container or machine-state persistence format.
+5. **Workbench expansion:** multiple source documents, coordinated source/instruction
+   focus, accessible draggable separators and large-data views as needed.
+
+Files use standard assembly text, raw bytes and ELF. Local scratch/settings recovery
+remains; importing a file never implicitly loads or patches a machine.
 
 ## Later capabilities
 
@@ -67,7 +76,7 @@ an independently distributable application. Checked items describe implementatio
 - [ ] Windows/Linux/macOS CI, both guests, coherent native toolchains and declared
       host/WebView minimums; static/cross/universal builds where supported.
 - [ ] Native WebDriver workbench flows with real IPC and worker, including failure,
-      stale edits, reset and eventual save/reopen. Automation stays out of production.
+      stale edits, reset and source/binary import/export. Automation stays out of production.
 - [ ] Broader keyboard/screen-reader, zoom and real-WebView acceptance using native
       semantics and library primitives.
 - [ ] Transitive native-library bundling/discovery, dependency/font notices,
@@ -84,12 +93,24 @@ establish Windows/Linux support or signed, independently installed distributions
 
 | Scope             | Latest verified result                                                                                                                                                                                                                                                                           |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Workspace         | `cargo xtask check` and `cargo xtask test` passed on 2026-09-15: 62 Rust unit/integration tests, 2 doctests and 27 frontend tests, including 8 Chromium component cases. Native tests ran with the host access described in the testing guide.                                                   |
+| Workspace         | `cargo xtask check` and `cargo xtask test` passed on 2026-09-15: 66 Rust unit/integration tests, 2 doctests and 49 frontend tests, including 25 Chromium component cases. Native tests ran with the host access described in the testing guide.                                                  |
 | API documentation | Rustdoc with warnings denied and both executable documentation examples passed on 2026-09-15; generated TypeScript comments match the Rust contracts.                                                                                                                                            |
 | Repository layout | Migrated paths, imports, build configuration and documentation were checked on 2026-09-15; no files were lost and Cargo package/binary names are unchanged.                                                                                                                                      |
 | Frontend          | Static production build passed on 2026-09-15. Visual review covered desktop, minimum-window and narrow layouts, both languages, fonts, wrapping and focus mode.                                                                                                                                  |
 | Desktop           | A fresh debug app built through Tauri's default hooks on 2026-09-15. Both guests assembled, loaded, stepped and stored 42; reset restored state, failed assembly preserved the machine, and a bounded loop paused/stopped. Fonts and the dynamic editor loaded under the application origin/CSP. |
 | Icons             | All 10 ICNS representations and 6 ICO layers matched their PNG references on 2026-09-14.                                                                                                                                                                                                         |
+
+Native acceptance covers Unicode diagnostic navigation, an exact 20-byte AArch64
+code export/import round trip, disassembly and execution yielding X0 = 42. A
+126,980-byte aligned ELF segment decoded its final instruction at `0x20000` and
+exported byte for byte against LLVM/LLD output. The latest static debug app also
+passed bilingual instruction-panel retention and keyboard export/cancellation.
+Browser visual review covered both languages at 1280×720 and 900×600; a reliable
+full native-window screenshot was unavailable for the latest icon review.
+Raw imports remain inspection inputs; execution loads the separately assembled ELF.
+
+Targeted mutation probes confirmed detection of row-count pagination, ignored
+base changes and file callbacks after unmount.
 
 The Vitest/Vite mock-hook warning and remaining keyboard/focus acceptance are
 recorded in [testing](testing.md#browser-coverage). The product work and release

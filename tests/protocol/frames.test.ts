@@ -63,55 +63,49 @@ test('stream memory preserves arbitrary bytes and publishes only complete window
   );
 });
 
-test('desktop load calls use canonical binary chunks at the 64 KiB boundary', () => {
-  fc.assert(
-    fc.property(
-      fc.constantFrom(1, 65535, 65536, 65537, 131073),
-      fc.integer({ min: 0, max: 255 }),
-      (length, seed) => {
-        const image = Uint8Array.from(
-          { length },
-          (_, index) => (index ^ (index >>> 8) ^ (index >>> 16) ^ seed) & 255,
-        );
-        const call: DesktopCall = {
-          connection: '9007199254740993',
-          view: '2',
-          command: {
-            type: 'load',
-            data: {
-              replace: null,
-              target: 'aarch64',
-              completion: '0x0000000000001008',
-              instruction_budget: '100',
-              image_bytes: length,
-            },
-          },
-        };
-        const bytes = encodeCall(call, image);
-        // Independent consumer of the documented envelope, not the production decoder.
-        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-        const controlLength = view.getUint32(4, true);
-        expect(bytes.slice(0, 4)).toEqual(new Uint8Array([79, 80, 0, 0]));
-        expect(JSON.parse(new TextDecoder().decode(bytes.slice(8, 8 + controlLength)))).toEqual(
-          call,
-        );
-        let offset = 8 + controlLength;
-        let consumed = 0;
-        while (consumed < image.length) {
-          expect(bytes.slice(offset, offset + 4)).toEqual(new Uint8Array([79, 80, 1, 0]));
-          const size = view.getUint32(offset + 4, true);
-          expect(size).toBe(Math.min(65536, image.length - consumed));
-          expect(bytes.slice(offset + 8, offset + 8 + size)).toEqual(
-            image.slice(consumed, consumed + size),
-          );
-          consumed += size;
-          offset += 8 + size;
-        }
-        expect(offset).toBe(bytes.length);
-        expect(() => encodeCall(call, image.subarray(1))).toThrow(RangeError);
+test('desktop load calls preserve every documented chunk boundary', () => {
+  for (const length of [1, 65535, 65536, 65537, 131073]) {
+    const image = Uint8Array.from(
+      { length },
+      (_, index) => (index ^ (index >>> 8) ^ (index >>> 16)) & 255,
+    );
+    const call: DesktopCall = {
+      connection: '9007199254740993',
+      view: '2',
+      command: {
+        type: 'load',
+        data: {
+          replace: null,
+          target: 'aarch64',
+          completion: '0x0000000000001008',
+          instruction_budget: '100',
+          image_bytes: length,
+        },
       },
-    ),
-  );
+    };
+    const bytes = encodeCall(call, image);
+    // Independent consumer of the documented envelope, not the production decoder.
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const controlLength = view.getUint32(4, true);
+    expect(bytes.slice(0, 4)).toEqual(new Uint8Array([79, 80, 0, 0]));
+    expect(JSON.parse(new TextDecoder().decode(bytes.slice(8, 8 + controlLength)))).toEqual(call);
+    let offset = 8 + controlLength;
+    let consumed = 0;
+    while (consumed < image.length) {
+      expect(bytes.slice(offset, offset + 4)).toEqual(new Uint8Array([79, 80, 1, 0]));
+      const size = view.getUint32(offset + 4, true);
+      expect(size).toBe(Math.min(65536, image.length - consumed));
+      expect(
+        bytes
+          .subarray(offset + 8, offset + 8 + size)
+          .every((byte, index) => byte === image[consumed + index]),
+      ).toBe(true);
+      consumed += size;
+      offset += 8 + size;
+    }
+    expect(offset).toBe(bytes.length);
+    expect(() => encodeCall(call, image.subarray(1))).toThrow(RangeError);
+  }
   expect(() =>
     encodeCall({ connection: '1', view: '1', command: { type: 'shutdown' } }, new Uint8Array(1)),
   ).toThrow(RangeError);
