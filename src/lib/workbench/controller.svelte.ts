@@ -1,5 +1,5 @@
-import { readScratch } from './document';
-import { initialMemory } from './image';
+import { readScratch } from './scratch';
+import { initialMemory } from './machine/memory';
 import { desktopWorker, type WorkerPort } from '$lib/desktop/worker';
 import { applyObservation } from '$lib/protocol/observations';
 import {
@@ -40,7 +40,14 @@ export const examples: Record<Target, string> = {
     '.text\n// Store the answer, then stop at done.\n\nmov x0, #40\nadd x0, x0, #2\nadr x1, output\nstr x0, [x1]\ndone: nop\n\n.bss\noutput: .skip 64\n',
 };
 
-/** One mounted document and one native session; async results keep captured identities. */
+/**
+ * Own a scratch document, build candidate and separately loaded machine.
+ *
+ * @remarks
+ * Call `initialize` after mounting and `dispose` on unmount. Async results retain
+ * their request identities; source edits never mutate the loaded machine. Exposed
+ * artifacts and snapshots are read-only by convention, including their byte buffers.
+ */
 export function createWorkbench(factory: Factory = desktopWorker) {
   let source = $state(examples.x86_64);
   let target = $state<Target>('x86_64');
@@ -68,6 +75,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   let subscribing = false;
   let subscriptionTask: Promise<void> | null = null;
   let refreshSubscription = false;
+  // Channel credit bounds delivery to one event while the subscribe reply is pending.
   let pending: Stream | null = null;
   const lifetime = new AbortController();
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -222,6 +230,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       lifetime.signal.throwIfAborted();
       info = next;
       connected = true;
+      // A retained native session does not prove which local source produced it.
       loaded = null;
       subscription = null;
       baseline = null;

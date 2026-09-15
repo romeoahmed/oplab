@@ -1,165 +1,222 @@
 # Architecture
 
-Oplab is an assembly workbench for x86_64 and little-endian AArch64. Its purpose is
-an explicit, inspectable loop: edit source, assemble a standard artifact, configure
-an experiment, execute it, and inspect effects. The current desktop loop includes
-assembly, ELF loading, execution controls, integer registers, memory, and English
-and Simplified Chinese interfaces. [Roadmap](roadmap.md) separates that implemented
-subset from the complete debugging product.
+Oplab is a desktop assembly workbench for x86_64 and little-endian AArch64.
+Its working loop is source → standard ELF → loaded machine → observable effects.
+[Roadmap](roadmap.md) separates implemented capabilities from the planned debugger.
 
-## Boundaries
+## Ownership
 
 ```text
-Svelte workbench → Tauri commands → process supervisor → worker
-                                                        ├─ LLVM MC → ELF object → LLD → ELF image
-                                                        └─ ELF loader → Unicorn session
+Svelte workbench → Tauri supervisor → isolated worker
+                                      ├─ assembly owner: LLVM MC → ELF object → LLD → ELF image
+                                      └─ execution owner: ELF loader → Unicorn → observations
 ```
 
-| Owner                      | Responsibility                                                                           |
-| -------------------------- | ---------------------------------------------------------------------------------------- |
-| `crates/oplab-core`        | Validated addresses, memory and execution rules, wire contracts; no native dependencies. |
-| `crates/oplab-engine`      | Assembly, linking, decoding, loading, execution, worker and CLI entry points.            |
-| `src-tauri`                | Window-scoped commands, worker lifetime, deadlines, connection leases, IPC delivery.     |
-| `src/lib/workbench`        | Editor and inspector presentation; one document and one loaded session.                  |
-| `src/lib/desktop`          | The only frontend access to Tauri. Browser preview exposes no native execution.          |
-| `src/lib/protocol`         | Generated declarations and pure framing, scalar, and observation functions.              |
-| `src/lib/i18n`, `messages` | Locale selection and source catalogs.                                                    |
-| `tests`, `*/tests`         | Frontend, core, engine, and desktop tests, outside production source directories.        |
-| `xtask`                    | Cross-tool verification, formatting, contract generation, and sidecar staging.           |
+| Location                      | Responsibility                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------ |
+| `crates/core`                 | Validated domain types, memory/execution policy and wire contracts; no native dependencies |
+| `crates/engine`               | Assembly, linking, decoding, loading, sessions, worker and CLI                             |
+| `src-tauri`                   | Window-scoped commands, worker lifetime, deadlines, leases and delivery                    |
+| `src/lib/workbench`           | Document controller, editor, machine and memory presentation                               |
+| `src/lib/desktop`             | Sole frontend entry to Tauri; no native execution in browser preview                       |
+| `src/lib/protocol`            | Rust-generated declarations and pure framing/scalar/observation logic                      |
+| `src/lib/i18n`, `messages`    | Locale selection and English/Simplified Chinese catalogs                                   |
+| `tests`, Rust package `tests` | Behavior and invariant tests outside production directories                                |
+| `xtask`                       | Cross-tool verification, formatting, contract export and sidecar staging                   |
 
-Keep each abstraction with its owner. Add crates or frontend modules when an actual
-boundary warrants them; do not create empty service, repository, adapter, or shared
-layers. Native types stay inside engine adapters. Desktop dependencies never enter
-core. Cargo, SvelteKit, Vite, and Tauri retain their ordinary build responsibilities.
+Keep abstractions with the state and effects they own. Native types stay in engine
+adapters; desktop dependencies stay out of core. Add modules or crates for actual
+boundaries, not empty service/repository/shared layers. Cargo, Vite, SvelteKit and
+Tauri retain their normal build lifecycles; [development](development.md) owns commands.
+
+## Repository layout
+
+Keep framework entry points in their default locations: SvelteKit owns `src/routes`,
+`src/app.html` and `static`; Tauri owns `src-tauri`; Cargo owns each package's
+`src`, `tests` and `build.rs`. Root tool configuration stays discoverable without
+custom config paths. See the official [SvelteKit](https://svelte.dev/docs/kit/project-structure),
+[Tauri](https://tauri.app/start/project-structure/) and
+[Cargo](https://doc.rust-lang.org/cargo/guide/project-layout.html) layouts.
+
+```text
+crates/
+  core/                       # Package: oplab-core
+    src/                      # Domain model and wire contracts
+    tests/                    # Public domain/protocol tests
+  engine/                     # Package: oplab-engine
+    build/                    # LLVM discovery and C++ build support
+    native/                   # CXX-facing C++ sources
+    src/                      # Assembly, machine, session and worker modules
+    tests/                    # Public integration targets
+      common/                 # Process fixtures
+      unit/                   # Private concurrency tests
+src/
+  lib/
+    desktop/                  # Tauri IPC boundary
+    i18n/                     # Locale selection
+    protocol/                 # Wire operations and generated DTOs
+    styles/                   # Application theme
+    workbench/                # Composition, controller, scratch and preferences
+      editor/                 # CodeMirror component, CSS and language support
+      machine/                # Machine/register/memory views and initial viewport
+  routes/                     # SvelteKit entry points
+src-tauri/                    # Native application and supervisor
+static/                       # Application icon master
+messages/                     # English and Simplified Chinese catalogs
+project.inlang/               # Localization project configuration
+tests/                        # Frontend behavior and invariant tests
+  fixtures/                   # Shared DTO fixtures
+  workbench/                  # Mirrors editor/machine feature ownership
+xtask/                        # Repository tooling
+```
+
+Use `PascalCase.svelte` for components, lowercase TypeScript/CSS module names, and
+`.svelte.ts` only for modules using Svelte runes. Name files for their responsibility:
+`scratch.ts` validates draft recovery, `editor/language.ts` supplies lexical assistance,
+and `machine/memory.ts` selects a memory viewport. `ToolbarAction.svelte` identifies
+its toolbar role. Avoid generic `utils`, `shared` or `components` buckets.
+
+Rust modules use `snake_case.rs` with child modules in a sibling directory; module
+entry points have explicit names such as `worker.rs` and `supervisor.rs`. Integration
+targets use kebab-case, such as `worker-session.rs`. The test helper `common/mod.rs`
+remains a module rather than a Cargo integration target. Directory names omit the
+redundant project prefix; Cargo package names and executable names retain `oplab-`.
 
 ## Standards and state
 
-Assembly syntax is LLVM's GNU-style language: Intel operands initially on x86_64,
-native LLVM/GNU syntax on AArch64. This is a toolchain contract, not universal
-NASM/MASM compatibility. Pass whole source documents unchanged. LLVM owns parsing,
-macros, fixups, relaxation, and ELF generation; LLD owns final relocation and layout.
-The [engine contract](engine.md) defines the accepted language and runtime subset.
+LLVM owns GNU-style source parsing, macros, fixups, relaxation and ELF generation.
+LLD resolves relocations and layout. Oplab passes complete source unchanged and
+reads standard object/program metadata. Protocol fields describe artifacts and
+operations; they do not redefine assembly, relocations or ELF layout. The
+[engine contract](engine.md) specifies the language and supported runtime subset.
 
-Keep standard objects intact. Protocol metadata describes artifacts and operations;
-it never replaces ELF sections, relocations, symbols, or program headers. Human
-inputs accept ordinary hexadecimal addresses. Exact fixed-width scalar formatting
-belongs at the JSON boundary. Code and data are interpreted using guest addresses
-and target byte order, independently of the host.
+Three independent lifetimes prevent accidental state changes:
 
-Distinguish three lifetimes:
+- **Document:** editable source, target and human inputs, including incomplete fields.
+- **Artifact:** immutable output identified by document, revision, target, link base
+  and assembler identity. A late result cannot replace a newer document's build.
+- **Session:** immutable initial image and mutable machine state. Loading replaces
+  it explicitly; reset advances its generation only after replacement succeeds.
 
-- A document contains editable source and human inputs, including incomplete fields.
-- An artifact captures document identity, revision, target, base, and assembler identity.
-- A session owns an immutable initial image and mutable machine state with a generation.
+Editing does not patch the machine. Reattaching a view does not invent an association
+between retained machine state and current source. Missing memory differs from zero;
+instruction starts differ from retired instructions; raw flags do not imply definedness.
+Human addresses use ordinary hexadecimal input. Exact 64-bit JSON scalars use the
+canonical representation defined in [protocol](protocol.md).
 
-A late build can never silently replace a newer document. Editing source does not
-patch a running machine. Reset replaces native state from the initial image only
-after replacement succeeds. Reconnection cannot invent a source association for a
-retained session. A future saved experiment will retain source, setup, policies,
-assertions, and backend identity; live registers alone are not a complete snapshot.
+Use a functional core with explicit effect owners. Rust newtypes and tagged enums
+enforce domain constraints. TypeScript uses strict unions, exhaustive switches,
+`unknown` validation and pure transformations. Derive values rather than storing
+parallel copies; avoid casts that bypass validation or a generic framework around
+one operation. See the [Rust reference](https://doc.rust-lang.org/stable/reference/)
+and [TypeScript's functional guidance](https://www.typescriptlang.org/docs/handbook/typescript-in-5-minutes-func.html).
 
-## Implementation style
+## Technology decisions
 
-Use a functional core with explicit effect owners. Rust newtypes and enums enforce
-ranges, transitions, and protocol variants; borrowed slices express read-only data.
-TypeScript uses strict structural types, tagged unions, exhaustive switches,
-`unknown` validation, and pure transformations. Avoid parallel copies of derived
-state, opaque generic frameworks, and casts that bypass boundary validation.
-See [TypeScript for functional programmers](https://www.typescriptlang.org/docs/handbook/typescript-in-5-minutes-func.html)
-and the [Rust reference](https://doc.rust-lang.org/stable/reference/).
+| Technology                                  | Role and limit                                                                              |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Tauri 2, Svelte 5, SvelteKit static adapter | Native desktop lifecycle and reactive static SPA; no server in the bundle                   |
+| LLVM 23 MC/LLD, CXX, C++23                  | Whole-document standard assembly/linking behind a small ownership boundary                  |
+| Unicorn                                     | One emulator API for both guests, with behavior independently verified                      |
+| iced-x86, Capstone AArch64                  | Decoding and instruction metadata; recognition does not guarantee emulation support         |
+| `object`                                    | ELF inspection; explicit project policy still validates loading                             |
+| CodeMirror 6, Lezer                         | Transactional editing, lexical syntax assistance and completion; LLVM remains the assembler |
+| Bits UI                                     | Composite toolbar, tooltip, tab and popover behavior; native form controls elsewhere        |
+| Fontsource JetBrains Mono Variable          | Bundled offline WOFF2 with an optional system monospace preference                          |
+| Paraglide                                   | Compiled bilingual messages and explicit locale selection                                   |
+| Native CSS, Lucide                          | Platform layout and a tree-shaken interface icon family                                     |
+| clap                                        | Typed CLI/xtask arguments and generated help                                                |
+| Proptest, fast-check, Vitest Browser        | Domain invariants and real-browser component behavior                                       |
 
-Svelte runes own reactive presentation. Use `$derived` for derivable values,
-`$state.raw` for immutable snapshots, and effects for external synchronization.
-The CodeMirror attachment owns one editor and its cleanup; compartments update
-locale and accessibility without destroying history. The workbench controller owns
-request identity, subscription lifetime, and scratch persistence. Separate state
-only when its lifetime or invariants differ. Follow [Svelte attachments](https://svelte.dev/docs/svelte/@attach)
-and [runes](https://svelte.dev/docs/svelte/what-are-runes).
+The direct MC boundary avoids reconstructing standard object/linker behavior around
+an instruction emitter. Inkwell/llvm-sys primarily expose IR and LLVM's C API;
+they do not replace MC's C++ interfaces. There is one assembly backend, without
+Keystone or competing fallbacks. Dependency changes must remove real complexity,
+fit the contract, and be checked against maintained official documentation and
+resolved source. Root manifests own requirements; lockfiles own exact resolutions.
 
-Native sessions are constructed on their owning execution thread. Assembly uses a
-separate owner; blocking pipe I/O and monitoring have explicit lifetimes. Bounded
-queues preserve control replies, reserve native result capacity, and coalesce
-observations. The supervisor kills and reaps failed workers, reports uncertain
-outcomes, and never retries an uncertain mutation. [Protocol](protocol.md) defines
-ordering, flow control, and identity checks.
+## Interface
 
-## Technology choices
+The source area, right-hand machine panel and bottom observations form a stable
+workbench. Assembly, loading and execution are separate actions. Configuration
+states when each input applies: link address on build, stop position and instruction
+limit on load. Appearance changes affect presentation only.
 
-| Choice                                        | Reason and boundary                                                                                                                                                                                       |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tauri 2 + Svelte 5 + SvelteKit static adapter | Native desktop lifecycle with a compact reactive interface and Vite HMR; no frontend server in a bundle.                                                                                                  |
-| CodeMirror 6                                  | Composable editor state, transactions, history, search, and locale compartments. Current work does not need Monaco's language-service and worker integration. Revisit only for a concrete capability gap. |
-| LLVM 23 MC + matching LLD through CXX         | Full-document assembly and complete ELF artifacts with standard relocation. A small C++23 adapter exposes the MC facilities that LLVM's C API does not.                                                   |
-| Unicorn                                       | Both guest architectures under one execution API. Feature flags limit the native build; supported semantics still require independent tests.                                                              |
-| iced-x86 / Capstone AArch64                   | Target-appropriate decoding without a second emulator or assembler. Decoder recognition is separate from execution support.                                                                               |
-| `object`                                      | Standard ELF reading and inspection; loader policy remains explicit.                                                                                                                                      |
-| Paraglide                                     | Compiled, typed bilingual messages and explicit locale selection.                                                                                                                                         |
-| Native CSS + `@lucide/svelte`                 | Platform layout and controls with a consistent, tree-shaken icon family.                                                                                                                                  |
-| clap                                          | Declarative, typed CLI and xtask commands with generated help and usage errors.                                                                                                                           |
-| Proptest / fast-check / Vitest Browser        | Invariant testing and real Chromium component interactions.                                                                                                                                               |
+CodeMirror is dynamically imported through Svelte's
+[await block](https://svelte.dev/docs/svelte/await); Vite owns chunking. One
+[Svelte attachment](https://svelte.dev/docs/svelte/@attach) creates and destroys the
+editor. [Compartments](https://codemirror.net/examples/config/) update language,
+locale, accessibility and wrapping without replacing history. Svelte `$derived`
+owns computed presentation and `$state.raw` holds immutable snapshots; effects
+synchronize external state.
 
-Inkwell and llvm-sys primarily expose LLVM IR/the C API; they do not remove the MC
-C++ boundary. Nyxstone is a useful runtime assembly wrapper, but preserving complete
-standard object/linker behavior is the decisive requirement here. asm-rs and JIT
-emitters would require implementing or restricting more of the language and
-relocation surface. Oplab therefore has one direct MC/LLD backend, without legacy
-fallbacks. Prefer maintained dependencies that remove real complexity, assessed by
-API fit, release activity, documentation, licenses, and verified behavior rather
-than popularity alone. Reevaluate when those facts change.
+The target-specific `StreamLanguage` uses Lezer tags for highlighting. Completion
+combines register/directive hints with deduplicated document words and is suppressed
+inside comments/strings. Comment commands distinguish x86 `#` from AArch64 `//`.
+This lexer is neither a complete grammar nor an instruction-validity database.
+Structural folding, source diagnostics and source-to-instruction mapping need
+separate verified implementations. Tab leaves the editor; indentation commands,
+search, multiple selections and bracket matching use CodeMirror's native facilities.
 
-Dependency requirements live in root manifests; lockfiles record exact resolved
-versions. Rust requirements use minor notation with Cargo's compatible-version
-semantics, not an upper bound on that minor. The stable channel selects Rust;
-`rust-version` declares the minimum. LLVM's C++ API requires a deliberately selected
-major and matching LLD, with semantic and packaging verification on upgrades.
+Bits UI owns roving toolbar focus, tooltip dismissal, popover focus return and tab
+navigation. Buttons retain native `disabled` behavior. Pass application handlers
+through the primitive so its own handlers remain composed. Follow the library's
+standard usage; custom focus management is not part of the current workbench.
 
-## Interface and localization
+Use semantic landmarks, labelled fields, tables and definition lists. Native CSS
+uses Grid/Flexbox, logical properties, nesting, `oklch`, `color-mix` and dynamic
+viewport units. Newly Baseline features are eligible subject to actual WebView
+acceptance; Vite does not polyfill missing Web APIs. Follow
+[HTML semantics](https://html.spec.whatwg.org/multipage/) and
+[CSS specifications](https://www.w3.org/Style/CSS/Overview.en.html).
 
-The editor is the primary work area; nearby controls separate assembly from loading
-and execution. State, faults, stale artifacts, and unavailable actions must be
-visible. Register and memory views use tabular numerals, bounded windows, and stable
-layout. Distinguish missing memory from zero, raw flags from defined flags, and
-static instruction effects from observed effects. Do not advertise unwritten features.
+JetBrains Mono defaults to 14px with ligatures disabled; preferences allow system
+monospace, 12–22px, wrapping and panel proportions. Settings do not enumerate local
+fonts. Focus mode hides inspectors without unmounting the editor or disconnecting
+the worker. Narrow layouts, zoom, visible focus and reduced motion require visual
+and keyboard acceptance.
 
-Use semantic buttons, labelled inputs, native selects, tables, headings, and regions.
-Reserve navigation for navigation. Icons accompany clear labels; decorative SVGs
-are hidden from assistive technology. Maintain focus visibility, keyboard access,
-comfortable targets, reduced-motion behavior, and text/zoom resilience. Future
-split panes must support keyboard resizing; large data views need measured,
-accessible virtualization. [HTML semantics](https://html.spec.whatwg.org/multipage/)
-and [CSS specifications](https://www.w3.org/Style/CSS/Overview.en.html) are the baseline.
+The future interface extends these regions: multiple documents and instructions in
+the center; registers, flags and watches on the right; memory, diagnostics and traces
+below. Introduce navigators only when collections exist, and coordinate source and
+instruction selection through real provenance. No inert controls or empty views
+stand in for planned capabilities. The layout draws on
+[VS Code](https://code.visualstudio.com/docs/getstarted/userinterface) and
+[Binary Ninja](https://docs.binary.ninja/guide/index.html) while keeping this workflow compact.
 
-Use native logical properties, Grid/Flexbox, nesting, modern color functions, and
-other Newly Baseline capabilities where the selected system WebViews support them.
-Vite transforms syntax, not missing Web APIs. Declare and test host minimums before
-release; add a compatibility dependency only for a demonstrated requirement.
-Application styles live in CSS. CodeMirror still injects its own structural styles.
+## Localization and recovery
 
-English and Simplified Chinese ship together. Locale preference follows explicit
-storage, supported system preference, then English. `Intl.Locale` validates tags
-and distinguishes Hans from Hant; Traditional Chinese is not silently treated as
-Simplified Chinese. Paraglide messages, document language, editor phrases, and
-accessible names update without reload. Source, history, selection, open search,
-and machine state survive locale changes. Assembly syntax and identifiers remain
-unchanged. Catalog keys and placeholders must agree; localization failures must
-not discard work. See [Paraglide strategies](https://paraglidejs.com/strategy).
+English and Simplified Chinese ship together. Preference order is explicit stored
+locale, supported system preference, then English. `Intl.Locale` validates tags
+and distinguishes Hans/Hant; Traditional Chinese is not silently treated as Simplified.
+[Paraglide](https://paraglidejs.com/strategy) messages, document language, editor
+phrases and accessible names update without reloading or losing edits/search state.
+Source identifiers and assembly syntax are not translated.
 
-## Persistence, performance, and delivery
+Product copy names actions and observable state, distinguishes builds from sessions,
+and gives useful recovery steps. Internal delivery counters, host paths and raw
+backend diagnostics stay out of ordinary views. Both languages are edited for
+natural, concise wording; keys and placeholders must agree.
 
-Current recovery stores a bounded scratch document in browser storage. Full project
-persistence needs a versioned format, complete validation, atomic replacement,
-conflict detection, save/reopen tests, and an explicit recovery policy. Avoid a
-custom container when standard source, ELF, and structured metadata suffice.
+Browser storage retains a bounded scratch document and validated display preferences.
+This is not a complete experiment save format. Saved experiments need versioned
+validation, atomic replacement, conflict detection and save/reopen acceptance.
+Use standard source and ELF alongside structured setup metadata where possible.
 
-Measure representative assembly latency, cancellation, execution throughput,
-observation delivery, rendering, memory, startup, and artifact size. Bound work and
-payloads before optimizing copies. Add trace, snapshots, replay, SIMD, or static
-performance analysis only with explicit semantics and measured resource budgets.
-No performance claim follows merely from choosing Rust or a native library.
+## Execution, performance and containment
 
-Tauri command capabilities and connection leases restrict access. The CSP permits
-CodeMirror's required style injection, not arbitrary scripts. Diagnostics omit host
-paths and source excerpts. Shareable artifacts require deliberate handling of
-source, symbols, memory, and failure data. Release gates include native dependency
-bundling, signing, licenses, installed workflows, actual system WebViews, and host
-resource containment. See [testing](testing.md) and [roadmap](roadmap.md).
+Construct each native session on its execution thread. A separate owner handles
+assembly; bounded queues and independent pipe readers/writers keep controls usable.
+Observations coalesce only after coherent capture. The supervisor kills and reaps
+failed workers, reports uncertain outcomes and never retries an uncertain mutation.
+[Protocol](protocol.md) defines the identities and delivery guarantees.
+
+Measure assembly latency, execution throughput, IPC, rendering, startup and memory
+before optimizing. Bound work and payloads first. Traces, snapshots, replay, SIMD
+and static performance analysis each need explicit semantics and resource budgets.
+
+Tauri capabilities restrict commands to the main window. The CSP permits necessary
+CodeMirror style injection and self-hosted fonts, without remote scripts. Native
+process isolation and sampled cutoffs are not a complete adversarial sandbox.
+Installed dependency bundling, licensing, signing/JIT policy and host containment
+remain [release gates](roadmap.md#release-gates).

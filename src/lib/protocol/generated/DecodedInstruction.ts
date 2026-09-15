@@ -2,7 +2,7 @@
 import type { HexAddress } from './HexAddress.js';
 
 /**
- * A projection of authoritative bytes at a known boundary.
+ * A decoded instruction with its original bytes and display text.
  */
 export type DecodedInstruction = {
   /**

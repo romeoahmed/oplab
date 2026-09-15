@@ -9,16 +9,23 @@ import {
 } from '$lib/protocol/scalars';
 import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 
-test('Rust-compatible scalar syntax round-trips every generated 64-bit value', () => {
+test('wire scalars match canonical decimal and hexadecimal without losing bits', () => {
   fc.assert(
     fc.property(fc.bigInt({ min: 0n, max: (1n << 64n) - 1n }), (value) => {
-      expect(parseAddress(formatAddress(value))).toBe(value);
-      expect(parseCounter(formatCounter(value))).toBe(value);
+      const hex = `0x${value.toString(16).padStart(16, '0')}`;
+      const decimal = value.toString(10);
+      expect(formatAddress(value)).toBe(hex);
+      expect(formatCounter(value)).toBe(decimal);
+      expect(parseAddress(hex)).toBe(value);
+      expect(parseCounter(decimal)).toBe(value);
     }),
   );
   for (const invalid of ['01', '-1', '+1', '1.0', '18446744073709551616'])
     expect(() => parseCounter(invalid)).toThrow(RangeError);
-  expect(() => formatAddress(1n << 64n)).toThrow(RangeError);
+  for (const invalid of [-1n, 1n << 64n]) {
+    expect(() => formatAddress(invalid)).toThrow(RangeError);
+    expect(() => formatCounter(invalid)).toThrow(RangeError);
+  }
   expect(() => parseAddress('0x00000000000000FF')).toThrow(RangeError);
 });
 

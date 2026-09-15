@@ -8,7 +8,7 @@ import type { SessionKey } from './SessionKey.js';
 import type { Target } from './Target.js';
 
 /**
- * Only implemented operations are advertised in this protocol revision.
+ * Commands accepted by the framed worker after protocol negotiation.
  */
 export type Command =
   | {

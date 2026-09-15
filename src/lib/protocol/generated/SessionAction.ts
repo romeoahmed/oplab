@@ -16,7 +16,7 @@ export type SessionAction =
       type: 'breakpoint';
       data: {
         /**
-         * Instruction-start address.
+         * Guest address to test before instruction effects; target alignment is required.
          */
         address: HexAddress;
         /**

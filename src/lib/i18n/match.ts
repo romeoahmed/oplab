@@ -1,6 +1,9 @@
 import type { Locale } from '$lib/paraglide/runtime.js';
 
-/** Resolve supported language tags without converting Traditional Chinese to Simplified. */
+/**
+ * Select the first supported language preference, falling back to English.
+ * Invalid tags and Traditional Chinese are skipped; only Hans maps to `zh-CN`.
+ */
 export function preferredLocale(languages: readonly string[]): Locale {
   for (const language of languages) {
     try {

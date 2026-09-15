@@ -2,8 +2,9 @@
 import type { Counter } from './Counter.js';
 
 /**
- * Session identity is scoped to a worker connection. The load request ID is never
- * reused; reset advances the generation without changing that identity.
+ * A loaded session and reset generation, scoped to one worker connection.
+ *
+ * Load request IDs are not reused within a connection; reset preserves the session ID.
  */
 export type SessionKey = {
   /**

@@ -1,0 +1,91 @@
+<script lang="ts">
+  import { Cpu, Keyboard } from '@lucide/svelte';
+  import Registers from './Registers.svelte';
+  import { stateLabel } from '../presentation';
+  import type { Observation } from '$lib/protocol/generated/Observation';
+  import type { Locale } from '$lib/paraglide/runtime';
+  import * as m from '$lib/paraglide/messages.js';
+  const {
+    observation,
+    loadedCurrent,
+    loadedRevision,
+    locale,
+  }: {
+    observation: Observation | undefined;
+    loadedCurrent: boolean;
+    loadedRevision: string | null;
+    locale: Locale;
+  } = $props();
+  const options = $derived({ locale });
+  const running = $derived(observation?.status.type === 'running');
+</script>
+
+<aside class="inspector" aria-label={m.machine({}, options)}>
+  <header class="pane-header">
+    <h2><Cpu size={17} aria-hidden="true" />{m.machine({}, options)}</h2>
+    <span class="machine-status" class:active={running} role="status"
+      >{stateLabel(observation?.status, locale)}</span
+    >
+  </header>
+  <div class="inspector-body">
+    {#if observation === undefined}
+      <div class="empty-machine">
+        <span class="empty-icon"><Cpu size={28} strokeWidth={1.4} aria-hidden="true" /></span>
+        <h3>{m.machine_empty_title({}, options)}</h3>
+        <p>{m.machine_empty_hint({}, options)}</p>
+      </div>
+      <ol class="workflow-steps">
+        <li>
+          <span>01</span>
+          <div>
+            <strong>{m.assemble({}, options)}</strong>
+            <p>{m.workflow_build({}, options)}</p>
+          </div>
+        </li>
+        <li>
+          <span>02</span>
+          <div>
+            <strong>{m.load_artifact({}, options)}</strong>
+            <p>{m.workflow_load({}, options)}</p>
+          </div>
+        </li>
+        <li>
+          <span>03</span>
+          <div>
+            <strong>{m.step({}, options)} / {m.run({}, options)}</strong>
+            <p>{m.workflow_run({}, options)}</p>
+          </div>
+        </li>
+      </ol>
+    {:else}
+      <div class="session-heading">
+        <span class="architecture-label"
+          >{observation.registers?.type === 'x86_64'
+            ? 'x86_64'
+            : observation.registers?.type === 'aarch64'
+              ? 'AArch64'
+              : '—'}</span
+        ><span
+          >{loadedRevision === null
+            ? m.existing_session({}, options)
+            : m.loaded_revision({ revision: loadedRevision }, options)}</span
+        >
+      </div>
+      {#if !loadedCurrent}<p class="revision-warning">
+          {loadedRevision === null ? m.source_unlinked({}, options) : m.source_changed({}, options)}
+        </p>{/if}
+      <dl class="execution-counts">
+        <div>
+          <dt>{m.instructions({}, options)}</dt>
+          <dd>{observation.instructions}</dd>
+        </div>
+      </dl>
+      <Registers bank={observation.registers} {locale} />
+    {/if}
+  </div>
+  <div class="inspector-footer">
+    <Keyboard size={15} aria-hidden="true" /><span>{m.step({}, options)} <kbd>F10</kbd></span><span
+      >{m.run({}, options)} <kbd>F5</kbd></span
+    >
+  </div>
+</aside>

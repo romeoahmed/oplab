@@ -3,7 +3,9 @@ import type { Counter } from './Counter.js';
 import type { FailureCode } from './FailureCode.js';
 
 /**
- * A failed invocation never implies that an admitted mutation can be retried.
+ * An invocation failure and whether the worker may already have acted.
+ *
+ * An unknown outcome must not trigger automatic mutation replay.
  */
 export type DesktopFailure = {
   /**

@@ -1,73 +1,96 @@
 # Roadmap
 
-The basic desktop execution loop exists. The complete debugging product does not.
-Checked items are implemented; acceptance limits are explicit in [testing](testing.md).
-[Architecture](architecture.md) and [engine](engine.md) define the intended boundaries.
+The desktop assembly/execution loop works. Oplab is not yet a complete debugger or
+an independently distributable application. Checked items describe implementation;
+[testing](testing.md) defines evidence and [development](development.md) owns setup.
 
 ## Implemented
 
-- [x] Three product Rust packages, Cargo xtask, stable Rust, inherited dependencies/lints, lockfiles, and native framework build hooks.
-- [x] Strict Rust/C++/TypeScript/Svelte/CSS checks, formatters, dependency analysis, and generated contract verification.
-- [x] LLVM 23 MC/LLD CXX bridge with C++23, standard source, complete relocatable/executable ELF, independent compile/link operations, and native compilation metadata.
-- [x] Validated addresses, non-wrapping ranges, memory permissions, ELF program-header loading, BSS/padding, and native RX protection.
-- [x] Both guest execution owners, bounded slices, step/run/pause/cancel/reset, integer observations, address breakpoints, and explicit completion/budget/fault outcomes.
-- [x] Bounded binary protocol, correlated requests, assembly coalescing/cancellation, reserved output capacity, coherent full/delta subscriptions, and orderly shutdown.
-- [x] Desktop supervision, connection/view leases, unknown outcomes, deadlines, RSS monitoring, bounded diagnostics, and kill/reap recovery.
-- [x] Editor, artifact loading, controls, registers, memory, stale-document handling, and bounded scratch recovery.
-- [x] English and Simplified Chinese, native locale selection, retained editor history/search, semantic controls, native CSS, and Lucide interface icons.
-- [x] Declarative clap CLI/xtask commands; tests outside production directories; property models for pending edits, fragments, Unicode recovery, and memory windows.
-- [x] One application SVG master and verified PNG/ICO/ICNS assets; documented conversion through ImageMagick and Tauri.
+- [x] Concise workspace directories, named Rust module entries, editor/machine
+      feature groups and corresponding tests; framework entry points retain defaults.
+- [x] Rust core, engine and desktop boundaries; workspace dependencies/lints, stable
+      toolchain, clap CLI/xtask and native Cargo/Vite/Tauri build ownership.
+- [x] Strict Rust/C++/TypeScript/Svelte/CSS checks, formatting, dependency analysis
+      and Rust-owned TypeScript contract verification.
+- [x] LLVM 23 MC/LLD through CXX/C++23, unchanged GNU-style source, complete standard
+      ELF object/image output and separate compile/link operations.
+- [x] Validated addresses, permissions, program-header loading, BSS/padding and RX protection.
+- [x] Both guests, bounded execution slices, step/run/pause/stop/reset, address
+      breakpoints in the engine, integer/memory observations and explicit stop/fault outcomes.
+- [x] Bounded framing, correlated requests, build coalescing/cancellation, output
+      reservations, coherent full/delta subscriptions and orderly shutdown.
+- [x] Desktop leases, deadlines/RSS monitoring, unknown outcomes, bounded delivery,
+      kill/reap and explicit worker recovery.
+- [x] Source/machine/observation interface, stale-build handling, scratch recovery,
+      configuration, appearance, focus mode and adjustable panel proportions.
+- [x] CodeMirror/Lezer lexical assistance, completion, comment/search/history commands,
+      bracket matching and multiple selections; dynamically imported editor.
+- [x] English/Simplified Chinese, self-hosted JetBrains Mono/system monospace,
+      font size/wrap preferences, native CSS, Bits UI primitives and Lucide icons.
+- [x] Standard component event composition and native disabled controls; no custom
+      focus-management layer. Broader accessibility acceptance remains open.
+- [x] Tests outside production directories, with independent Proptest/fast-check
+      oracles, generated guest programs and observation histories, scoped concurrency
+      probes and Chromium new-headless workbench flows.
+- [x] One application SVG master and PNG/ICO/ICNS assets with documented conversion.
 
 ## Next product work
 
-- [ ] Integrate UTF-8 diagnostic positions with UTF-16 editor ranges; derive structured source provenance from MC/DWARF, including macros, duplicates, data, padding, and Unicode.
-- [ ] Add bounded machine-code import and instruction views, static effects, and a tested target/extension capability matrix.
-- [ ] Add validated initial registers and mappings, debugger aliases, executable patches, and translated-code invalidation.
-- [ ] Implement versioned experiments, atomic save/reopen, conflict detection, complete recovery, and CLI execution of the same experiment model.
-- [ ] Add multiple documents, deliberate focus transitions, keyboard resizing, and accessible large-data inspection.
-- [ ] Automate complete native workbench flows, including failures, stale edits, reset, and eventual save/reopen.
+1. **Diagnostics and provenance:** map UTF-8 diagnostic offsets to UTF-16 editor
+   positions, then derive verified MC/DWARF source/instruction relationships, including
+   macros, duplicate locations, Unicode, data and padding.
+2. **Instruction inspection:** bounded machine-code import, disassembly/static effects
+   and a tested target/extension capability matrix.
+3. **Machine setup:** validated initial registers/mappings, alias writes, executable
+   patches and translated-code invalidation.
+4. **Saved experiments:** versioned setup/source/policy format, atomic save/reopen,
+   conflicts and recovery; CLI execution using the same model.
+5. **Workbench expansion:** multiple documents, coordinated source/instruction focus,
+   accessible draggable separators and large-data views when those capabilities exist.
 
-## Professional debugging
+## Later capabilities
 
-- [ ] Source breakpoints and watchpoint timing with before/after semantics.
-- [ ] SysV AMD64, Windows x64, and AAPCS64 integer/buffer function experiments with explicit stack and return policies.
-- [ ] Assertions, bounded trace with visible truncation, and separation of static versus observed effects.
-- [ ] Verified alias writes, undefined flags, self-modifying code, and broader independent instruction coverage.
-- [ ] Measured assembly, execution, IPC, rendering, startup, and memory workloads.
-
-## Extensions
-
-- [ ] Complete machine snapshots and deterministic replay with explicit external-state limits.
-- [ ] Selected portable import/export formats with separate acceptance gates.
-- [ ] SIMD with tested storage, views, and execution semantics.
-- [ ] Optional static performance analysis with declared microarchitecture assumptions.
+- [ ] Source breakpoints, watchpoints and explicit before/after timing.
+- [ ] SysV AMD64, Windows x64 and AAPCS64 integer/buffer function experiments with
+      declared stack and return policies.
+- [ ] Assertions and bounded traces with visible truncation; static effects remain
+      distinct from observed execution.
+- [ ] Verified undefined flags, self-modifying code and broader instruction coverage.
+- [ ] Complete snapshots/replay, selected import/export formats, SIMD and optional
+      static performance analysis, each with its own semantics and acceptance gates.
 
 ## Release gates
 
-- [ ] State-machine properties for complete workflows, isolated fuzzing, adversarial native resource tests, and representative benchmarks.
-- [ ] Windows, Linux, and macOS CI exercising both guests and coherent native toolchains.
-- [ ] WebdriverIO/Tauri native automation, with embedded automation excluded from production.
-- [ ] Declared host/WebView minimums and verified native, static, cross, and universal build paths where supported.
-- [ ] Native library discovery/bundling, licensing, signing/JIT policy, installation, and sidecar discovery on each host.
-- [ ] Production CSP, command capabilities, dependency/license audit, privacy, failure artifacts, and full save/reopen acceptance.
+- [ ] Complete-workflow state-machine properties, parser fuzzing and adversarial
+      native resource/expansion tests.
+- [ ] Measured assembly, execution, IPC, rendering, startup and memory workloads.
+- [ ] Windows/Linux/macOS CI, both guests, coherent native toolchains and declared
+      host/WebView minimums; static/cross/universal builds where supported.
+- [ ] Native WebDriver workbench flows with real IPC and worker, including failure,
+      stale edits, reset and eventual save/reopen. Automation stays out of production.
+- [ ] Broader keyboard/screen-reader, zoom and real-WebView acceptance using native
+      semantics and library primitives.
+- [ ] Transitive native-library bundling/discovery, dependency/font notices,
+      signing/JIT policy, installation and sidecar startup on each supported host.
+- [ ] Production CSP/capabilities, privacy and failure-artifact review.
 
-Do not install dependencies or add empty modules/configurations for unchecked work.
-A capability is complete only when its actual behavior and failure boundaries are
-verified; browser fixtures and local debug builds do not establish release readiness.
+Do not install speculative dependencies or create placeholder modules for pending
+work. Browser fixtures and local debug builds do not satisfy distribution gates.
 
-## Verification record
+## Verification
 
-Verified on 2026-09-14:
+Current evidence is limited to local Apple Silicon macOS development. It does not
+establish Windows/Linux support or signed, independently installed distributions.
 
-- `cargo xtask check`: strict Rust/C++/frontend analysis, Knip, 34 generated declarations, and all formatters passed.
-- Rust workspace: 62 passing tests, including 14 core, 46 engine, and 2 desktop tests.
-- Frontend: 18 passing tests, including 13 logic/property tests and 5 Chromium new-headless browser cases.
-- Application icon: all 10 ICNS representations and 6 ICO layers match corresponding PNG references pixel-for-pixel after extraction.
+| Scope             | Latest verified result                                                                                                                                                                                                                                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Workspace         | `cargo xtask check` and `cargo xtask test` passed on 2026-09-15: 62 Rust unit/integration tests, 2 doctests and 27 frontend tests, including 8 Chromium component cases. Native tests ran with the host access described in the testing guide.                                                   |
+| API documentation | Rustdoc with warnings denied and both executable documentation examples passed on 2026-09-15; generated TypeScript comments match the Rust contracts.                                                                                                                                            |
+| Repository layout | Migrated paths, imports, build configuration and documentation were checked on 2026-09-15; no files were lost and Cargo package/binary names are unchanged.                                                                                                                                      |
+| Frontend          | Static production build passed on 2026-09-15. Visual review covered desktop, minimum-window and narrow layouts, both languages, fonts, wrapping and focus mode.                                                                                                                                  |
+| Desktop           | A fresh debug app built through Tauri's default hooks on 2026-09-15. Both guests assembled, loaded, stepped and stored 42; reset restored state, failed assembly preserved the machine, and a bounded loop paused/stopped. Fonts and the dynamic editor loaded under the application origin/CSP. |
+| Icons             | All 10 ICNS representations and 6 ICO layers matched their PNG references on 2026-09-14.                                                                                                                                                                                                         |
 
-- `pnpm tauri build --debug --bundles app`: default hooks built a matching worker and static macOS application bundle.
-- The fresh bundle ran from `tauri://localhost`: both guests assembled, loaded, completed, and stored 42. AArch64 single-step, reset, cross-target replacement, and locale changes preserved the documented state boundaries.
-- Documentation links and local-path hygiene passed. The bundle contains the verified application icon.
-
-These are local debug-build results. Installed/signed distributions, other hosts,
-WebDriver automation, full experiment persistence, and the product gates above are
-still open. The known Vitest/Vite mock-hook warning is recorded in [testing](testing.md).
+The Vitest/Vite mock-hook warning and remaining keyboard/focus acceptance are
+recorded in [testing](testing.md#browser-coverage). The product work and release
+gates above remain open.

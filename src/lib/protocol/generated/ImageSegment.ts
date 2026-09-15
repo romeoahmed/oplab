@@ -19,11 +19,11 @@ export type ImageSegment = {
    */
   file_bytes: number;
   /**
-   * Mapped byte count, including zero-filled storage.
+   * Segment memory size (`p_memsz`), including zero-fill but excluding page rounding.
    */
   memory_bytes: Counter;
   /**
-   * ELF `PF_R/PF_W/PF_X` bits; no invented permission widening.
+   * ELF segment flags (`p_flags`); guest access uses `PF_R`, `PF_W` and `PF_X`.
    */
   flags: number;
 };

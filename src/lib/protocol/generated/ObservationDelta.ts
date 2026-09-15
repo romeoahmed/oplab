@@ -6,8 +6,9 @@ import type { SessionKey } from './SessionKey.js';
 import type { Status } from './Status.js';
 
 /**
- * State at a new coherent boundary. Status, counters, and fault are always current;
- * unchanged registers and memory are inherited only from the named baseline.
+ * A coherent update relative to the last delivered subscription sample.
+ *
+ * Status, counters and fault are current; unchanged registers and memory come from `base`.
  */
 export type ObservationDelta = {
   /**

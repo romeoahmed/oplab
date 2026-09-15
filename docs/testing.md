@@ -1,118 +1,169 @@
 # Testing and acceptance
 
-Tests establish behavior and invariants. Keep independent facts and regressions;
-remove assertions about incidental object identity, DOM structure, queue ordering,
-private storage, or generated formatting. A rewrite must not discard useful coverage
-just to change its appearance. [Development](development.md) owns check commands;
-[roadmap](roadmap.md) owns progress.
+Tests should establish behavior, independent architectural facts and invariants.
+Prefer the smallest test at the boundary that can detect a meaningful regression.
+Do not freeze incidental DOM structure, object identity, zero-storage representation,
+independent reply order or formatter output. Test counts and coverage percentages
+are diagnostic information, not acceptance targets.
+[Development](development.md#commands-and-ownership) owns command recipes;
+[roadmap](roadmap.md#verification) owns dated results and outstanding gates.
 
-## Ownership
+## Suites
 
-| Location                                          | Evidence                                                                                  |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `crates/oplab-core/tests`                         | Exact scalars, strict schemas, range/permission rules, fragmented and incomplete framing. |
-| `crates/oplab-engine/tests`                       | Architectural bytes, ELF geometry, actual guest effects, real CLI and worker processes.   |
-| `crates/oplab-engine/tests/unit`                  | Private scheduling, cancellation, stream baselines, and native mapping invariants.        |
-| `src-tauri/tests/unit`                            | Real worker supervision, reattachment, stale leases, unknown outcomes, kill/reap.         |
-| `tests/protocol`, `tests/i18n`, `tests/workbench` | Pure frontend properties, catalogs, scratch recovery, editor and workbench behavior.      |
+| Location                                          | Evidence                                                                            |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `crates/core/tests`                               | Scalar/schema validity, address/permission rules, fragmented and incomplete framing |
+| `crates/engine/tests`                             | Exact encodings, ELF geometry, real guest effects, CLI and worker processes         |
+| `crates/engine/tests/unit`                        | Private scheduling, output reservations, cancellation and stream baselines          |
+| `src-tauri/tests/unit`                            | Real worker supervision, leases, reattachment, unknown outcomes and kill/reap       |
+| `tests/protocol`, `tests/i18n`, `tests/workbench` | Frontend properties, catalogs, recovery and browser interaction                     |
 
-Rust files under `tests/unit` are `#[cfg(test)]` modules referenced with `#[path]`.
-They stay physically outside production source while retaining private access;
-they do not widen APIs for tests. Root integration tests exercise public behavior.
-This follows Rust's distinction between [unit and integration tests](https://doc.rust-lang.org/book/ch11-03-test-organization.html).
-SvelteKit includes root `tests` in its generated TypeScript project; Vitest discovers
-them explicitly. No production test helpers or separate test-only TS project exist.
+Rust `tests/unit` files are private `#[cfg(test)]` modules included through `#[path]`;
+root integration tests exercise public APIs. Tests remain outside production source
+without widening APIs just for access. Public session tests verify guest memory
+protection through observable effects. See [Rust test organization](https://doc.rust-lang.org/book/ch11-03-test-organization.html).
+SvelteKit includes root tests in its generated TS project; Vitest discovers them
+explicitly. No production test helpers or duplicate test-only TS project are needed.
 
-## Properties and fixtures
+## Contracts and properties
 
-Proptest varies full-width addresses, non-wrapping ranges, pipe fragments, ELF page
-geometry, pending document edits/cancellation, and bounded integer programs. Models
-use wide arithmetic, maps of latest valid document requests, or independently
-computed guest results. Assert exact-once delivery and shutdown barriers without
-fixing incidental lane order. Retain targeted tests for native faults and known
-architectural encodings that a round trip through the same library cannot establish.
-See [Proptest](https://proptest-rs.github.io/proptest/intro.html).
+Use [Proptest's guidance](https://proptest-rs.github.io/proptest/proptest/tips-and-best-practices.html)
+and [fast-check arbitraries](https://fast-check.dev/docs/core-blocks/arbitraries/):
+construct relevant inputs, retain shrinking and compare against an independent
+oracle. Keep exact boundary examples alongside properties. Do not reproduce the
+implementation in the expected result or merely round-trip two production helpers.
 
-fast-check exercises exact frontend scalars, coherent observation reduction,
-stale identities, Unicode scratch recovery, locale preference order, and readable
-memory windows at address-space boundaries. Prefer constructive valid generators,
-then separate malformed-input properties. Keep shrinking and persisted regression
-seeds useful; do not ignore minimized failures as disposable build output.
-See [fast-check arbitraries](https://fast-check.dev/docs/core-blocks/arbitraries/).
+| Boundary                   | Independent evidence                                                                                                               |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Addresses and wire scalars | Standard decimal/hex formatting and wider integer arithmetic                                                                       |
+| Memory access              | Complete containment in one mapping and a permission bit-set model                                                                 |
+| Framing                    | Published little-endian headers, binary chunk boundaries, arbitrary pipe fragmentation and truncated input                         |
+| ELF loading                | Hand-built ELF64 headers, page envelopes, file bytes and observed zero-fill                                                        |
+| Guest execution            | Generated add/subtract/XOR programs compared with wrapping `u32` arithmetic on both guests                                         |
+| Build scheduling           | Latest valid request per document, cancellation and exactly-once delivery without assuming unrelated reply order                   |
+| Observations               | Generated full/delta histories, independent complete samples, exact counters, retained baselines and stale identities              |
+| Editor language            | Target-specific literal/comment examples and incremental parsing compared with a fresh parse after generated edits                 |
+| Recovery                   | Unicode and incomplete inputs survive; source budgets count UTF-8 bytes; valid preferences survive independently of corrupt fields |
+| Localization               | Catalog key/parameter agreement and ordered supported-language preferences                                                         |
 
-Process fixtures drain stdout/stderr concurrently, bound retained output, apply
-failure deadlines, and kill/reap children before joining blocked I/O. Use controlled
-promises or channel handoffs for races. Sleeps are not evidence that a task ran;
-timeouts bound failures rather than define normal correctness.
+Properties use bounded inputs so failures remain small and reproducible. Native
+program generation has a lower case count than pure logic; it still executes real
+LLVM/Unicorn work. Repeated runs must explore new inputs rather than permanently
+pinning every property to one seed.
 
-## Browser and desktop
+For a failure, preserve the minimized input and the printed replay information.
+[Proptest persists regressions](https://proptest-rs.github.io/proptest/proptest/failure-persistence.html);
+keep those files in version control. For fast-check, replay the printed `seed` and
+`path` through `fc.assert` options, then retain the smallest meaningful regression.
+Do not ignore failures, retry until green or weaken a contract to accommodate a fixture.
 
-Vitest has a Node logic project and a real browser component project in
-`vite.config.ts`, sharing SvelteKit and Paraglide. Browser tests use only Playwright
-Chromium with `channel: 'chromium'` and `headless: true`, selecting
-[new headless mode](https://playwright.dev/docs/browsers#chromium-new-headless-mode).
-Do not install or configure Firefox, WebKit, or the separate Chromium headless shell.
-Use semantic locators, actual keyboard input, and awaited visible outcomes.
-[Svelte's testing guidance](https://svelte.dev/docs/svelte/testing) supports this
-browser component approach. Worker ports are explicit fixtures, not fabricated
-proof of native IPC.
+## Effects and fixtures
 
-Browser acceptance covers layout, keyboard behavior, locale switching, retained
-editor history/search, and stale builds. Native acceptance must additionally cover
-real IPC, worker discovery, both guests, failures, and static assets in a bundle.
-A Vite preview is not a packaged WebView, and macOS development evidence is not a
-Windows/Linux or signed-installation claim.
+Frontend feature tests mirror `src/lib` ownership; editor and machine tests live
+under their corresponding `tests/workbench` subdirectories. Shared DTO factories
+live in `tests/fixtures/protocol.ts`; they supply data rather than implementing a
+second worker or emulator. Browser ports reject unexpected commands. A component
+fixture proves the frontend's use of a contract, while actual process tests prove
+that the native implementation fulfills it.
 
-For future automated desktop runs, current [Tauri guidance](https://tauri.app/develop/tests/webdriver/)
-recommends WebdriverIO with `@wdio/tauri-service`. Its embedded driver supports
-Windows, Linux, and macOS; direct upstream `tauri-driver` supports Windows/Linux.
-Use the embedded provider for a consistent initial host matrix, with automation
-plugins behind a dedicated development/test feature absent from production builds.
-Run core acceptance with real commands and the actual worker, without IPC mocking.
-Do not duplicate renderer-only suites already covered by Vitest. The service and
-plugins are not installed until the desktop harness is implemented.
+Use white-box tests only where deterministic control adds evidence: holding a native
+job at the handoff, returning output capacity, coalescing unsent samples and losing
+a writer. Assert control priority and shutdown barriers, not FIFO order among
+independent responses. Do not use a short absence-of-message timeout to infer that
+a scheduler ran.
 
-## Established engine evidence
+Process fixtures drain output concurrently, bound retained bytes and kill/reap before
+joining blocked I/O. Interactive requests use one absolute reply deadline, so an
+unrelated event cannot restart the timeout; transport failures retain their cause.
+Polling child exit under a deadline is allowed. Sleeps must not stand in for a
+state transition, and elapsed execution time is not a performance assertion.
 
-- Assembly: exact integer and branch bytes, final-layout absolute/PC-relative
-  relocations, explicit operand widths, literal pools, macros, `.org`, alignment,
-  Unicode diagnostic offsets, sections/symbols/zero-fill, relinking, and final-address
-  boundaries. Host file/console access and dependent-library loading are rejected.
-- Loading: sectionless ELF, file/BSS/padding separation, page congruence, permission
-  conflicts, unsupported runtime headers, aggregate bounds, and the final page of
-  the address space. Real guest stores cannot write RX pages.
-- Execution: both integer banks, flags and instruction alias effects, arithmetic
-  properties, whole-REP stepping, budgets, breakpoints before effects, loop re-arming,
-  reset, coherent memory, fault classification, environment stops, and completion
-  before an unmapped fetch. Instruction starts and native dispatches remain distinct.
-- Worker: actual binary transfers, pipelined cancellation with one legal outcome,
-  controls during outstanding assembly, reserved output capacity, shutdown barriers,
-  writer loss, session generations, coherent subscriptions, and invalid replacement
-  preserving the existing machine/subscription.
-- Desktop: connection/view leases, real guest execution, withheld frontend credit,
-  reattachment without mutation replay, stale callers, and a nonresponsive child
-  whose admitted outcome is unknown before forced termination.
+## Browser coverage
 
-The compiled bridge uses C++23 with LLVM/LLD 23.1.1 and bundled Unicorn 2.1.5 in the
-current macOS verification. Shared native builds are established. Source mapping
-is explicitly unavailable despite retained DWARF; decoding does not establish an
-instruction/extension execution matrix. Standard linking does not establish TLS,
-ABI, OS services, imported executable, or dynamic runtime support.
+`vite.config.ts` defines a Node logic project and a real browser component project,
+both inheriting SvelteKit/Paraglide. Browser tests use Playwright **Chromium only**,
+`channel: 'chromium'`, `headless: true`: [new headless mode](https://playwright.dev/docs/browsers#chromium-new-headless-mode).
+Install with `--no-shell`; do not add Firefox, WebKit or the separate headless shell.
+See [Vitest projects](https://vitest.dev/guide/projects) and
+[Svelte testing](https://svelte.dev/docs/svelte/testing).
 
-## Remaining gates
+Follow [Vitest component testing](https://vitest.dev/guide/browser/component-testing)
+and [Playwright best practices](https://playwright.dev/docs/best-practices): use
+semantic locators, real input and awaited visible outcomes. Use the renderer's
+[automatic cleanup](https://vitest.dev/api/browser/svelte) and clear storage between
+cases; explicitly unmount only when testing lifecycle behavior.
 
-Adversarial expansion and native allocation/CPU limits require stress and host
-containment evidence. Output bounds, cooperative cancellation, sampled RSS cutoffs,
-exception handling, and worker isolation each have different guarantees.
+Coverage includes locale changes with retained text/history/search, late builds,
+corrupt scratch reattachment, actual draft unmount/reopen, appearance/focus mode,
+completion/comment commands and native disabled controls. A workbench flow verifies
+that assembling does not load, loading does not run, ELF completion metadata reaches
+the load request, and a rejected reset retains the displayed machine. Further
+keyboard/screen-reader acceptance, including toolbar focus when all actions begin
+disabled, remains open. Use Bits UI
+and native semantics; do not add a custom focus framework to satisfy a test.
 
-Add isolated fuzz targets for boundary parsers, state-machine properties for complete
-experiments, Criterion workloads for measured bottlenecks, and multi-host CI when
-those surfaces are implemented. nextest can orchestrate Rust suites without changing
-what they prove. Run actual installed artifacts, native dependency/license audits,
-signing/JIT checks, and production capability/CSP review before release. No unused
-harness or placeholder configuration is required to record these gates.
+Worker ports are explicit component fixtures. They do not establish native IPC,
+ELF validity or actual machine effects. Use browser HMR for visual acceptance at
+1280×820 and the desktop minimum 880×600, then inspect narrow layouts, zoom, both
+languages, long values and keyboard focus. Do not publish synthetic fixture states
+as evidence of native behavior.
 
-The current Vitest/Vite combination emits a warning that the mock interceptor's
-`configureServer` hook is ignored. These tests use explicit ports; they pass without
-that hook, and the warning is not filtered. Treat future reliance on that facility
-as unverified until upstream compatibility is resolved.
+The current Vitest/Vite combination warns that the mocks interceptor's
+`configureServer` hook is ignored. The suite uses explicit ports and passes without
+that hook; the warning is not filtered. Future reliance on that facility needs
+upstream compatibility verification.
+
+## Native evidence
+
+- **Assembly:** independent integer/branch bytes, absolute and PC-relative relocation,
+  operand widths, pools/macros/origins/alignment, Unicode offsets, symbols/zero-fill,
+  repeated linking and address limits; host input/output and dependent-library access
+  are rejected.
+- **Loading:** sectionless ELF, BSS/padding separation, congruence and permission
+  conflicts, unsupported runtime headers, aggregate bounds and the last address page;
+  real guest stores cannot write RX pages.
+- **Decoding/CLI:** independent instruction bytes and addresses, bounded complete
+  prefixes, explicit invalid-byte locations, raw-stdin decode and separate usage errors.
+- **Execution:** canonical registers, flags/alias effects, arithmetic properties,
+  whole-REP stepping, instruction budgets, before-effect breakpoints/re-arming,
+  reset, coherent memory, fault/environment outcomes and boundary completion.
+- **Worker:** actual binary transfers, cancellation with one outcome, controls during
+  assembly, reserved capacity, shutdown barriers, writer loss, generations and full/delta
+  subscriptions; invalid replacement preserves the current machine/subscription.
+- **Desktop:** leases, real execution, withheld frontend credit, reattachment without
+  mutation replay and nonresponsive children producing unknown outcomes before kill/reap.
+
+For UI changes, verify a fresh static desktop bundle as well as the browser:
+
+1. Build/load each architecture's example, step, run to completion and inspect the
+   expected register/memory effect (the built-in examples store 42).
+2. Reset and verify initial state. Exercise a bounded loop, pause and stop.
+3. Edit source or change target; confirm the old machine remains distinct and stale
+   artifacts cannot replace current work. Exercise an assembly error.
+4. Verify fonts, dynamic editor loading, both locales and focus behavior under the
+   actual WebView origin/CSP. Test failure/restart when the supervisor changes.
+
+These checks do not establish a full ISA/extension matrix, source mapping, TLS,
+OS/ABI support or general imported-executable support. Native execution requires
+permission for Unicorn JIT operations and host CPU/cache discovery. On Apple Silicon,
+Unicorn 2.1.5 queries `hw.cachelinesize`; denying that query can trigger an unsupported
+`CTR_EL0` fallback read and `SIGILL` before loading a guest. Run native tests with the
+required host access and report sandbox restrictions separately from test results.
+Browser success is not packaged-WebView success, and a local debug bundle is not
+installed/signed distribution evidence.
+
+## Automation and release gates
+
+[Tauri's WebDriver guide](https://tauri.app/develop/tests/webdriver/) recommends
+WebdriverIO with `@wdio/tauri-service`. Its embedded provider supports Windows,
+Linux and macOS; direct upstream `tauri-driver` supports Windows/Linux. A future
+native harness should use real IPC and the actual worker, keep automation plugins
+behind a test-only feature and exclude them from production. Avoid duplicating
+renderer suites. No desktop WebDriver harness is installed yet.
+
+Release acceptance still needs multi-host CI, actual installed artifacts, dynamic
+library discovery/bundling, dependency licenses, signing/JIT policy and production
+capability/CSP checks. Add complete-workflow state-machine properties, isolated
+parser fuzzing, adversarial expansion/resource tests and measured performance
+workloads as those surfaces are developed. Output bounds, cooperative cancellation,
+sampled RSS and OS quotas provide different guarantees; do not conflate them.

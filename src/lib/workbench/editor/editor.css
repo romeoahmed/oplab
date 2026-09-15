@@ -1,0 +1,91 @@
+.editor {
+  block-size: 100%;
+  min-block-size: 0;
+
+  .cm-editor {
+    block-size: 100%;
+    background: transparent;
+    color: var(--text);
+  }
+
+  .cm-scroller {
+    overflow: auto;
+    font: var(--editor-size, 14px)/1.8 var(--mono);
+    font-variant-ligatures: none;
+  }
+
+  .cm-content {
+    padding-block: 12px 32px;
+  }
+
+  .cm-line {
+    padding-inline: 18px;
+  }
+
+  .cm-gutters {
+    background: transparent;
+    color: var(--muted);
+    border: 0;
+    padding-inline: 12px 6px;
+    font-size: 11px;
+  }
+
+  .cm-activeLine,
+  .cm-activeLineGutter {
+    background: color-mix(in oklch, var(--surface-raised), transparent 45%);
+  }
+
+  .cm-cursor {
+    border-inline-start-color: var(--accent);
+  }
+
+  .cm-focused {
+    outline: none;
+  }
+
+  .cm-selectionBackground,
+  .cm-focused .cm-selectionBackground {
+    background: var(--selection);
+  }
+
+  .cm-selectionMatch,
+  .cm-matchingBracket {
+    background: var(--selection);
+    outline: 1px solid var(--accent);
+  }
+
+  .cm-tooltip,
+  .cm-panels {
+    background: var(--surface-raised);
+    color: var(--text);
+    border-color: var(--border);
+    font: 12px/1.6 var(--system-mono);
+  }
+
+  .cm-panels {
+    padding: 6px;
+  }
+
+  .cm-search label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-inline-end: 8px;
+  }
+
+  .cm-textfield {
+    inline-size: auto;
+    background: var(--surface-deep);
+    border: 1px solid var(--border);
+  }
+
+  .cm-button {
+    background: var(--surface);
+    font-size: 11px;
+  }
+
+  .cm-tooltip-autocomplete ul li[aria-selected] {
+    background: var(--selection);
+    color: var(--text);
+  }
+}

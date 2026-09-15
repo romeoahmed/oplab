@@ -4,6 +4,7 @@ import type { ImageInfo } from './ImageInfo.js';
 
 /**
  * Metadata for two complete ELF files transferred after the control frame.
+ *
  * Payload order is relocatable object, then linked executable image.
  */
 export type Artifact = {

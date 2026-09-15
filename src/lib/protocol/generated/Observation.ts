@@ -7,8 +7,9 @@ import type { SessionKey } from './SessionKey.js';
 import type { Status } from './Status.js';
 
 /**
- * One full observation from a safe boundary. Registers, fault metadata, counters,
- * and optional binary memory all describe this same sequence and generation.
+ * A coherent machine observation captured between native slices.
+ *
+ * Registers, faults, counters and optional binary memory share one sequence and generation.
  */
 export type Observation = {
   /**

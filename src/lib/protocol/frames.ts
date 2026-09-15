@@ -1,3 +1,6 @@
+// Rust owns DTO validation. This module checks framing and payload completeness;
+// consumers validate exact scalars, request identities and observation coherence.
+
 import type { Command } from './generated/Command';
 import type { DesktopCall } from './generated/DesktopCall';
 import type { Response } from './generated/Response';
@@ -60,8 +63,6 @@ class Reader {
   json(kind: number): unknown {
     const value = this.frame();
     if (value.kind !== kind) throw new RangeError('Unexpected frame kind');
-    // This is the sole JSON type boundary. Rust validates these DTOs before IPC;
-    // consumers additionally check exact scalars, identities, and delta coherence.
     return JSON.parse(decoder.decode(value.bytes));
   }
   payload(length: number): Uint8Array {
@@ -83,7 +84,12 @@ class Reader {
   }
 }
 
-/** Encode one desktop invocation; complete ELF bytes stay binary across IPC. */
+/**
+ * Encode a desktop call and its declared ELF image as one contiguous message.
+ *
+ * @param image - Required only for a load command; otherwise `null`.
+ * @throws RangeError - Image metadata disagrees with the payload or a size limit is exceeded.
+ */
 export function encodeCall(call: DesktopCall, image: Uint8Array | null): Uint8Array {
   const command: Command = call.command;
   const required = command.type === 'load' ? command.data.image_bytes : null;
@@ -97,7 +103,15 @@ export function encodeCall(call: DesktopCall, image: Uint8Array | null): Uint8Ar
   return join(parts);
 }
 
-/** A response is accepted only after every declared binary file has arrived. */
+/**
+ * Decode a Rust-validated response and all of its declared binary payloads.
+ *
+ * @returns Owned payload buffers in wire order: object then image for assembly,
+ * or a single memory window for an observation.
+ * @throws RangeError - Framing, lengths, chunk boundaries or trailing bytes are invalid.
+ * @throws TypeError - A JSON body is not valid UTF-8.
+ * @throws SyntaxError - A control body is not valid JSON.
+ */
 export function decodeResponse(buffer: ArrayBuffer): {
   response: Response;
   payloads: Uint8Array[];
@@ -116,7 +130,14 @@ export function decodeResponse(buffer: ArrayBuffer): {
   return { response, payloads };
 }
 
-/** A channel event retains its binary window and explicit subscription identity. */
+/**
+ * Decode a Rust-validated subscription event and its complete memory window.
+ *
+ * @returns The event and an owned memory buffer, or `null` when no bytes follow.
+ * @throws RangeError - Framing, memory bounds or payload completeness is invalid.
+ * @throws TypeError - A JSON body is not valid UTF-8.
+ * @throws SyntaxError - An event body is not valid JSON.
+ */
 export function decodeStream(buffer: ArrayBuffer): {
   event: StreamEvent;
   memory: Uint8Array | null;

@@ -66,10 +66,16 @@ function applyDelta(base: Snapshot, delta: ObservationDelta, memory: Uint8Array 
 }
 
 /**
- * Apply only a complete event to its exact subscription baseline. Keep this cursor
- * separate from correlated read results: those replies never establish a delta base.
- * On resync, discard the baseline and subscribe again for a fresh full event.
- * Returned snapshots are immutable by convention; callers must not edit their bytes.
+ * Reconstruct a complete subscription event without mutating the cursor.
+ *
+ * @remarks
+ * Correlated replies never establish a stream baseline. On `updated`, retain the
+ * returned snapshot as the next baseline; on `resync`, subscribe again for a full
+ * event. Snapshots may share input objects and buffers: callers must not mutate them.
+ *
+ * @returns `ignored` for stale identities/sequences, `resync` for a missing delta
+ * baseline, `ended` for capture failure, or `updated` with the coherent snapshot.
+ * @throws RangeError - Scalars, memory, register availability or counters are incoherent.
  */
 export function applyObservation(
   cursor: Cursor,

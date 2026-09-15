@@ -8,7 +8,8 @@ use tauri::Manager;
 /// Launch the desktop workbench and reap its worker on application exit.
 ///
 /// # Errors
-/// Returns an error when initialization or the event loop fails.
+///
+/// Returns an error if desktop application initialization fails.
 pub fn run() -> tauri::Result<()> {
     let app = tauri::Builder::default()
         .manage(supervisor::Service::default())

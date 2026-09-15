@@ -5,7 +5,7 @@ import type { Counter } from './Counter.js';
 import type { Observation } from './Observation.js';
 
 /**
- * Current desktop attachment without replaying any mutation.
+ * Attachment lease, negotiated capabilities and retained worker metadata.
  */
 export type ConnectionInfo = {
   /**

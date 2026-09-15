@@ -66,7 +66,7 @@ pub(super) fn format(check: bool) -> Result {
     } else {
         command.arg("-i");
     }
-    let mut sources = fs::read_dir("crates/oplab-engine/native")?
+    let mut sources = fs::read_dir("crates/engine/native")?
         .map(|entry| entry.map(|entry| entry.path()))
         .collect::<std::io::Result<Vec<_>>>()?;
     sources.retain(|path| {

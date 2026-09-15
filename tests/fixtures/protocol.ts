@@ -1,0 +1,64 @@
+import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
+import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
+import type { Observation } from '$lib/protocol/generated/Observation';
+import type { WorkerPort } from '$lib/desktop/worker';
+
+// Shared protocol data; native behavior is exercised by the Rust process tests.
+export function observation(sequence = '9007199254740993'): Observation {
+  return {
+    key: { session: '2', generation: '0' },
+    sequence,
+    status: { type: 'ready' },
+    instructions: '0',
+    dispatches: '0',
+    registers: {
+      type: 'x86_64',
+      data: {
+        gpr: ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
+        rip: '0x0000000000001000',
+        rflags: '2',
+      },
+    },
+    memory: null,
+    fault: null,
+  };
+}
+
+export function connection(session: Observation | null = null): ConnectionInfo {
+  return {
+    connection: '1',
+    view: '1',
+    session,
+    artifact: null,
+    capabilities: {
+      version: 1,
+      targets: ['x86_64', 'aarch64'],
+      assembler: { name: 'LLVM MC', version: '23' },
+      source_mapping: false,
+      execution: true,
+    },
+  };
+}
+
+export function assembled(identity: BuildIdentity): Awaited<ReturnType<WorkerPort['request']>> {
+  return {
+    response: {
+      id: '1',
+      result: {
+        type: 'assembled',
+        data: {
+          identity,
+          object_bytes: 1,
+          image_bytes: 1,
+          image: {
+            entry: identity.base,
+            segments: [],
+            symbols: [{ name: 'done', address: '0x0000000000001008', size: '0' }],
+            symbols_truncated: false,
+          },
+        },
+      },
+    },
+    payloads: [new Uint8Array([1]), new Uint8Array([2])],
+  };
+}

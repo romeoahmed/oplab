@@ -21,7 +21,7 @@ struct Cli {
 enum Task {
     /// Check types, strict lints, unused code, generated contracts, and formatting.
     Check,
-    /// Run Rust and Chromium behavioral tests.
+    /// Run Rust, frontend logic and Chromium component tests.
     Test {
         /// Test optimized Rust builds.
         #[arg(long)]
@@ -82,7 +82,6 @@ fn check() -> Result {
     native::lint()?;
     run(pnpm().arg("check"))?;
     run(pnpm().arg("lint"))?;
-    run(pnpm().args(["exec", "knip"]))?;
     codegen::generate(true)?;
     format(true)
 }
@@ -95,7 +94,7 @@ fn test(release: bool) -> Result {
         command.arg("--release");
     }
     run(&mut command)?;
-    run(pnpm().args(["exec", "vitest", "run"]))
+    run(pnpm().arg("test"))
 }
 
 fn format(check: bool) -> Result {

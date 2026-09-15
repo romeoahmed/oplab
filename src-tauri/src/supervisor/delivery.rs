@@ -1,4 +1,4 @@
-//! One acknowledged Channel message in flight, with one coalesced full observation.
+//! One Channel observation awaiting acknowledgement and one latest pending sample.
 
 use oplab_core::protocol::{
     desktop::{DesktopFailure, FailureCode},

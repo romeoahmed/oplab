@@ -1,29 +1,36 @@
 {
   "name": "oplab",
   "version": "0.1.0",
+  "private": true,
   "description": "A desktop assembly workbench for x86_64 and AArch64",
-  "license": "MIT",
-  "type": "module",
-  "engines": {
-    "node": ">=24.21.0"
+  "license": "MIT OR Apache-2.0",
+  "author": {
+    "name": "Romeo Ahmed",
+    "url": "https://github.com/romeoahmed"
   },
+  "type": "module",
   "scripts": {
-    "dev": "vite dev",
     "build": "vite build",
-    "preview": "vite preview",
-    "prepare": "svelte-kit sync",
     "check": "paraglide-js compile --outdir ./src/lib/paraglide --strategy localStorage preferredLanguage baseLocale && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "lint": "eslint . --max-warnings 0 && stylelint \"src/**/*.css\"",
-    "test": "vitest run",
-    "tauri": "tauri"
+    "dev": "vite dev",
+    "lint": "eslint . --max-warnings 0 && stylelint \"src/**/*.css\" && knip",
+    "prepare": "svelte-kit sync",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.11.0",
+    "@codemirror/language": "^6.12.4",
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.4",
     "@codemirror/view": "^6.43.11",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@lezer/highlight": "^1.2.3",
     "@lucide/svelte": "^1.45.0",
-    "@tauri-apps/api": "^2.11.1"
+    "@tauri-apps/api": "^2.11.1",
+    "bits-ui": "^2.19.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -53,5 +60,7 @@
     "vitest": "^5.0.0",
     "vitest-browser-svelte": "^3.1.0"
   },
-  "private": true
+  "engines": {
+    "node": ">=24.21.0"
+  }
 }

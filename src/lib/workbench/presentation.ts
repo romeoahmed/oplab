@@ -4,7 +4,7 @@ import * as m from '$lib/paraglide/messages.js';
 
 export function stateLabel(status: Status | undefined, locale: Locale): string {
   const options = { locale };
-  if (status === undefined) return m.no_artifact({}, options);
+  if (status === undefined) return m.no_session({}, options);
   switch (status.type) {
     case 'ready':
       return m.state_ready({}, options);

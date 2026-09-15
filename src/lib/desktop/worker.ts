@@ -6,14 +6,27 @@ import type { DesktopFailure } from '$lib/protocol/generated/DesktopFailure';
 import { decodeResponse, decodeStream, encodeCall } from '$lib/protocol/frames';
 
 type Stream = ReturnType<typeof decodeStream>;
+/** A mounted view's worker attachment; requests are never retried automatically. */
 export type WorkerPort = {
+  /** Attach to the worker, or replace it and discard its state when `restart` is true. */
   connect: (restart: boolean) => Promise<ConnectionInfo>;
+  /** Resolve after the complete reply arrives; engine failures remain tagged reply values. */
   request: (command: Command, image?: Uint8Array) => Promise<ReturnType<typeof decodeResponse>>;
+  /** Return delivery credit after consuming an event; detached views have no credit to return. */
   acknowledge: (subscription: Counter, sequence: Counter) => Promise<void>;
+  /** Invalidate this view immediately and release its native lease asynchronously. */
   detach: () => void;
 };
 
-/** Scope one Channel to one mounted workbench; a new attachment invalidates old callers. */
+/**
+ * Create a worker port for one mounted workbench.
+ *
+ * @remarks
+ * Reattachment invalidates pending callers. Detaching preserves admitted native
+ * work and suppresses late events; it does not cancel a guest operation.
+ *
+ * @returns A disconnected port in Tauri, or `null` in browser preview.
+ */
 export function desktopWorker(
   onstream: (stream: Stream) => void,
   onfailure: (failure: DesktopFailure) => void,

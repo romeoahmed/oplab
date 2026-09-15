@@ -3,7 +3,7 @@ import type { AssemblerIdentity } from './AssemblerIdentity.js';
 import type { Target } from './Target.js';
 
 /**
- * Capabilities describe actual available paths, not merely compiled dependencies.
+ * Operations and targets available on the negotiated worker connection.
  */
 export type Capabilities = {
   /**
@@ -19,7 +19,7 @@ export type Capabilities = {
    */
   assembler: AssemblerIdentity;
   /**
-   * Whether original source provenance has passed the source-debugging gate.
+   * Whether verified source-to-instruction mapping is available.
    */
   source_mapping: boolean;
   /**

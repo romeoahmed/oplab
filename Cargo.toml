@@ -1,23 +1,19 @@
 [workspace]
-members = ["crates/oplab-core", "crates/oplab-engine", "src-tauri", "xtask"]
-default-members = ["crates/oplab-core", "crates/oplab-engine"]
+members = ["crates/core", "crates/engine", "src-tauri", "xtask"]
+default-members = ["crates/core", "crates/engine"]
 resolver = "3"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.98"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-clap = { version = "4.6", features = ["derive"] }
-cargo_metadata = "0.23"
-tauri = "2.11"
-tauri-build = "2.6"
-sysinfo = { version = "0.39", default-features = false, features = ["system"] }
-oplab-core = { path = "crates/oplab-core" }
 capstone = { version = "0.14", default-features = false, features = ["std", "full", "arch_arm64"] }
+cargo_metadata = "0.23"
 cc = "1.4"
+clap = { version = "4.6", features = ["derive"] }
 cxx = "1.0"
 cxx-build = "1.0"
 iced-x86 = { version = "1.21", default-features = false, features = [
@@ -27,19 +23,23 @@ iced-x86 = { version = "1.21", default-features = false, features = [
   "intel",
 ] }
 object = { version = "0.40", default-features = false, features = ["read", "std", "elf"] }
+oplab-core = { path = "crates/core" }
+proptest = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 shlex = "2.0"
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+tauri = "2.11"
+tauri-build = "2.6"
 tempfile = "3.27"
+thiserror = "2.0"
+# ts-rs cannot represent serde's enum unknown-field validation in TypeScript.
+# Suppress that export warning; serde still rejects unknown fields at runtime.
+ts-rs = { version = "12.0", features = ["no-serde-warnings"] }
 unicorn-engine = { version = "2.1", default-features = false, features = [
   "arch_x86",
   "arch_aarch64",
 ] }
-thiserror = "2.0"
-proptest = "1.10"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-# ts-rs cannot represent serde's enum unknown-field validation in TypeScript.
-# Wire contract tests retain strict rejection; no type errors are suppressed.
-ts-rs = { version = "12.0", features = ["no-serde-warnings"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

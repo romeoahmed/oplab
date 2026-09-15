@@ -1,7 +1,10 @@
 import { preferredLocale } from './match';
 import { localStorageKey, setLocale, type Locale } from '$lib/paraglide/runtime.js';
 
-/** One owner serializes preference writes and updates the persistent CSR shell. */
+/**
+ * Own locale selection and document metadata for the mounted application.
+ * Changes persist in order without reloading; failed writes leave the locale intact.
+ */
 export function createLocaleController() {
   let current = $state<Locale>('en');
   let failed = $state(false);
@@ -27,7 +30,7 @@ export function createLocaleController() {
         const stored = localStorage.getItem(localStorageKey);
         if (stored === 'en' || stored === 'zh-CN') locale = stored;
       } catch {
-        /* Unavailable storage does not prevent editing. */
+        // Use the system preference when storage is unavailable.
       }
       synchronize(locale);
     },

@@ -4,7 +4,9 @@ import type { Observation } from './Observation.js';
 import type { ObservationDelta } from './ObservationDelta.js';
 
 /**
- * A delta never depends on an observation that was coalesced before delivery.
+ * A full observation, a delta from a delivered baseline, or a capture failure.
+ *
+ * Coalesced samples that were never delivered cannot become delta baselines.
  */
 export type ObservationUpdate =
   | { type: 'full'; data: Observation }

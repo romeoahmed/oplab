@@ -32,7 +32,7 @@ export type Registers =
           Counter,
         ];
         /**
-         * Next instruction address.
+         * Observed instruction pointer; faults may leave it at the faulting instruction.
          */
         rip: HexAddress;
         /**
@@ -85,11 +85,11 @@ export type Registers =
          */
         sp: Counter;
         /**
-         * Next instruction address.
+         * Observed instruction pointer; faults may leave it at the faulting instruction.
          */
         pc: HexAddress;
         /**
-         * Raw 32-bit NZCV representation.
+         * Raw NZCV representation, with flags in bits 31 through 28.
          */
         nzcv: number;
       };

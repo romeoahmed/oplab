@@ -160,11 +160,13 @@ fn unresponsive_child_is_killed_reaped_and_admitted_outcome_is_unknown() -> Test
     use std::os::unix::fs::PermissionsExt;
     let temporary = tempfile::tempdir()?;
     let executable = temporary.path().join("unresponsive-worker");
-    std::fs::write(&executable, "#!/bin/sh\nexec sleep 30\n")?;
+    std::fs::write(
+        &executable,
+        "#!/bin/sh\nprintf '%s' \"$$\" > \"$0.pid\"\nexec sleep 30\n",
+    )?;
     std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))?;
     let service = Service::default();
     let (events, _) = channel();
-    let started = std::time::Instant::now();
     let failure = service
         .connect(&executable, events, false)
         .err()
@@ -172,7 +174,11 @@ fn unresponsive_child_is_killed_reaped_and_admitted_outcome_is_unknown() -> Test
     assert_eq!(failure.code, FailureCode::Deadline);
     assert!(failure.outcome_unknown);
     service.shutdown();
-    assert!(started.elapsed() < Duration::from_secs(6));
+    let pid = std::fs::read_to_string(temporary.path().join("unresponsive-worker.pid"))?;
+    let pid = sysinfo::Pid::from_u32(pid.parse()?);
+    let mut system = sysinfo::System::new();
+    system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+    assert!(system.process(pid).is_none(), "worker survived shutdown");
     Ok(())
 }
 
