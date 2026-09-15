@@ -1,9 +1,8 @@
 # Engine contract
 
 Assembly, instruction inspection, loading and execution are separate capabilities.
-LLVM accepting an instruction does not establish decoder coverage or Unicorn
-execution support.
-This document defines the implemented engine; [roadmap](roadmap.md) tracks additions.
+LLVM acceptance does not establish decoder coverage or Unicorn execution support.
+The [roadmap](roadmap.md) tracks planned additions.
 
 ## Assembly
 
@@ -57,8 +56,9 @@ LLD resolves references and uses its [orphan-section rules](https://lld.llvm.org
 for additional sections. Storage following `.text` aligns to the target's maximum
 page boundary; source alignment and the requested code address remain unchanged.
 The original object retains symbols, sections, relocations and debug information.
-Data-only objects, BSS and TLS keep their standard representations, although a
-successfully linked image can still require unsupported runtime behavior.
+Data-only objects, BSS and TLS keep their standard representations. The desktop
+address view excludes TLS offsets; complete ELF output retains them. A linked image
+can still require unsupported runtime behavior.
 
 Oplab validates ELF kind, architecture, byte order, section geometry, the `.text`
 anchor and load-segment ranges. Undefined symbols and unrepresentable relocations
@@ -162,8 +162,8 @@ from its used-access lists; Oplab does not turn them into unknown data accesses.
 This classification is backend-specific, not a complete inventory of cache or
 translation effects. Memory sizes describe operands, not measured traffic, total
 REP traffic or cache-line extents. Address expressions, branch conditions and
-effective addresses are not evaluated. A null
-branch target may mean indirect control or an unreported destination, not fallthrough.
+effective addresses are not evaluated. A null branch target may mean indirect
+control or an unreported destination, not fallthrough.
 Aliases, system behavior, partial state and unreported effects prevent treating
 this metadata as a complete ISA model.
 It does not establish source provenance or retire-time effects.

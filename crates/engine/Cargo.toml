@@ -10,6 +10,7 @@ description = "Assembly and execution engine for Oplab"
 clap.workspace = true
 oplab-core.workspace = true
 thiserror.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 cxx.workspace = true
 object.workspace = true

@@ -35,7 +35,12 @@ pub(crate) fn describe(bytes: &[u8], target: Target) -> Result<ImageInfo, Diagno
     let mut symbols_truncated = false;
     let mut names = 0;
     for symbol in file.symbols() {
-        if symbol.is_undefined() || matches!(symbol.kind(), SymbolKind::File | SymbolKind::Section)
+        // TLS values are thread-relative offsets, not linked virtual addresses.
+        if symbol.is_undefined()
+            || matches!(
+                symbol.kind(),
+                SymbolKind::File | SymbolKind::Section | SymbolKind::Tls
+            )
         {
             continue;
         }

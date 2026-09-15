@@ -12,7 +12,7 @@ pub struct ImageInfo {
     pub entry: HexAddress,
     /// Standard `PT_LOAD` program headers, in file order.
     pub segments: Vec<ImageSegment>,
-    /// Bounded named, defined, non-file/non-section symbols.
+    /// Bounded named, defined address symbols; excludes file, section and TLS entries.
     pub symbols: Vec<ImageSymbol>,
     /// More symbols exist than this bounded view includes.
     pub symbols_truncated: bool,

@@ -1,9 +1,9 @@
-# Worker protocol
+# Engine interfaces
 
-The isolated worker provides negotiation, assembly, instruction inspection, ELF
-loading, execution, coherent observations and shutdown. Rust declarations in
-`oplab-core::protocol` are authoritative; `cargo xtask codegen [--check]` exports or verifies the committed
-TypeScript declarations. [Engine](engine.md) owns machine semantics and artifact limits.
+This document defines the worker protocol, desktop boundary and CLI output.
+Rust declarations in `oplab-core::protocol` own the wire contracts;
+`cargo xtask codegen [--check]` exports or verifies their TypeScript declarations.
+[Engine](engine.md) defines machine semantics and artifact limits.
 
 ## Framing
 
@@ -58,6 +58,9 @@ first, linked ELF second, in 64-KiB binary chunks except the final remainder.
 There is no padding or terminator. Validate kind, order and exact lengths before
 publishing; reject extra frames and discard incomplete artifacts on failure.
 ELF remains authoritative for symbols, relocations, debugging and program headers.
+The bounded image view exposes named address symbols, excluding undefined, file,
+section and TLS entries. TLS offsets remain in the complete ELF; they are not
+virtual addresses or desktop stop positions.
 
 `load` declares target, completion, instruction budget, image length and `replace`,
 followed by the same binary chunk format. No machine is allocated until transfer and
@@ -248,13 +251,20 @@ transport; application credit supplies the bound.
 
 ## CLI
 
-The clap CLI shares engine operations. `assemble` reads source from stdin and writes
-only linked ELF to stdout; engine failures leave stdout empty and write a JSON
-diagnostic to stderr. `capabilities`, `decode` and `analyze` write newline-terminated
-JSON responses, including engine errors, to stdout. Input read, size and encoding
-failures occur before the operation and write a static message to stderr.
-Help/version and argument validation run before stdin reads. Usage errors exit 2;
-all other failures exit nonzero.
+The [clap CLI](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html) reads
+stdin and shares the native engine operations. Addresses accept ordinary hexadecimal
+input, including `0x1000` and `0XFF`. Help and argument validation precede input reads.
+Usage errors exit 2; operational or output failures exit 1.
+
+| Command                             | stdout                   | Operational errors                            |
+| ----------------------------------- | ------------------------ | --------------------------------------------- |
+| `assemble`                          | Complete linked ELF      | JSON diagnostic on stderr; stdout stays empty |
+| `capabilities`, `decode`, `analyze` | Correlated JSON response | JSON on stdout                                |
+| `run source`, `run elf`             | Batch JSON report        | JSON on stdout                                |
+
+For assembly and inspection, input read, size and encoding failures produce a static
+message on stderr. Batch execution reports those failures as JSON. JSON output ends
+with a newline; raw source excerpts and host paths are excluded from diagnostics.
 
 ```sh
 cargo run --locked -p oplab-engine --bin oplab-cli -- capabilities
@@ -263,9 +273,62 @@ cargo run --locked -p oplab-engine --bin oplab-cli -- decode aarch64 0x1000 < co
 cargo run --locked -p oplab-engine --bin oplab-cli -- analyze x86_64 0x1000 < instruction.bin
 ```
 
-CLI addresses accept ordinary hexadecimal input, including `0x1000` and `0XFF`.
-These commands do not execute guests. CLI execution remains planned; current
-execution is available through the engine and framed worker.
+### Batch execution
+
+`run source` compiles unchanged UTF-8 stdin (up to 256 KiB), links at the supplied
+base, then executes that image. `run elf` accepts a complete static ELF64 executable
+(up to 1 MiB), checks the selected guest, and uses its program headers and `e_entry`
+without relocating it. Ordinary section headers are optional; symbol-based completion
+requires a symbol table, and extended program-header counts require section zero.
+Both use the desktop's [loader](engine.md#loading) and [session policy](engine.md#execution).
+Successful assembly alone does not imply a loadable runtime image.
+
+```sh
+cargo run --locked -p oplab-engine --bin oplab-cli -- run source x86_64 0x1000 --until-symbol done --budget 100 < experiment.s
+cargo run --locked -p oplab-engine --bin oplab-cli -- run elf aarch64 --until 0x1008 --budget 100 --memory 0x1000 --memory-bytes 8 < experiment.elf
+```
+
+| Option                                    | Contract                                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `--until ADDRESS` / `--until-symbol NAME` | Exactly one is required. Stop before fetching the resolved address; it must be aligned and distinct from the entry. |
+| `--budget N`                              | Required instruction-start limit, 1–100,000,000. REP iterations count as one instruction.                           |
+| `--timeout-ms N`                          | Cooperative execution limit, 1–3,600,000 ms; default 10,000.                                                        |
+| `--memory ADDRESS`                        | Include one final mapped memory window; validated before execution.                                                 |
+| `--memory-bytes N`                        | 1–65,536 bytes, default 64 when observing memory. Explicit use requires `--memory`.                                 |
+
+A completion symbol must name exactly one entry in the ordinary ELF symbol table,
+defined in an existing section or as an absolute value. Missing, undefined, unallocated
+common, ambiguous and file symbols fail. [TLS symbols](https://gabi.xinuos.com/elf/05-symtab.html#symbol-type)
+are rejected because their values are offsets, not virtual addresses. An explicit
+address needs no symbols. Neither form establishes source provenance or an instruction
+boundary; completion is an explicit control policy.
+
+Each invocation owns one session and captures final state after execution. The PC
+comes from ELF, memory comes from the loader, and other registers retain the
+backend's initial state. No stack, return address, host ABI or system services are
+supplied implicitly.
+
+The timeout begins after input, assembly, loading and initial observation validation.
+It is checked between slices using Rust's monotonic `Instant`; a native call may
+overrun it. A terminal outcome reached within the last slice takes precedence over
+the next timeout check. Timeout cancels the session and retains partial effects.
+Native hangs, input stalls and assembler expansion require an external process
+supervisor; this CLI does not inherit the desktop supervisor's deadlines or RSS limits.
+
+`run` writes one newline-terminated JSON object to stdout:
+
+- `{"type":"executed","data":{...}}` contains `target`, resolved `completion`,
+  `outcome`, decimal-string `instructions`/`dispatches`, canonical `registers`,
+  nullable `fault`, and nullable `memory: {address, bytes}`. Memory uses a bounded
+  JSON byte array; register/fault shapes and exact scalars match the worker contract.
+- `outcome` is `completed`, `budget`, `guest_fault`, `unsupported_environment` or
+  `timeout`. Non-completion outcomes exit 1 and retain final effects.
+- `{"type":"error","data":{...}}` uses the standard `Diagnostic` for rejected
+  input, assembly/loading failures or an unavailable native observation. It exits 1;
+  no machine state is fabricated after a backend failure.
+
+Batch output has no request ID. Output errors are detected through serialization,
+writing and the final flush; exit 0 requires a completed run and successful output.
 
 ## Desktop file boundary
 

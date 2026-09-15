@@ -1,7 +1,10 @@
 //! Exact session identities and coherent observations at the wire boundary.
 
 use super::scalar::{Counter, HexAddress};
-use crate::execution::{FaultKind, Termination};
+use crate::{
+    execution::{FaultKind, GuestFault, Termination},
+    registers::IntegerRegisters,
+};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -156,4 +159,33 @@ pub struct Observation {
     pub fault: Option<Fault>,
     /// Metadata for the binary memory payload immediately following the reply.
     pub memory: Option<MemoryWindow>,
+}
+
+impl From<IntegerRegisters> for Registers {
+    fn from(registers: IntegerRegisters) -> Self {
+        match registers {
+            IntegerRegisters::X86_64 { gpr, rip, rflags } => Self::X86_64 {
+                gpr: gpr.map(Counter::new),
+                rip: HexAddress::new(rip),
+                rflags: Counter::new(rflags),
+            },
+            IntegerRegisters::Aarch64 { x, sp, pc, nzcv } => Self::Aarch64 {
+                x: x.map(Counter::new),
+                sp: Counter::new(sp),
+                pc: HexAddress::new(pc),
+                nzcv,
+            },
+        }
+    }
+}
+
+impl From<GuestFault> for Fault {
+    fn from(fault: GuestFault) -> Self {
+        Self {
+            kind: fault.kind,
+            pc: HexAddress::new(fault.pc),
+            address: fault.address.map(HexAddress::new),
+            size: fault.size.map(Counter::new),
+        }
+    }
 }

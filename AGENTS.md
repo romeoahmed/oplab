@@ -31,7 +31,8 @@ Native handles stay on their owning threads; queues and payloads stay bounded.
   Vite server per checkout; stop a standalone server before starting Tauri dev.
 - Native builds require stable Rust, C++23, LLVM 23 with matching LLD development
   files, libclang, CMake/build tools, pkg-config and the platform SDK. Follow
-  `docs/development.md`; do not invent paths or patch generated headers to bypass setup.
+  [native setup](docs/development.md#native-toolchain); do not invent paths or patch
+  generated headers to bypass setup.
 - `pnpm check`: catalogs and Svelte/TypeScript checks.
 - `pnpm lint`: ESLint, Stylelint and Knip.
 - `pnpm test [--project logic|browser]`: frontend tests.
@@ -80,7 +81,7 @@ Vite and Tauri lifecycles instead of adding duplicate wrappers or ad hoc scripts
 - Keep tests under root `tests/` or Rust package `tests/`; private Rust tests use
   `#[cfg(test)]` path modules without widening production APIs.
 - Keep machine-specific paths, secrets and local logs out of tracked files. The icon
-  master is `static/icon.svg`; follow the documented conversion and visual verification.
+  master is `static/icon.svg`; follow [asset conversion and verification](docs/development.md#configuration-and-assets).
 
 ## Verification and delivery
 
@@ -94,7 +95,7 @@ Use only Playwright Chromium with new headless mode. Install it with
 prove component behavior, not native IPC or guest execution. Test UI changes with
 both languages, keyboard navigation, realistic window sizes and retained editor state.
 Native changes need real worker/guest tests; desktop UI changes also need a fresh
-static-bundle check when relevant. See `docs/testing.md` for the acceptance flows.
+static-bundle check when relevant. Follow the [acceptance flows](docs/testing.md#native-evidence).
 
 Run checks proportionate to the change. Command/orchestration changes need the
 actual xtask flows; contracts need codegen verification; broad changes need workspace

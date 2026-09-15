@@ -31,6 +31,8 @@ an independently distributable application. Checked items describe implementatio
       explicit byte offsets, bounded pages and stale-result rejection.
 - [x] On-demand analysis in the workbench, worker and CLI: register/memory metadata,
       x86 control/flags/CPUID and AArch64 groups/writeback, with explicit metadata limits.
+- [x] Batch CLI execution from unchanged source or standard ELF, explicit completion
+      and instruction/time budgets, final registers/faults and optional bounded memory.
 - [x] English/Simplified Chinese, self-hosted JetBrains Mono/system monospace,
       font size/wrap preferences, native CSS, Bits UI primitives and Lucide icons.
 - [x] Tests outside production directories, with independent Proptest/fast-check
@@ -48,8 +50,7 @@ an independently distributable application. Checked items describe implementatio
    need explicit contracts.
 3. **Machine setup:** validated initial registers/mappings and explicit raw-code
    loading, alias writes, executable patches and translated-code invalidation.
-4. **CLI execution:** use standard source/binary inputs and explicit machine policy.
-5. **Workbench expansion:** multiple source documents, coordinated source/instruction
+4. **Workbench expansion:** multiple source documents, coordinated source/instruction
    focus, accessible draggable separators and large-data views as needed.
 
 Files use standard assembly text, raw bytes and ELF; no saved-experiment container
@@ -82,8 +83,7 @@ implicitly loads or patches a machine.
       signing/JIT policy, installation and sidecar startup on each supported host.
 - [ ] Production CSP/capabilities, privacy and failure-artifact review.
 
-Do not install speculative dependencies or create placeholder modules for pending
-work. Browser fixtures and local debug builds do not satisfy distribution gates.
+Add dependencies and modules when implementing a capability, not as placeholders.
 
 ## Verification
 
@@ -92,9 +92,13 @@ signed, independently installed distributions remain unverified.
 
 Verified on **2026-09-15**:
 
-- `cargo xtask check` and `cargo xtask test`: 74 Rust unit/integration tests,
+- `cargo xtask check` and `cargo xtask test`: 84 Rust unit/integration tests,
   2 doctests and 60 frontend tests, including 36 Chromium cases. Rustdoc also
   passed with warnings denied; generated TypeScript matches the Rust contracts.
+- Batch CLI source/ELF runs on both guests preserved arbitrary full-width arithmetic
+  and memory results, including precision/overflow boundaries. Tests covered exact
+  stdin limits, sectionless ELF entry handling, absolute/ambiguous symbols, rejected
+  TLS offsets, partial faults, environment stops, instruction limits and cooperative timeout.
 - Static frontend and Tauri debug builds through the normal hooks. Both guests
   assembled, loaded, stepped and stored 42; reset restored state, failed assembly
   preserved the machine, and a bounded loop paused/stopped.
@@ -104,11 +108,7 @@ Verified on **2026-09-15**:
 - Browser and native layout review covered both languages, font/wrap preferences,
   focus mode, layout reset, narrow instruction navigation and the larger default
   window. Fonts and the dynamic editor loaded under the app origin/CSP.
-- Regression probes detected incorrect pagination, branch-immediate selection,
-  ignored base changes and file callbacks after unmount. Input-reversion and
-  re-decoding tests reject stale pages and analyses.
 
 All 10 ICNS representations and 6 ICO layers matched PNG references on
 **2026-09-14**. Test design, acceptance procedures and the known Vitest/Vite mock-hook
-warning are maintained in [testing](testing.md). These results do not close the
-release gates above.
+warning are maintained in [testing](testing.md).

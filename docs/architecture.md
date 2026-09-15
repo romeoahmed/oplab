@@ -24,10 +24,9 @@ Svelte workbench → Tauri supervisor → isolated worker
 | `tests`, Rust package `tests` | Behavior and invariant tests outside production directories                                |
 | `xtask`                       | Cross-tool verification, formatting, contract export and sidecar staging                   |
 
-Keep abstractions with the state and effects they own. Native types stay in engine
-adapters; desktop dependencies stay out of core. Add modules or crates for actual
-boundaries, not empty service/repository/shared layers. Cargo, Vite, SvelteKit and
-Tauri retain their normal build lifecycles; [development](development.md) owns commands.
+Keep state and effects with their owners, native types in engine adapters and desktop
+dependencies out of core. Introduce modules for actual boundaries. Cargo, Vite,
+SvelteKit and Tauri own their build lifecycles; [development](development.md) owns commands.
 
 ## Repository layout
 
@@ -47,6 +46,7 @@ crates/
     build/                    # LLVM discovery and C++ build support
     native/                   # CXX-facing C++ sources
     src/                      # Assembly, machine, session and worker modules
+      bin/oplab-cli/          # CLI entry and batch execution
     tests/                    # Public integration targets
       common/                 # Process fixtures
       unit/                   # Private concurrency tests
@@ -202,11 +202,9 @@ scroll independently in wide panels. Below 760px of content width, a native CSS
 container query gives analysis the panel; Close restores the existing list and
 controls without another decode.
 
-Planned expansion adds multiple documents and coordinated instructions in the center,
-watches on the right, and diagnostics/traces below. Introduce navigators when
-collections exist and coordinate source/instruction selection through verified
-provenance. Do not add inert controls or empty views for planned capabilities.
-The layout draws on
+The [roadmap](roadmap.md#next-product-work) tracks interface expansion. Add navigation
+when collections exist; coordinate source/instruction selection through verified
+provenance. The layout draws on
 [VS Code](https://code.visualstudio.com/docs/getstarted/userinterface) and
 [Binary Ninja](https://docs.binary.ninja/guide/index.html) while keeping this workflow compact.
 
@@ -244,6 +242,11 @@ containing directory. Cancellation is a normal outcome.
 No frontend filesystem scope or automatic write to an earlier path is granted.
 
 ## Execution, performance and containment
+
+The batch CLI owns a `Session` on its calling thread and shares assembly, ELF loading
+and execution with the worker. Core supplies canonical register/fault conversions;
+the CLI owns batch outcomes and inline memory. clap validates arguments and Serde
+writes buffered JSON. [Protocol](protocol.md#batch-execution) defines the output contract.
 
 Construct each native session on its execution thread. A separate owner handles
 assembly; bounded queues and independent pipe readers/writers keep controls usable.

@@ -1,11 +1,12 @@
-//! Machine-readable assembly and instruction inspection through the worker's operations.
+//! Machine-readable assembly, instruction inspection and bounded guest execution.
+
+mod execute;
 
 use clap::Parser;
 use oplab_core::{
     address::Address,
     protocol::{
-        BuildIdentity, Command, MAX_DECODE_BYTES, MAX_SOURCE_BYTES, Reply, Request, Response,
-        VERSION,
+        BuildIdentity, Command, MAX_DECODE_BYTES, MAX_SOURCE_BYTES, Reply, Request, VERSION,
         scalar::{Counter, HexAddress},
     },
 };
@@ -16,7 +17,7 @@ use std::{
     process::ExitCode,
 };
 
-/// Assemble ELF images, disassemble machine code or analyze an instruction from stdin.
+/// Assemble, inspect or execute `x86_64` and `AArch64` code from stdin.
 #[derive(clap::Parser)]
 #[command(version)]
 struct Cli {
@@ -26,6 +27,15 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Operation {
+    #[command(flatten)]
+    Inspect(Inspection),
+    /// Execute a source document or static ELF image and report final machine state.
+    #[command(subcommand)]
+    Run(execute::Input),
+}
+
+#[derive(clap::Subcommand)]
+enum Inspection {
     /// Print engine capabilities as JSON.
     Capabilities,
     /// Read UTF-8 assembly and write an executable ELF image to stdout.
@@ -65,8 +75,15 @@ fn main() -> ExitCode {
     // Keep dependency panic payloads and build-machine paths out of routine stderr.
     std::panic::set_hook(Box::new(|_| eprintln!("engine_backend_panic")));
     let cli = Cli::parse();
-    let binary = matches!(cli.operation, Operation::Assemble(_));
-    let response = match run(cli.operation) {
+    match cli.operation {
+        Operation::Run(input) => execute::run(input),
+        Operation::Inspect(operation) => inspect(operation),
+    }
+}
+
+fn inspect(operation: Inspection) -> ExitCode {
+    let binary = matches!(operation, Inspection::Assemble(_));
+    let response = match dispatch(operation) {
         Ok(response) => response,
         Err(message) => {
             eprintln!("{message}");
@@ -96,17 +113,16 @@ fn main() -> ExitCode {
     }
 }
 
-fn write_json_line(mut writer: impl Write, response: &Response) -> bool {
-    transport::encode_json(response).is_ok_and(|bytes| {
-        writer
-            .write_all(&bytes)
-            .and_then(|()| writer.write_all(b"\n"))
+fn write_json_line(writer: impl Write, response: &impl serde::Serialize) -> bool {
+    let mut writer = io::BufWriter::new(writer);
+    serde_json::to_writer(&mut writer, response).is_ok()
+        && writer
+            .write_all(b"\n")
             .and_then(|()| writer.flush())
             .is_ok()
-    })
 }
 
-fn run(operation: Operation) -> Result<transport::Message, &'static str> {
+fn dispatch(operation: Inspection) -> Result<transport::Message, Box<dyn std::error::Error>> {
     let mut worker = Worker::default();
     let hello = worker
         .handle(
@@ -118,8 +134,8 @@ fn run(operation: Operation) -> Result<transport::Message, &'static str> {
         )
         .map_err(|_| "worker initialization failed")?;
     let command = match operation {
-        Operation::Capabilities => return Ok(hello),
-        Operation::Assemble(input) => Command::Assemble {
+        Inspection::Capabilities => return Ok(hello),
+        Inspection::Assemble(input) => Command::Assemble {
             identity: BuildIdentity {
                 document: "stdin".into(),
                 revision: Counter::new(0),
@@ -130,12 +146,12 @@ fn run(operation: Operation) -> Result<transport::Message, &'static str> {
             source: String::from_utf8(read_input(MAX_SOURCE_BYTES)?)
                 .map_err(|_| "source must be UTF-8")?,
         },
-        Operation::Analyze(input) => Command::Analyze {
+        Inspection::Analyze(input) => Command::Analyze {
             target: input.target.into(),
             base: HexAddress::new(input.base),
             bytes: read_input(15)?,
         },
-        Operation::Decode(input) => Command::Decode {
+        Inspection::Decode(input) => Command::Decode {
             target: input.target.into(),
             base: HexAddress::new(input.base),
             bytes: read_input(MAX_DECODE_BYTES)?,
@@ -150,18 +166,36 @@ fn run(operation: Operation) -> Result<transport::Message, &'static str> {
             }
             .into(),
         )
-        .map_err(|_| "worker request failed")
+        .map_err(|_| "worker request failed".into())
 }
 
-fn read_input(limit: usize) -> Result<Vec<u8>, &'static str> {
+fn read_input(limit: usize) -> Result<Vec<u8>, InputError> {
     let mut bytes = Vec::new();
     io::stdin()
         .lock()
         .take((limit + 1) as u64)
         .read_to_end(&mut bytes)
-        .map_err(|_| "could not read input")?;
+        .map_err(|_| InputError::Read)?;
     if bytes.len() > limit {
-        return Err("input budget exceeded");
+        return Err(InputError::Budget);
     }
     Ok(bytes)
+}
+
+#[derive(Debug, thiserror::Error)]
+enum InputError {
+    #[error("could not read input")]
+    Read,
+    #[error("input budget exceeded")]
+    Budget,
+}
+
+impl From<InputError> for oplab_core::protocol::Diagnostic {
+    fn from(error: InputError) -> Self {
+        use oplab_core::protocol::DiagnosticCode;
+        Self::new(match error {
+            InputError::Read => DiagnosticCode::InvalidInput,
+            InputError::Budget => DiagnosticCode::ResourceLimit,
+        })
+    }
 }

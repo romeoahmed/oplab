@@ -40,6 +40,7 @@ implementation in the expected result or merely round-trip two production helper
 | Framing                    | Published little-endian headers, binary chunk boundaries, arbitrary pipe fragmentation and truncated input                         |
 | ELF loading                | Hand-built ELF64 headers, page envelopes, file bytes and observed zero-fill                                                        |
 | Instruction analysis       | Fixed effects, generated MOV/signed-branch operands, full-width destinations and independent extension encodings                   |
+| Batch CLI                  | Full-width arithmetic and memory from source/ELF inputs; exit outcomes, sectionless ELF and completion symbols                     |
 | Guest execution            | Generated add/subtract/XOR programs compared with wrapping `u32` arithmetic on both guests                                         |
 | Build scheduling           | Latest valid request per document, cancellation and exactly-once delivery without assuming unrelated reply order                   |
 | Observations               | Generated full/delta histories, independent complete samples, exact counters, retained baselines and stale identities              |
@@ -155,12 +156,19 @@ upstream compatibility verification.
 - **Instruction inspection/CLI:** independent instruction bytes and static effects,
   bounded complete prefixes, exact single-instruction analysis, invalid-byte locations,
   raw stdin and separate usage errors.
+- **Batch CLI:** two arbitrary `u64` operands against wrapping arithmetic and exact
+  memory, plus fixed precision/overflow boundaries. Separate cases cover exact stdin
+  limits and one-byte overflow, sectionless entry handling, absolute/ambiguous/TLS
+  symbols and structured stop/error outcomes.
+  Timeout tests use a nonterminating guest and an external fixture deadline, not a
+  latency assertion.
 - **Execution:** canonical registers, flags/alias effects, arithmetic properties,
   whole-REP stepping, instruction budgets, before-effect breakpoints/re-arming,
   reset, coherent memory, fault/environment outcomes and boundary completion.
 - **Worker:** actual binary transfers, cancellation with one outcome, controls during
   assembly, reserved capacity, shutdown barriers, writer loss, generations and full/delta
   subscriptions; invalid replacement preserves the current machine/subscription.
+  ELF exports retain TLS symbols while the address view excludes their offsets.
 - **Files:** Proptest-generated binary/Unicode contents against standard filesystem
   I/O, explicit UTF-8/BOM/newline and size boundaries, missing/non-file paths, and
   preservation of the old file on rejected replacement.
@@ -201,9 +209,6 @@ native harness should use real IPC and the actual worker, keep automation plugin
 behind a test-only feature and exclude them from production. Avoid duplicating
 renderer suites. No desktop WebDriver harness is installed yet.
 
-Release acceptance still needs multi-host CI, actual installed artifacts, dynamic
-library discovery/bundling, dependency licenses, signing/JIT policy and production
-capability/CSP checks. Add complete-workflow state-machine properties, isolated
-parser fuzzing, adversarial expansion/resource tests and measured performance
-workloads as those surfaces are developed. Output bounds, cooperative cancellation,
-sampled RSS and OS quotas provide different guarantees; do not conflate them.
+The [release gates](roadmap.md#release-gates) track multi-host CI, installed-artifact
+acceptance, containment and performance work. Output bounds, cooperative cancellation,
+sampled RSS and OS quotas provide different guarantees.

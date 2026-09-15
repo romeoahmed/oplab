@@ -1,8 +1,8 @@
 # Development and builds
 
-This guide covers setup, commands, native discovery and build outputs. Manifests
-and lockfiles define dependencies; [testing](testing.md) defines acceptance.
-Build from the repository root. No toolchain is downloaded by `build.rs` or xtask.
+Run commands from the repository root. Manifests and lockfiles define dependencies;
+[testing](testing.md) defines acceptance. Install native tools before building;
+`build.rs` and xtask do not download them.
 
 ## Requirements by task
 
@@ -184,11 +184,10 @@ pnpm exec playwright install --with-deps --no-shell chromium
 | xtask        | `cargo xtask codegen [--check]`          | Export or verify Rust-owned TypeScript contracts                                       |
 | xtask        | `cargo xtask sidecar [--release]`        | Build and stage the worker without starting the app                                    |
 
-Frontend recipes live once in package.json; xtask calls them. Formatting spans
-languages and belongs to xtask. Tauri owns desktop builds; there is no second xtask
-build/dev command. Use `cargo xtask --help` and subcommand help for options. Focused
-runs use native tool arguments, such as `pnpm test --project logic`,
-`pnpm test --project browser`, or `cargo test -p oplab-core --locked`.
+package.json owns frontend recipes, xtask owns cross-tool verification and formatting,
+and Tauri owns desktop builds. Use `cargo xtask --help` for options. Focused runs use
+native arguments: `pnpm test --project logic`, `pnpm test --project browser` or
+`cargo test -p oplab-core --locked`.
 
 Check/test commands may compile dependencies, refresh ignored generated files
 and stage ignored binaries. They preserve lockfiles, tracked source and Git staging.
@@ -197,8 +196,8 @@ an app restart. Tauri's watcher does not rebuild the independent worker automati
 
 ## API documentation
 
-Comments describe contracts and non-obvious constraints: units, ownership, failure
-behavior and invariants. Keep implementation explanations beside the relevant code.
+Document units, ownership, failures and invariants; keep implementation explanations
+beside the relevant code.
 TypeScript uses [TSDoc](https://tsdoc.org/) summaries, with `@remarks`, `@returns` or
 `@throws` when they add useful information; do not repeat declared types in tags.
 Rust uses [`//!` for modules and `///` for items](https://doc.rust-lang.org/reference/comments.html),

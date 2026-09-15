@@ -26,12 +26,14 @@ The interface is available in English and Simplified Chinese.
   instruction for static register/memory effects, control flow and architecture metadata.
 - **Files:** Import/export UTF-8 assembly and exact machine bytes; export complete
   ELF objects and images through native dialogs.
+- **Automate:** Run assembly or static ELF from stdin with explicit completion and
+  execution limits; receive final registers, faults and optional memory as JSON.
 - **Adjust:** Self-hosted JetBrains Mono or system monospace, font size, wrapping,
   panel proportions and focus mode; local draft/settings recovery.
 
-Source-to-instruction mapping, editable machine setup, multiple documents and CLI
-execution remain planned. Imported raw bytes support inspection only; execution
-loads an assembled ELF image. See the [current scope](docs/roadmap.md).
+Source-to-instruction mapping, editable machine setup and multiple documents remain
+planned. Imported raw bytes support inspection only; execution loads standard ELF.
+See the [current scope](docs/roadmap.md).
 
 ## Get started
 
@@ -43,7 +45,7 @@ pnpm dev
 ```
 
 Open Vite's local URL. Browser preview supports editing and interface development;
-assembly and execution require the desktop app.
+native assembly and execution are available in the desktop app or CLI.
 
 For **desktop development**, follow the [native build setup](docs/development.md)
 for Rust, LLVM/LLD 23, C++23 and Tauri's platform prerequisites. Stop the standalone
@@ -70,6 +72,17 @@ address/symbol and instruction limit. A link-address change needs a new build;
 stop position and limit apply when loading. The [engine contract](docs/engine.md)
 explains GNU syntax, alignment and execution boundaries.
 
+For a terminal workflow, save an [assembly example](docs/engine.md#language-and-layout)
+with a `done` label and run:
+
+```sh
+cargo run --locked -p oplab-engine --bin oplab-cli -- run source x86_64 0x1000 --until-symbol done --budget 100 < experiment.s
+```
+
+The CLI requires the [native toolchain](docs/development.md#native-toolchain).
+Its [contract](docs/protocol.md#batch-execution) covers ELF input, memory output,
+exit codes and timeout limits.
+
 ## Contribute
 
 Read the [development guide](docs/development.md) for setup and focused commands.
@@ -81,9 +94,8 @@ cargo xtask check
 cargo xtask test
 ```
 
-`cargo xtask fmt` formats source and documentation. Tests should verify observable
-behavior and independent invariants. Include relevant validation and update both
-language catalogs and the documentation when behavior changes.
+`cargo xtask fmt` formats source and documentation. Include behavior tests and
+relevant validation; update both language catalogs and documentation when needed.
 
 ## Project guide
 

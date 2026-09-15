@@ -7,12 +7,9 @@ use oplab_core::{
     execution::{ExecutionState, PauseReason},
     protocol::{
         Command, Diagnostic, DiagnosticCode, Reply, Response,
-        execution::{
-            Fault, MemoryWindow, Observation, Registers, SessionAction, SessionKey, Status,
-        },
+        execution::{MemoryWindow, Observation, SessionAction, SessionKey, Status},
         scalar::{Counter, HexAddress},
     },
-    registers::IntegerRegisters,
 };
 use std::{
     sync::mpsc::{self, Receiver, SyncSender, TryRecvError},
@@ -122,19 +119,14 @@ impl BoundSession {
         let registers = if self.machine.state() == ExecutionState::Crashed {
             None
         } else {
-            Some(registers(
-                &self
-                    .machine
+            Some(
+                self.machine
                     .read_registers()
-                    .map_err(|error| diagnostic(&error))?,
-            ))
+                    .map_err(|error| diagnostic(&error))?
+                    .into(),
+            )
         };
-        let fault = self.machine.fault().map(|fault| Fault {
-            kind: fault.kind,
-            pc: HexAddress::new(fault.pc),
-            address: fault.address.map(HexAddress::new),
-            size: fault.size.map(Counter::new),
-        });
+        let fault = self.machine.fault().map(Into::into);
         let observation = Observation {
             key: self.key(),
             sequence: Counter::new(sequence),
@@ -306,21 +298,5 @@ const fn status(state: ExecutionState) -> Status {
         }
         ExecutionState::Terminated(reason) => Status::Terminated(reason),
         ExecutionState::Crashed => Status::Crashed,
-    }
-}
-
-fn registers(registers: &IntegerRegisters) -> Registers {
-    match registers {
-        IntegerRegisters::X86_64 { gpr, rip, rflags } => Registers::X86_64 {
-            gpr: gpr.map(Counter::new),
-            rip: HexAddress::new(*rip),
-            rflags: Counter::new(*rflags),
-        },
-        IntegerRegisters::Aarch64 { x, sp, pc, nzcv } => Registers::Aarch64 {
-            x: x.map(Counter::new),
-            sp: Counter::new(*sp),
-            pc: HexAddress::new(*pc),
-            nzcv: *nzcv,
-        },
     }
 }

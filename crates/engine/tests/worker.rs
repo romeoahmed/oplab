@@ -1,6 +1,6 @@
 //! Worker framing and process behavior under fragmented, malformed, and bounded input.
 
-use object::{Object, ObjectSection};
+use object::{Object, ObjectSection, ObjectSymbol};
 use oplab_core::address::Address;
 use oplab_core::protocol::transport;
 use oplab_core::protocol::{
@@ -13,6 +13,63 @@ use oplab_engine::worker::{Worker, WorkerError};
 mod common;
 
 use std::io::Cursor;
+
+#[test]
+fn address_view_excludes_tls_offsets_but_preserves_elf_symbols()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = ".text\nstart: nop\n.section .tdata,\"awT\",%progbits\n.type local_value,%tls_object\nlocal_value: .quad 42";
+    for target in [Target::X86_64, Target::Aarch64] {
+        let mut worker = Worker::default();
+        worker.handle(
+            Request {
+                id: Counter::new(1),
+                command: Command::Hello { version: VERSION },
+            }
+            .into(),
+        )?;
+        let message = worker.handle(
+            Request {
+                id: Counter::new(2),
+                command: Command::Assemble {
+                    identity: BuildIdentity {
+                        document: "symbols".into(),
+                        revision: Counter::new(1),
+                        target,
+                        base: HexAddress::new(Address::new(0x1000)),
+                        assembler: oplab_engine::assembly::identity(),
+                    },
+                    source: source.into(),
+                },
+            }
+            .into(),
+        )?;
+        let Reply::Assembled(artifact) = message.response.result else {
+            return Err("missing TLS artifact".into());
+        };
+        let [object, image] = message.payloads.as_slice() else {
+            return Err("missing object/image payloads".into());
+        };
+        for bytes in [object, image] {
+            let file = object::File::parse(bytes.as_slice())?;
+            let symbol = file
+                .symbols()
+                .find(|symbol| symbol.name() == Ok("local_value"))
+                .ok_or("missing TLS symbol in ELF")?;
+            assert_eq!(symbol.kind(), object::SymbolKind::Tls);
+        }
+        assert!(artifact.image.symbols.iter().any(
+            |symbol| symbol.name == "start" && symbol.address.address() == Address::new(0x1000)
+        ));
+        assert!(
+            !artifact
+                .image
+                .symbols
+                .iter()
+                .any(|symbol| symbol.name == "local_value")
+        );
+    }
+    Ok(())
+}
 
 #[test]
 fn protocol_negotiation_and_request_order_are_enforced() -> Result<(), WorkerError> {

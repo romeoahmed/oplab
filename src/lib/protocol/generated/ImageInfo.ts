@@ -16,7 +16,7 @@ export type ImageInfo = {
    */
   segments: Array<ImageSegment>;
   /**
-   * Bounded named, defined, non-file/non-section symbols.
+   * Bounded named, defined address symbols; excludes file, section and TLS entries.
    */
   symbols: Array<ImageSymbol>;
   /**

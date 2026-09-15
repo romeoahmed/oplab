@@ -2534,6 +2534,7 @@ dependencies = [
  "object",
  "oplab-core",
  "proptest",
+ "serde",
  "serde_json",
  "shlex 2.0.1",
  "tempfile",
