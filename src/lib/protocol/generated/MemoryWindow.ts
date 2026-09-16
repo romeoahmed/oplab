@@ -2,7 +2,9 @@
 import type { HexAddress } from './HexAddress.js';
 
 /**
- * A bounded memory observation, captured together with the returned registers.
+ * A contiguous guest range for a memory observation or patch.
+ *
+ * Observations capture this range together with registers; patches supply its bytes separately.
  */
 export type MemoryWindow = {
   /**
@@ -10,7 +12,7 @@ export type MemoryWindow = {
    */
   address: HexAddress;
   /**
-   * Byte count, limited to 64 KiB and one mapped region.
+   * Nonzero byte count, limited to 64 KiB within one mapped region.
    */
   length: number;
 };

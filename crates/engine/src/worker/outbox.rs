@@ -50,7 +50,7 @@ impl Sender {
         Ok(state.bulk.len() < BULK_CAPACITY)
     }
 
-    /// Only uncorrelated observations may coalesce. None invalidates a subscription.
+    /// Replace the pending observation; `None` clears it without dropping correlated replies.
     pub(super) fn observe(&self, pending: Option<Pending>) -> Result<(), WorkerError> {
         let mut state = self.0.state.lock().map_err(|_| WorkerError::IoThread)?;
         if state.failed || state.closed {

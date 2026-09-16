@@ -10,7 +10,7 @@ export type Mapping = {
    */
   address: HexAddress;
   /**
-   * Nonzero byte length, a multiple of backend page size. Total memory <= 64 MiB.
+   * Nonzero byte length, a multiple of backend page size. Total mapped memory is at most 64 MiB.
    */
   length: number;
   /**

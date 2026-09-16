@@ -90,7 +90,7 @@
     });
   }
 
-  /** Own the editor for this attachment; compartment updates preserve editing state. */
+  // The attachment owns the view; compartments update settings without replacing history.
   function attachEditor(element: HTMLElement) {
     const externalSource = Annotation.define<boolean>();
     const language = new Compartment();

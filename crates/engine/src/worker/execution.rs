@@ -29,12 +29,12 @@ use std::{
 struct Job {
     id: Counter,
     command: Command,
-    image: Option<Vec<u8>>,
+    payload: Option<Vec<u8>>,
     reply: SyncSender<Message>,
 }
 
-/// The synchronous dispatcher admits one queued execution command. The reply slot
-/// never competes with observations: each command captures a full snapshot on demand.
+/// One native owner with a bounded command queue and a reply slot per request.
+/// Replies do not compete with unsolicited observations for capacity.
 pub(super) struct Owner {
     sender: Option<SyncSender<Job>>,
     thread: Option<JoinHandle<()>>,
@@ -57,7 +57,7 @@ impl Owner {
         &self,
         id: Counter,
         command: Command,
-        image: Option<Vec<u8>>,
+        payload: Option<Vec<u8>>,
     ) -> Result<Message, WorkerError> {
         let (reply, receiver) = mpsc::sync_channel(1);
         self.sender
@@ -66,7 +66,7 @@ impl Owner {
             .send(Job {
                 id,
                 command,
-                image,
+                payload,
                 reply,
             })
             .map_err(|_| WorkerError::ExecutionLost)?;
@@ -173,7 +173,7 @@ fn run(receiver: &Receiver<Job>) {
             }
         };
         let advanced = if let Some(job) = job {
-            let (result, payloads) = dispatch(&mut active, job.id, &job.command, job.image)
+            let (result, payloads) = dispatch(&mut active, job.id, &job.command, job.payload)
                 .unwrap_or_else(|error| (Reply::Error(error), Vec::new()));
             // Step already executes one slice. Poll queued controls before any
             // continuation, including when that slice made no instruction progress.
@@ -202,8 +202,7 @@ fn run(receiver: &Receiver<Job>) {
             && let Some(bound) = active.as_mut()
             && bound.machine.state() == ExecutionState::Running
         {
-            // Session turns a native operation failure into Crashed. The next
-            // observation reports the lost state without attempting register reads.
+            // Session marks native failure as Crashed. Observations then omit registers.
             let _ = bound.machine.advance();
         }
     }
@@ -213,7 +212,7 @@ fn dispatch(
     active: &mut Option<BoundSession>,
     id: Counter,
     command: &Command,
-    image: Option<Vec<u8>>,
+    payload: Option<Vec<u8>>,
 ) -> Result<(Reply, Vec<Vec<u8>>), Diagnostic> {
     match command {
         Command::Load {
@@ -234,7 +233,7 @@ fn dispatch(
             {
                 return Err(Diagnostic::new(DiagnosticCode::InvalidState));
             }
-            let image = image.ok_or_else(|| Diagnostic::new(DiagnosticCode::InvalidInput))?;
+            let image = payload.ok_or_else(|| Diagnostic::new(DiagnosticCode::InvalidInput))?;
             let setup = setup(*target, initial).map_err(|error| diagnostic(&error))?;
             let input = match format {
                 LoadImage::Elf => Image::Elf(&image),
@@ -270,7 +269,13 @@ fn dispatch(
             if bound.sequence == u64::MAX {
                 return Err(Diagnostic::new(DiagnosticCode::ResourceLimit));
             }
-            let memory = apply(&mut bound.machine, *action).map_err(|error| diagnostic(&error))?;
+            let memory = match apply(&mut bound.machine, action, payload.as_deref()) {
+                Ok(memory) => memory,
+                Err(MachineError::Backend) if bound.machine.state() == ExecutionState::Crashed => {
+                    return bound.observe(None);
+                }
+                Err(error) => return Err(diagnostic(&error)),
+            };
             bound.observe(memory)
         }
         _ => Err(Diagnostic::new(DiagnosticCode::InvalidInput)),
@@ -318,7 +323,8 @@ fn setup(target: Target, initial: &InitialState) -> Result<MachineSetup, Machine
 
 fn apply(
     session: &mut Session,
-    action: SessionAction,
+    action: &SessionAction,
+    payload: Option<&[u8]>,
 ) -> Result<Option<MemoryWindow>, MachineError> {
     match action {
         SessionAction::Run => session.start()?,
@@ -326,10 +332,19 @@ fn apply(
         SessionAction::Pause => session.pause()?,
         SessionAction::Cancel => session.cancel()?,
         SessionAction::Reset => session.reset()?,
-        SessionAction::Breakpoint { address, enabled } => {
-            session.set_breakpoint(address.address(), enabled)?;
+        SessionAction::WriteRegister(register) => {
+            session.write_register(&register.name, register.value.get())?;
         }
-        SessionAction::Observe { memory } => return Ok(memory),
+        SessionAction::WriteMemory(window) => {
+            session.write_memory(
+                window.address.address(),
+                payload.ok_or(ValidationError::Length)?,
+            )?;
+        }
+        SessionAction::Breakpoint { address, enabled } => {
+            session.set_breakpoint(address.address(), *enabled)?;
+        }
+        SessionAction::Observe { memory } => return Ok(*memory),
         SessionAction::Close => return Err(ValidationError::Transition.into()),
     }
     Ok(None)

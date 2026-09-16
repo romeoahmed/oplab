@@ -214,14 +214,14 @@ fn image_requests_require_complete_bounded_binary_transfers()
                     image_bytes: 65_537,
                 },
             },
-            image: Some(vec![0xa5; 65_537]),
+            payload: Some(vec![0xa5; 65_537]),
         };
         let mut bytes = Vec::new();
         transport::write_request(&mut Fragmented(&mut bytes, 1), &message)?;
         let parsed = transport::read_request(&mut Fragmented(Cursor::new(&bytes), 1))?
             .ok_or("missing request")?;
         assert_eq!(parsed.request, message.request);
-        assert_eq!(parsed.image, message.image);
+        assert_eq!(parsed.payload, message.payload);
         assert!(transport::read_request(&mut Cursor::new(&bytes[..bytes.len() - 1])).is_err());
         let mut wrong_kind = Vec::new();
         transport::write_frame(
@@ -231,7 +231,7 @@ fn image_requests_require_complete_bounded_binary_transfers()
         )?;
         transport::write_frame(&mut wrong_kind, Kind::Control, b"{}")?;
         assert!(transport::read_request(&mut Cursor::new(wrong_kind)).is_err());
-        message.image = Some(vec![0]);
+        message.payload = Some(vec![0]);
         let mut output = Vec::new();
         assert!(transport::write_request(&mut output, &message).is_err());
         assert!(output.is_empty());
@@ -246,6 +246,69 @@ fn image_requests_require_complete_bounded_binary_transfers()
             &serde_json::to_vec(&message.request)?,
         )?;
         assert!(transport::read_request(&mut Cursor::new(oversized)).is_err());
+    }
+    Ok(())
+}
+
+#[test]
+fn memory_patches_require_exact_bounded_payloads() -> Result<(), Box<dyn std::error::Error>> {
+    use oplab_core::protocol::execution::{MemoryWindow, SessionAction, SessionKey};
+    for length in [0, 1, 65_536, 65_537, u32::MAX] {
+        let request = Request {
+            id: Counter::new(3),
+            command: Command::Execute {
+                session: SessionKey {
+                    session: Counter::new(2),
+                    generation: Counter::new(0),
+                },
+                action: SessionAction::WriteMemory(MemoryWindow {
+                    address: HexAddress::new(Address::new(0x1000)),
+                    length,
+                }),
+            },
+        };
+        let metadata = serde_json::to_vec(&request)?;
+        let mut wire = vec![b'O', b'P', 0, 0];
+        wire.extend_from_slice(&u32::try_from(metadata.len())?.to_le_bytes());
+        wire.extend_from_slice(&metadata);
+        if !(1..=65_536).contains(&length) {
+            // Reject metadata before attempting to read or allocate its declared body.
+            assert!(matches!(
+                transport::read_request(&mut wire.as_slice()),
+                Err(transport::TransportError::PayloadLength)
+            ));
+            let mut output = Vec::new();
+            assert!(transport::write_request(&mut output, &request.into()).is_err());
+            assert!(output.is_empty());
+            continue;
+        }
+        let payload = (0..length)
+            .map(|index| u8::try_from(index % 251))
+            .collect::<Result<Vec<_>, _>>()?;
+        wire.extend_from_slice(&[b'O', b'P', 1, 0]);
+        wire.extend_from_slice(&length.to_le_bytes());
+        wire.extend_from_slice(&payload);
+        let parsed = transport::read_request(&mut Fragmented(wire.as_slice(), 3))?
+            .ok_or("missing request")?;
+        assert_eq!(parsed.request, request);
+        assert_eq!(parsed.payload.as_ref(), Some(&payload));
+        let mut output = Vec::new();
+        transport::write_request(&mut output, &parsed)?;
+        assert_eq!(output, wire);
+        assert!(transport::read_request(&mut &wire[..wire.len() - 1]).is_err());
+        for wrong in [
+            None,
+            Some(payload[..payload.len() - 1].to_vec()),
+            Some(vec![0; payload.len() + 1]),
+        ] {
+            let message = transport::RequestMessage {
+                request: request.clone(),
+                payload: wrong,
+            };
+            let mut output = Vec::new();
+            assert!(transport::write_request(&mut output, &message).is_err());
+            assert!(output.is_empty());
+        }
     }
     Ok(())
 }

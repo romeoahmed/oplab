@@ -14,6 +14,7 @@
     loadedKind,
     editable,
     onbreakpoint,
+    onregister,
     locale,
   }: {
     observation: Observation | undefined;
@@ -22,6 +23,7 @@
     loadedKind: 'source' | 'raw' | null;
     editable: boolean;
     onbreakpoint: (address: string, enabled: boolean) => void;
+    onregister: (name: string, value: string) => void;
     locale: Locale;
   } = $props();
   const options = $derived({ locale });
@@ -100,7 +102,7 @@
         {locale}
         onchange={onbreakpoint}
       />
-      <Registers bank={observation.registers} {locale} />
+      <Registers bank={observation.registers} {locale} {editable} onwrite={onregister} />
     {/if}
   </div>
   <div class="inspector-footer">

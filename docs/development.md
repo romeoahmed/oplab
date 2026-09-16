@@ -107,10 +107,14 @@ The bridge resolves these four overrides in order: `NAME_<target-triple>`,
 a cross build, then `NAME`. Empty values fail. This follows
 [cc-rs precedence](https://docs.rs/cc/latest/cc/#external-configuration-via-environment-variables).
 `CC`, `CXX`, `AR`, `CXXFLAGS`, standard-library selection and target flags retain
-cc-rs behavior. Libclang and pkg-config retain their upstream environment conventions.
+upstream behavior. CXX's `link-cplusplus` dependency selects the C++ runtime;
+cc-rs selects the compiler and archiver. The bridge adds `/EHsc` for MSVC-compatible
+compilers so CXX exception translation unwinds C++ owners. Libclang and pkg-config
+retain their upstream environment conventions.
 
 On macOS, explicit compiler sysroot flags take precedence; otherwise `SDKROOT` or
 `xcrun` supplies the SDK. `build.rs` tracks selected environment and identity files.
+Discovery rejects installations missing either guest target before compilation.
 It uses [llvm-config](https://llvm.org/docs/CommandGuide/llvm-config.html) for library
 names and dependencies, without copying `--cxxflags`, which may select an older
 language standard or disable exceptions needed by the bridge.
@@ -257,12 +261,24 @@ the committed Rust-generated contracts. Rustfmt records both edition and style e
 so standalone editor formatting agrees with Cargo. Tauri retains explicit application
 identity, window geometry, build hooks and capabilities; bundle targets use platform defaults.
 
+CXX exposes headers under the Cargo package name. The include
+`oplab-engine/src/assembly/ffi.rs.h` refers to the generated bridge header under
+`OUT_DIR/cxxbridge/include`, not a source-tree file. CXX also exposes handwritten
+headers through its crate include directory; no custom include prefix is needed.
+The bridge's three C++ translation units compile through cc-rs's `parallel`
+feature, coordinated by Cargo's jobserver and `-j` limit.
+
 The native bridge's `OUT_DIR` holds compilation metadata. xtask obtains it from
-Cargo and runs clang-tidy against the actual cc-rs/CXX compilation database.
-C++ formatting uses the selected LLVM clang-format. Root Cargo dependencies and
-lints are inherited throughout the workspace. Knip declares the dynamically imported
-Svelte editor as an entry so its dependency tree remains checked. Its two dependency
-exceptions cover Oxfmt invoked by Rust and the inlang-owned message-format plugin.
+Cargo and runs clang-tidy against the cc-rs/CXX compiler arguments, carrying over
+cc-rs's tool environment for SDK/MSVC headers. The JSON database uses argument
+arrays without shell escaping; paths and arguments must be UTF-8.
+C++ formatting inherits LLVM style with C++23 and a 100-column limit. clang-tidy
+owns brace enforcement, correctness, modernization and direct-include checks;
+formatting does not insert control-flow syntax. Both tools come from the selected
+LLVM installation. Root Cargo dependencies and lints are inherited throughout the
+workspace. Knip declares the dynamically imported Svelte editor as an entry so its
+dependency tree remains checked. Its two dependency exceptions cover Oxfmt invoked
+by Rust and the inlang-owned message-format plugin.
 
 `static/icon.svg` is the application icon master and README logo. Review it in a
 browser at small and large sizes. To regenerate desktop formats:

@@ -35,6 +35,7 @@ body {
 
 button,
 input,
+textarea,
 select {
   font: inherit;
   color: inherit;

@@ -83,7 +83,7 @@ pub struct AddressRange {
 }
 
 impl AddressRange {
-    /// Construct a bounded range. The limit is supplied by the owning operation.
+    /// Construct a range bounded by `limit` bytes, allowing an exclusive end of 2^64.
     ///
     /// # Errors
     ///

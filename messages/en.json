@@ -208,5 +208,13 @@
   "inspect_pc": "Inspect at PC",
   "current_instruction": "PC at capture",
   "live_decode_hint": "Disassembly uses captured memory. To see changes, refresh memory and disassemble again.",
-  "breakpoint_at": "Breakpoint at {address}"
+  "breakpoint_at": "Breakpoint at {address}",
+  "edit_register": "Edit register",
+  "write_register": "Write register",
+  "write_memory": "Patch memory",
+  "patch_address": "Patch address",
+  "patch_bytes": "Hex bytes",
+  "patch_hint": "Write up to 4 KiB of data or code. Reset restores the loaded state.",
+  "register_edit_hint": "Enter unsigned decimal or 0x-prefixed hexadecimal. PC and flags are read-only. Reset restores initial values.",
+  "register_value": "Value"
 }

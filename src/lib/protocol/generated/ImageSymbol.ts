@@ -15,7 +15,7 @@ export type ImageSymbol = {
    */
   address: HexAddress;
   /**
-   * ELF symbol size, which may be zero for assembly labels.
+   * ELF symbol size in bytes, which may be zero for assembly labels.
    */
   size: Counter;
 };

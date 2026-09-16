@@ -1,21 +1,30 @@
 //! Keep compilation and analysis on the same cc-rs toolchain configuration.
 
 use super::Result;
-use std::{env, fs, path::PathBuf, process::Command};
+use std::{
+    collections::BTreeMap,
+    env,
+    ffi::{OsStr, OsString},
+    fs,
+    path::PathBuf,
+};
 
 pub(super) fn configure(build: &mut cc::Build, includes: &[PathBuf]) -> Result<()> {
     let compiler = build.try_get_compiler()?;
+    if compiler.is_like_msvc() {
+        // CXX Result translates exceptions; MSVC must unwind native RAII owners.
+        build.flag("/EHsc").flag("/external:W0");
+    }
     for directory in includes {
         if compiler.is_like_msvc() {
-            build
-                .flag(format!("/external:I{}", directory.display()))
-                .flag("/external:W0");
+            let mut flag = OsString::from("/external:I");
+            flag.push(directory);
+            build.flag(flag);
         } else {
             build.flag("-isystem").flag(directory.as_os_str());
         }
     }
-    // cc-rs owns compiler/archiver selection, target flags, CXXFLAGS and stdlib.
-    // Only make an implicit Apple SDK explicit for compilation-database consumers.
+    // cc-rs may omit an implicit Apple SDK; clang-tidy needs its explicit path.
     if env::var("CARGO_CFG_TARGET_OS")? == "macos"
         && !compiler.args().iter().any(|arg| {
             let arg = arg.to_string_lossy();
@@ -26,13 +35,10 @@ pub(super) fn configure(build: &mut cc::Build, includes: &[PathBuf]) -> Result<(
         let sdk = if let Some(value) = env::var_os("SDKROOT") {
             PathBuf::from(value)
         } else {
-            let result = Command::new("xcrun")
-                .args(["--sdk", "macosx", "--show-sdk-path"])
-                .output()?;
-            if !result.status.success() {
-                return Err("macOS SDK discovery failed; set SDKROOT".into());
-            }
-            PathBuf::from(String::from_utf8(result.stdout)?.trim())
+            PathBuf::from(super::llvm::query(
+                OsStr::new("xcrun"),
+                &["--sdk", "macosx", "--show-sdk-path"],
+            )?)
         };
         if !sdk.is_dir() {
             return Err("SDKROOT must identify an existing macOS SDK directory".into());
@@ -50,12 +56,12 @@ pub(super) fn write_compilation_database(
     let directory = env::current_dir()?;
     let mut commands = Vec::new();
     for file in build.get_files() {
-        let mut arguments = vec![compiler.path().to_str().ok_or("non-UTF-8 compiler path")?];
+        let mut arguments = vec![utf8(compiler.path().as_os_str())?];
         for argument in compiler.args() {
-            arguments.push(argument.to_str().ok_or("non-UTF-8 compiler argument")?);
+            arguments.push(utf8(argument)?);
         }
         arguments.push(if compiler.is_like_msvc() { "/c" } else { "-c" });
-        arguments.push(file.to_str().ok_or("non-UTF-8 source path")?);
+        arguments.push(utf8(file.as_os_str())?);
         commands.push(
             serde_json::json!({"directory": directory, "file": file, "arguments": arguments}),
         );
@@ -65,9 +71,22 @@ pub(super) fn write_compilation_database(
         output.join("compile_commands.json"),
         serde_json::to_vec_pretty(&commands)?,
     )?;
+    // Compilation databases have no environment field. Preserve cc-rs's SDK/MSVC
+    // environment separately so clang-tidy sees the same toolchain headers.
+    let environment = compiler
+        .env()
+        .iter()
+        .map(|(key, value)| Ok((utf8(key)?, utf8(value)?)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
     fs::write(
         output.join("native-tools.json"),
-        serde_json::to_vec(&serde_json::json!({"bin": llvm.bin}))?,
+        serde_json::to_vec(&serde_json::json!({"bin": llvm.bin, "environment": environment}))?,
     )?;
     Ok(())
+}
+
+fn utf8(value: &OsStr) -> Result<&str> {
+    value
+        .to_str()
+        .ok_or_else(|| "native analysis metadata requires UTF-8 paths and arguments".into())
 }

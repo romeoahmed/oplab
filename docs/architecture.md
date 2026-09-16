@@ -95,7 +95,7 @@ Three independent lifetimes prevent accidental state changes:
 - **Session:** immutable initial image and mutable machine state. Loading replaces
   it explicitly; reset advances its generation only after replacement succeeds.
 
-Editing does not patch the machine. Reattaching a view does not invent an association
+Source edits do not patch the machine. Reattaching a view does not invent an association
 between retained machine state and current source. Missing memory differs from zero;
 instruction starts differ from retired instructions; raw flags do not imply definedness.
 Human addresses use ordinary hexadecimal input. Exact 64-bit JSON scalars use the
@@ -226,6 +226,22 @@ Address breakpoint controls use the latest authoritative observation. They are
 editable only in ready/paused states, retain the engine's reset semantics and never
 optimistically publish a change. Static artifact/imported rows cannot change session
 breakpoints; only rows from the bound memory capture expose those controls.
+
+### Live machine editing
+
+The register panel offers a canonical GPR selector and exact decimal/hex value
+input. The memory toolbar offers explicit address and hex-byte input, limited to
+4 KiB per desktop patch. Bits UI owns popover lifecycle; native forms own submission
+and required fields. Input is bounded to 12,288 UTF-16 code units and decoded
+output to 4 KiB. `Uint8Array.fromHex` decodes validated byte pairs after whitespace
+removal. Both languages share the same controls and transport.
+
+Writes target the current session key and are enabled only while ready/paused.
+The UI waits for the authoritative reply. Successful memory patches clear the
+retained capture and subscribe to the written range; decoding must use fresh
+observed bytes. Failed validation preserves the capture. Source/build freshness
+still describes the initial loaded image, not equality with mutable guest memory.
+A patch changes neither source nor exportable build artifacts.
 
 ## Localization and recovery
 

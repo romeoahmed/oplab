@@ -111,7 +111,7 @@ struct Connection {
 }
 
 impl Connection {
-    fn request(&self, view: Counter, command: Command, image: Option<Vec<u8>>) -> Result<Ticket> {
+    fn request(&self, view: Counter, command: Command, payload: Option<Vec<u8>>) -> Result<Ticket> {
         let mut state = self
             .shared
             .state
@@ -139,7 +139,7 @@ impl Connection {
         let (result, receiver) = mpsc::sync_channel(1);
         let message = RequestMessage {
             request: Request { id, command },
-            image,
+            payload,
         };
         oplab_core::protocol::transport::validate_request(&message)
             .map_err(|_| DesktopFailure::new(FailureCode::Protocol))?;
@@ -266,7 +266,7 @@ impl Service {
         connection: Counter,
         view: Counter,
         command: Command,
-        image: Option<Vec<u8>>,
+        payload: Option<Vec<u8>>,
     ) -> Result<Ticket> {
         let service = self
             .0
@@ -282,7 +282,7 @@ impl Service {
         if view.get() == 0 || matches!(command, Command::Hello { .. } | Command::Shutdown) {
             return Err(DesktopFailure::new(FailureCode::Protocol));
         }
-        active.request(view, command, image)
+        active.request(view, command, payload)
     }
 
     pub(crate) fn acknowledge(

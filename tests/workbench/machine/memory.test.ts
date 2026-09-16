@@ -1,6 +1,6 @@
 import type { ImageInfo } from '$lib/protocol/generated/ImageInfo';
 import { formatAddress, parseAddress } from '$lib/protocol/scalars';
-import { initialMemory } from '$lib/workbench/machine/memory';
+import { initialMemory, patchBytes } from '$lib/workbench/machine/memory';
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
 
@@ -45,4 +45,31 @@ test('the initial viewport fits every nonempty readable segment, even at the end
       },
     ),
   );
+});
+
+test('patch input preserves every byte, rejects partial bytes and enforces its byte budget', () => {
+  fc.assert(
+    fc.property(
+      fc.array(
+        fc.tuple(
+          fc.integer({ min: 0, max: 255 }),
+          fc.boolean(),
+          fc.constantFrom('', ' ', '\t', '\r\n'),
+        ),
+        { minLength: 1, maxLength: 256 },
+      ),
+      (tokens) => {
+        const hex = tokens
+          .map(([byte, uppercase, separator]) => {
+            const pair = byte.toString(16).padStart(2, '0');
+            return (uppercase ? pair.toUpperCase() : pair) + separator;
+          })
+          .join('');
+        expect(patchBytes(`  ${hex}\n`)).toEqual(Uint8Array.from(tokens, ([byte]) => byte));
+      },
+    ),
+  );
+  expect(patchBytes('ff'.repeat(4096))).toEqual(new Uint8Array(4096).fill(255));
+  for (const invalid of ['', ' ', 'a', 'a b', 'aa b', '0x42', 'gg', '00'.repeat(4097)])
+    expect(() => patchBytes(invalid)).toThrow(RangeError);
 });

@@ -18,16 +18,16 @@ mod run;
 use hooks::Monitor;
 pub(crate) use run::{SLICE_DISPATCHES, Slice, SliceStop};
 
-/// Maximum bytes in one debugger memory observation.
-pub const MAX_READ_BYTES: u64 = 64 * 1024;
+/// Maximum bytes in one debugger memory read or write.
+pub const MAX_MEMORY_BYTES: u64 = 64 * 1024;
 
-/// Machine construction or observation failure without native logs or host paths.
+/// Machine operation failure without native logs or host paths.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum MachineError {
     /// The input does not describe a supported initial image.
     #[error(transparent)]
     Load(#[from] LoadError),
-    /// The requested observation violates a domain constraint.
+    /// The requested operation violates a domain constraint.
     #[error(transparent)]
     Validation(#[from] ValidationError),
     /// The native backend rejected an operation after input validation.
@@ -125,6 +125,37 @@ impl Machine {
         &self.initial
     }
 
+    pub(crate) fn write_memory(
+        &mut self,
+        address: Address,
+        bytes: &[u8],
+    ) -> Result<(), MachineError> {
+        let length = u64::try_from(bytes.len()).map_err(|_| ValidationError::Length)?;
+        let range = AddressRange::new(address, length, MAX_MEMORY_BYTES)?;
+        let region = self.initial.memory().require(
+            range,
+            Permissions {
+                read: false,
+                write: false,
+                execute: false,
+            },
+        )?;
+        let executable = region.permissions().execute;
+        self.native
+            .mem_write(address.get(), bytes)
+            .map_err(|_| MachineError::Backend)?;
+        if executable {
+            // Unicorn's range invalidation takes an exclusive u64 end. The last
+            // address-space byte instead requires a full translation-cache flush.
+            let result = match u64::try_from(range.end()) {
+                Ok(end) => self.native.ctl_remove_cache(address.get(), end),
+                Err(_) => self.native.ctl_flush_tb(),
+            };
+            result.map_err(|_| MachineError::Backend)?;
+        }
+        Ok(())
+    }
+
     /// Observe a bounded mapped range without granting guest read permissions.
     ///
     /// Debugger observations may inspect execute-only or guard pages.
@@ -133,7 +164,7 @@ impl Machine {
     ///
     /// Rejects empty, oversized, unmapped, or cross-region ranges and native failures.
     pub fn read_memory(&self, address: Address, length: u64) -> Result<Vec<u8>, MachineError> {
-        let range = AddressRange::new(address, length, MAX_READ_BYTES)?;
+        let range = AddressRange::new(address, length, MAX_MEMORY_BYTES)?;
         self.initial.memory().require(
             range,
             Permissions {

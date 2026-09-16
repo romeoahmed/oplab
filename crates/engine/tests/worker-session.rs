@@ -544,14 +544,14 @@ fn configured_loads_restore_initial_state_and_failed_replacements_preserve_the_m
                     length: 8,
                 }),
             };
-            let stored = execute(client, key, observe_memory)?;
+            let stored = execute(client, key, observe_memory.clone())?;
             assert_eq!(stored.payloads, vec![42_u64.to_le_bytes().to_vec()]);
             for rejected in [invalid, duplicates, flags] {
                 let reply = client.request(command(rejected, Some(key)), Some(image.clone()))?;
                 assert!(
                     matches!(reply.response.result, Reply::Error(error) if error.code == DiagnosticCode::InvalidInput)
                 );
-                let current = execute(client, key, observe_memory)?;
+                let current = execute(client, key, observe_memory.clone())?;
                 let actual = observed(&current)?;
                 // Observation sequence advances; the loaded machine must not change.
                 let expected = Observation {
@@ -691,6 +691,97 @@ fn verify_raw_session(
         let replaced = client.request(command(entry, Some(restored.key)), Some(bytes.to_vec()))?;
         assert!(observed(&replaced)?.breakpoints.is_empty());
         assert_ne!(observed(&replaced)?.key.session, key.session);
+        client.request(Command::Shutdown, None)?;
+        Ok(())
+    })
+}
+
+#[test]
+fn live_writes_return_authoritative_state_and_reject_obsolete_generations() -> TestResult {
+    use oplab_core::protocol::execution::{InitialState, LoadImage, RegisterValue};
+    interactive::worker(|client| {
+        client.request(Command::Hello { version: VERSION }, None)?;
+        let mut replace = None;
+        for target in [Target::X86_64, Target::Aarch64] {
+            let loaded = client.request(
+                Command::Load {
+                    image: LoadImage::Raw {
+                        base: address(0x1000),
+                        entry: address(0x1000),
+                    },
+                    initial: InitialState::default(),
+                    replace,
+                    target,
+                    completion: address(0x1800),
+                    instruction_budget: Counter::new(100),
+                    image_bytes: 16,
+                },
+                Some(vec![0; 16]),
+            )?;
+            let key = observed(&loaded)?.key;
+            let register = SessionAction::WriteRegister(RegisterValue {
+                name: if target == Target::X86_64 {
+                    "rax"
+                } else {
+                    "x0"
+                }
+                .into(),
+                value: Counter::new(u64::MAX),
+            });
+            let written = execute(client, key, register.clone())?;
+            assert_eq!(integer(observed(&written)?)?, u64::MAX);
+            let window = MemoryWindow {
+                address: address(0x1000),
+                length: 256,
+            };
+            let bytes: Vec<u8> = (0..=255).collect();
+            let patched = client.request(
+                Command::Execute {
+                    session: key,
+                    action: SessionAction::WriteMemory(window),
+                },
+                Some(bytes.clone()),
+            )?;
+            assert_eq!(observed(&patched)?.memory, None);
+            assert!(patched.payloads.is_empty());
+            let memory = execute(
+                client,
+                key,
+                SessionAction::Observe {
+                    memory: Some(window),
+                },
+            )?;
+            assert_eq!(memory.payloads, vec![bytes]);
+            assert_eq!(integer(observed(&patched)?)?, u64::MAX);
+            let reset = execute(client, key, SessionAction::Reset)?;
+            let new_key = observed(&reset)?.key;
+            assert_ne!(key, new_key);
+            assert_eq!(integer(observed(&reset)?)?, 0);
+            for action in [register, SessionAction::WriteMemory(window)] {
+                let payload =
+                    matches!(action, SessionAction::WriteMemory(_)).then(|| vec![0xff; 256]);
+                let rejected = client.request(
+                    Command::Execute {
+                        session: key,
+                        action,
+                    },
+                    payload,
+                )?;
+                assert!(
+                    matches!(rejected.response.result, Reply::Error(error) if error.code == DiagnosticCode::StaleSession)
+                );
+            }
+            let restored = execute(
+                client,
+                new_key,
+                SessionAction::Observe {
+                    memory: Some(window),
+                },
+            )?;
+            assert_eq!(restored.payloads, vec![vec![0; 256]]);
+            assert_eq!(integer(observed(&restored)?)?, 0);
+            replace = Some(new_key);
+        }
         client.request(Command::Shutdown, None)?;
         Ok(())
     })

@@ -89,7 +89,7 @@ fn load<'a>(
     }
     let range = AddressRange::new(Address::new(start), size, MAX_MAPPED_BYTES)?;
     let page_start = start - start % page_size;
-    let page_end = range.end().div_ceil(u128::from(page_size)) * u128::from(page_size);
+    let page_end = range.end().next_multiple_of(u128::from(page_size));
     let page_length =
         u64::try_from(page_end - u128::from(page_start)).map_err(|_| ValidationError::Length)?;
     let pages = AddressRange::new(Address::new(page_start), page_length, MAX_MAPPED_BYTES)?;

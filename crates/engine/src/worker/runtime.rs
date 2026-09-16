@@ -276,7 +276,7 @@ impl Dispatcher {
                 self.worker.close()?;
             }
             _ => {
-                let refresh = matches!(message.request.command, Command::Execute { action, .. } if !matches!(action, SessionAction::Observe { .. }));
+                let refresh = matches!(&message.request.command, Command::Execute { action, .. } if !matches!(action, SessionAction::Observe { .. }));
                 let response = self.worker.perform(message)?;
                 if self.subscription.as_ref().is_some_and(|subscription| {
                     match &response.response.result {

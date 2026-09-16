@@ -2,7 +2,7 @@
 import type { Counter } from './Counter.js';
 
 /**
- * One exact initial general-purpose or stack-pointer value.
+ * One exact general-purpose or stack-pointer value.
  */
 export type RegisterValue = {
   /**

@@ -4,7 +4,7 @@ use crate::{address::Address, diagnostic::ValidationError};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// Guest access that failed; debugger reads are a separate host operation.
+/// Guest access that failed; debugger reads and writes are separate host operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum Access {
@@ -46,7 +46,7 @@ pub struct GuestFault {
     pub pc: Address,
     /// Memory address reported by the backend, if a memory hook supplied it.
     pub address: Option<Address>,
-    /// Access width reported by the backend, if available.
+    /// Access width in bytes reported by the backend, if available.
     pub size: Option<u64>,
 }
 
@@ -88,7 +88,7 @@ pub enum ExecutionState {
     Paused(PauseReason),
     /// The experiment ended with an explicit outcome.
     Terminated(Termination),
-    /// Native worker state was lost.
+    /// Native machine state is unusable; loading a replacement is required.
     Crashed,
 }
 
@@ -103,7 +103,7 @@ pub enum ControlEvent {
     Terminate(Termination),
     /// The loaded artifact was successfully restored.
     Reset,
-    /// The worker has failed, invalidating all native state.
+    /// A native failure invalidated this machine's state.
     Crash,
 }
 

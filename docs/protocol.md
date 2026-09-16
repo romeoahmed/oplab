@@ -49,7 +49,7 @@ automatically retrying a mutation. Replies may arrive out of order, so correlate
 | Value                                        | Wire representation                                  |
 | -------------------------------------------- | ---------------------------------------------------- |
 | Address                                      | `0x` plus sixteen lowercase hexadecimal digits       |
-| 64-bit counter                               | Decimal string, no leading zeros except `0` itself   |
+| 64-bit counter or GPR value                  | Decimal string, no leading zeros except `0` itself   |
 | Unavailable diagnostic address/source offset | Explicit `null`                                      |
 | Source offset                                | Original UTF-8 byte position, not a source range/map |
 
@@ -91,10 +91,24 @@ overlap, target and aggregate limits before native mapping.
 These values are load inputs, not live patches, and reset reapplies them.
 
 `execute` carries a session key and `run`, `step`, `pause`, `cancel`, `reset`,
-`breakpoint`, `observe` or `close`. Keys contain decimal `session` and `generation`.
+`breakpoint`, `write_register`, `write_memory`, `observe` or `close`. Keys contain
+decimal `session` and `generation`.
 Stale keys fail before mutation. Reset advances generation; close drops the owner,
 even when running, and returns `session_closed`. IDs must also be qualified by the
 worker connection, because they can recur after restart.
+
+`write_register` carries `{name, value}` with the same canonical GPR names and exact
+scalar encoding as initial setup. `write_memory` carries `{address, length}` and
+1–65,536 following binary bytes; the declared length must match exactly. The
+desktop form limits each patch to 4 KiB. Tauri and the worker share payload-length
+validation. Both write operations require Ready/Paused state and follow the
+[live-editing contract](engine.md#live-editing).
+
+Write acknowledgements contain a full register/control observation without memory,
+so a successful mutation does not depend on bulk-output capacity. Observe or
+subscribe separately for fresh bytes. A native write/cache failure returns a
+Crashed observation with no registers; framing or process loss retains the usual
+unknown-outcome semantics. Never replay a mutation to recover a missing observation.
 
 Other successful controls return `observed`: a complete snapshot containing key,
 increasing sequence, status, instruction/dispatch counters, canonical registers,
@@ -242,12 +256,12 @@ engine APIs; the pipe runtime owns process-level lifetime.
 Four main-window Tauri commands manage the worker. Two separate commands handle
 [file import/export](#desktop-file-boundary).
 
-| Command          | Responsibility                                                                                                                      |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `worker_connect` | Attach a Channel and obtain capabilities, connection/view lease and retained metadata; explicit restart creates a new worker        |
-| `worker_request` | Send a binary framed `DesktopCall` plus optional ELF/raw bytes; supervisor assigns worker IDs and returns the complete framed reply |
-| `worker_ack`     | Grant credit for a delivered subscription/sequence                                                                                  |
-| `worker_detach`  | Invalidate the view without replaying or cancelling admitted mutations                                                              |
+| Command          | Responsibility                                                                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `worker_connect` | Attach a Channel and obtain capabilities, connection/view lease and retained metadata; explicit restart creates a new worker           |
+| `worker_request` | Send a binary framed `DesktopCall` plus optional load/patch bytes; supervisor assigns worker IDs and returns the complete framed reply |
+| `worker_ack`     | Grant credit for a delivered subscription/sequence                                                                                     |
+| `worker_detach`  | Invalidate the view without replaying or cancelling admitted mutations                                                                 |
 
 Reattachment issues a new lease while preserving the worker. Zero, detached and
 obsolete leases cannot mutate it. Source association is not inferred from retained

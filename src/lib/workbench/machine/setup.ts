@@ -27,12 +27,20 @@ const x86 = [
 ];
 const aarch64 = [...Array.from({ length: 31 }, (_, index) => `x${String(index)}`), 'sp'];
 
-/** Canonical GPR order, with AArch64 SP stored separately from X0–X30. */
+/** Canonical GPR names in display order; AArch64 appends SP after X0–X30. */
 export function registerNames(target: Target): readonly string[] {
   return target === 'x86_64' ? x86 : aarch64;
 }
 
-function unsigned(value: string): bigint {
+/**
+ * Parse unsigned decimal or 0x-prefixed input, allowing surrounding whitespace.
+ *
+ * @remarks
+ * The result is exact but not width-limited; callers enforce their own numeric bounds.
+ *
+ * @throws RangeError - The trimmed input is empty or contains invalid digits.
+ */
+export function unsigned(value: string): bigint {
   const text = value.trim();
   if (!/^(?:[0-9]+|0x[\da-f]+)$/i.test(text)) throw new RangeError('Invalid unsigned integer');
   return BigInt(text);
@@ -41,9 +49,10 @@ function unsigned(value: string): bigint {
 /**
  * Capture editable initial conditions as exact wire values before starting a load.
  *
+ * @remarks
  * The loader validates register names, page alignment, overlap and aggregate memory limits.
  *
- * @throws RangeError - A value or collection exceeds its input limits.
+ * @throws RangeError - An input is malformed or exceeds its field or collection limit.
  */
 export function initialState(input: SetupInput): InitialState {
   if (input.registers.length > 32 || input.mappings.length > 63)

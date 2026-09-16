@@ -49,6 +49,7 @@
   }
 
   input,
+  textarea,
   select {
     min-inline-size: 0;
     min-block-size: 32px;

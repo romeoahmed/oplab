@@ -100,12 +100,7 @@ export function applyObservation(
   let snapshot: Snapshot;
   if (update.type === 'full') snapshot = { observation: update.data, memory };
   else {
-    if (
-      base === null ||
-      !sameKey(base.observation.key, update.data.key) ||
-      update.data.base !== base.observation.sequence
-    )
-      return { type: 'resync' };
+    if (base === null || update.data.base !== base.observation.sequence) return { type: 'resync' };
     snapshot = applyDelta(base, update.data, memory);
   }
   validate(snapshot);

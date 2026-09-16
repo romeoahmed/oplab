@@ -1,7 +1,13 @@
-/** Map an original UTF-8 byte boundary to CodeMirror's UTF-16 position and 1-based line/column.
+/**
+ * Map a source byte offset to a CodeMirror position and line/column.
  *
+ * @remarks
+ * Input offsets count UTF-8 bytes; positions count UTF-16 code units from zero.
+ * Lines and columns are one-based, with columns also counting UTF-16 code units.
  * CRLF and CR use CodeMirror's default newline normalization. The boundary inside
- * CRLF belongs to the end of the preceding line. Invalid boundaries have no location.
+ * CRLF belongs to the end of the preceding line.
+ *
+ * @returns `null` for missing offsets, invalid UTF-8 boundaries or ill-formed Unicode.
  */
 export function sourceLocation(source: string, offset: number | null) {
   if (offset === null || !Number.isSafeInteger(offset) || offset < 0 || !source.isWellFormed())
@@ -24,7 +30,7 @@ export function sourceLocation(source: string, offset: number | null) {
   }
 }
 
-/** Count logical lines and report the original separators without normalizing the source. */
+/** Report line count and original separator style; text without line breaks defaults to LF. */
 export function sourceInfo(source: string) {
   const endings = new Set<string>();
   let lines = 1;

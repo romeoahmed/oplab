@@ -2,6 +2,8 @@ import type { Locale } from '$lib/paraglide/runtime.js';
 
 /**
  * Select the first supported language preference, falling back to English.
+ *
+ * @remarks
  * Invalid tags and Traditional Chinese are skipped; only Hans maps to `zh-CN`.
  */
 export function preferredLocale(languages: readonly string[]): Locale {
@@ -11,7 +13,7 @@ export function preferredLocale(languages: readonly string[]): Locale {
       if (locale.language === 'zh' && locale.script === 'Hans') return 'zh-CN';
       if (locale.language === 'en') return 'en';
     } catch {
-      // Invalid stored tags must not prevent trying the next user preference.
+      // Ignore malformed tags and continue through the preference list.
     }
   }
   return 'en';

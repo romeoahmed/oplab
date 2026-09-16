@@ -4,12 +4,32 @@ use super::hooks::Monitor;
 use super::{Machine, MachineError};
 use oplab_core::{
     address::Address,
-    registers::{InitialRegisters, IntegerRegisters},
+    diagnostic::ValidationError,
+    registers::{AARCH64_GPR_NAMES, InitialRegisters, IntegerRegisters, X86_GPR_NAMES},
     target::Target,
 };
 use unicorn_engine::{RegisterARM64, RegisterX86, Unicorn};
 
 impl Machine {
+    pub(crate) fn write_register(&mut self, name: &str, value: u64) -> Result<(), MachineError> {
+        let register: i32 = match self.initial.target() {
+            Target::X86_64 => X86_GPR_NAMES
+                .into_iter()
+                .zip(X86_GPR)
+                .find(|(candidate, _)| *candidate == name)
+                .map(|(_, register)| register.into()),
+            Target::Aarch64 => AARCH64_GPR_NAMES
+                .into_iter()
+                .zip(AARCH64_GPR.into_iter().chain([RegisterARM64::SP]))
+                .find(|(candidate, _)| *candidate == name)
+                .map(|(_, register)| register.into()),
+        }
+        .ok_or(ValidationError::Target)?;
+        self.native
+            .reg_write(register, value)
+            .map_err(|_| MachineError::Backend)
+    }
+
     /// Read canonical integer storage at one execution boundary.
     ///
     /// # Errors

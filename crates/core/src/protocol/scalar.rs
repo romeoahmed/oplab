@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::fmt;
 use ts_rs::TS;
 
-/// An unsigned 64-bit counter serialized as decimal text.
+/// An unsigned 64-bit integer serialized as decimal text, also used for register values.
 ///
 /// Deserialization accepts ASCII digits without leading zeros, except `0` itself.
 /// Signs, whitespace, JSON numbers and values above the unsigned 64-bit range fail.

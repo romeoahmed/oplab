@@ -3,7 +3,7 @@
 use super::Result;
 use std::{
     env,
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -15,8 +15,38 @@ pub(super) struct Toolchain {
     version: String,
     llvm_lib: PathBuf,
     lld_prefix: PathBuf,
-    llvm_kind: &'static str,
-    lld_kind: &'static str,
+    llvm_kind: LinkKind,
+    lld_kind: LinkKind,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LinkKind {
+    Static,
+    Shared,
+}
+
+impl LinkKind {
+    fn parse(value: &OsStr) -> Result<Self> {
+        match value.to_str() {
+            Some("static") => Ok(Self::Static),
+            Some("dylib") => Ok(Self::Shared),
+            _ => Err("native link kinds must be 'static' or 'dylib'".into()),
+        }
+    }
+
+    const fn cargo(self) -> &'static str {
+        match self {
+            Self::Static => "static",
+            Self::Shared => "dylib",
+        }
+    }
+
+    const fn selection(self) -> &'static str {
+        match self {
+            Self::Static => "--link-static",
+            Self::Shared => "--link-shared",
+        }
+    }
 }
 
 impl Toolchain {
@@ -29,6 +59,13 @@ impl Toolchain {
         let version = query(&config, &["--version"])?;
         if version.split('.').next() != Some("23") {
             return Err("the MC bridge supports LLVM 23; select a compatible LLVM_CONFIG".into());
+        }
+        let targets = query(&config, &["--targets-built"])?;
+        if !["X86", "AArch64"]
+            .iter()
+            .all(|required| targets.split_whitespace().any(|target| target == *required))
+        {
+            return Err("LLVM must include both X86 and AArch64 targets".into());
         }
         let llvm_lib = PathBuf::from(query(&config, &["--libdir"])?);
         let bin = PathBuf::from(query(&config, &["--bindir"])?);
@@ -61,21 +98,21 @@ impl Toolchain {
             return Err("LLVM and LLD must come from the same release".into());
         }
         let llvm_kind = match configured("LLVM_LINK_KIND")? {
-            Some(kind) => link_kind(&kind.to_string_lossy())?,
+            Some(kind) => LinkKind::parse(&kind)?,
             None => match query(&config, &["--shared-mode"])?.as_str() {
-                "shared" => "dylib",
-                "static" => "static",
+                "shared" => LinkKind::Shared,
+                "static" => LinkKind::Static,
                 _ => return Err("llvm-config reported an unknown library mode".into()),
             },
         };
         let lld_kind = if let Some(kind) = configured("LLD_LINK_KIND")? {
-            link_kind(&kind.to_string_lossy())?
-        } else if llvm_kind == "dylib" && has_shared_lld(&lld_prefix)? {
-            "dylib"
+            LinkKind::parse(&kind)?
+        } else if llvm_kind == LinkKind::Shared && has_shared_lld(&lld_prefix)? {
+            LinkKind::Shared
         } else {
-            "static"
+            LinkKind::Static
         };
-        if llvm_kind == "static" && lld_kind == "dylib" {
+        if llvm_kind == LinkKind::Static && lld_kind == LinkKind::Shared {
             return Err(
                 "shared LLD requires shared LLVM to avoid duplicate LLVM runtime state".into(),
             );
@@ -102,16 +139,12 @@ impl Toolchain {
             self.llvm_lib.display()
         );
         for name in ["lldELF", "lldCommon"] {
-            println!("cargo::rustc-link-lib={}={name}", self.lld_kind);
+            println!("cargo::rustc-link-lib={}={name}", self.lld_kind.cargo());
         }
-        let selection = if self.llvm_kind == "dylib" {
-            "--link-shared"
-        } else {
-            "--link-static"
-        };
+        let selection = self.llvm_kind.selection();
         for file in query(&self.config, &[selection, "--libnames"])?.split_whitespace() {
             let name = library_name(file).ok_or("unrecognized LLVM library filename")?;
-            println!("cargo::rustc-link-lib={}={name}", self.llvm_kind);
+            println!("cargo::rustc-link-lib={}={name}", self.llvm_kind.cargo());
         }
         emit_system_libraries(&query(&self.config, &[selection, "--system-libs"])?)?;
         println!("cargo::rustc-env=OPLAB_LLVM_VERSION={}", self.version);
@@ -145,8 +178,17 @@ fn configured(name: &str) -> Result<Option<OsString>> {
     Ok(None)
 }
 
-fn query(program: &std::ffi::OsStr, arguments: &[&str]) -> Result<String> {
-    let result = Command::new(program).args(arguments).output()?;
+pub(super) fn query(program: &OsStr, arguments: &[&str]) -> Result<String> {
+    let result = Command::new(program)
+        .args(arguments)
+        .output()
+        .map_err(|error| {
+            format!(
+                "could not run {} {}: {error}",
+                program.display(),
+                arguments.join(" ")
+            )
+        })?;
     if !result.status.success() {
         return Err(format!(
             "{} {} failed: {}",
@@ -159,20 +201,15 @@ fn query(program: &std::ffi::OsStr, arguments: &[&str]) -> Result<String> {
     Ok(String::from_utf8(result.stdout)?.trim().into())
 }
 
-fn link_kind(value: &str) -> Result<&'static str> {
-    match value {
-        "static" => Ok("static"),
-        "dylib" => Ok("dylib"),
-        _ => Err("native link kinds must be 'static' or 'dylib'".into()),
-    }
-}
-
 fn has_shared_lld(prefix: &Path) -> Result<bool> {
     let os = env::var("CARGO_CFG_TARGET_OS")?;
     Ok(["lldELF", "lldCommon"]
         .iter()
         .all(|name| match os.as_str() {
-            "windows" => prefix.join("bin").join(format!("{name}.dll")).is_file(),
+            "windows" => {
+                prefix.join("bin").join(format!("{name}.dll")).is_file()
+                    && prefix.join("lib").join(format!("{name}.lib")).is_file()
+            }
             "macos" => prefix
                 .join("lib")
                 .join(format!("lib{name}.dylib"))

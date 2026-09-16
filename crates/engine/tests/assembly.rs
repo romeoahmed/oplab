@@ -10,6 +10,8 @@ use oplab_core::{
     },
 };
 use oplab_engine::assembly::{self, BuildArtifact};
+use proptest::prelude::*;
+use std::fmt::Write;
 
 fn build(target: Target) -> BuildIdentity {
     BuildIdentity {
@@ -407,4 +409,27 @@ fn assert_segment_permissions(image: &object::File<'_>) -> Result<(), Box<dyn st
         );
     }
     Ok(())
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(32))]
+
+    #[test]
+    fn object_and_linked_data_preserve_arbitrary_bytes(bytes in prop::collection::vec(any::<u8>(), 1..2048)) {
+        let mut source = String::from(".text\nnop\n.data\n.balign 16\n");
+        for byte in &bytes {
+            writeln!(source, ".byte {byte}")?;
+        }
+        for target in [Target::X86_64, Target::Aarch64] {
+            let artifact = assembly::assemble(build(target), &source)
+                .map_err(|error| TestCaseError::fail(format!("{error:?}")))?;
+            for output in [&artifact.object, &artifact.image] {
+                let file = object::File::parse(output.as_slice())?;
+                let section = file.section_by_name(".data")
+                    .ok_or_else(|| TestCaseError::fail("missing data section"))?;
+                prop_assert_eq!(section.data()?, bytes.as_slice());
+                prop_assert_eq!(section.align(), 16);
+            }
+        }
+    }
 }

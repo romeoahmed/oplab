@@ -30,13 +30,13 @@ impl Client {
     pub(super) fn request(
         &mut self,
         command: Command,
-        image: Option<Vec<u8>>,
+        payload: Option<Vec<u8>>,
     ) -> TestResult<Message> {
         let id = Counter::new(self.next);
         self.next = self.next.checked_add(1).ok_or("fixture request overflow")?;
         self.sender.send(RequestMessage {
             request: Request { id, command },
-            image,
+            payload,
         })?;
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {

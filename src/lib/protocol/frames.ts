@@ -66,22 +66,29 @@ class Reader {
 }
 
 /**
- * Encode a desktop call and its declared ELF or raw image as one contiguous message.
+ * Encode a desktop call and its declared binary payload as one contiguous message.
  *
- * @param image - Required only for a load command; otherwise `null`.
- * @throws RangeError - Image metadata disagrees with the payload or a size limit is exceeded.
+ * @param payload - Load image or memory patch; otherwise `null`.
+ * @throws RangeError - Metadata disagrees with the payload or a size limit is exceeded.
  */
-export function encodeCall(call: DesktopCall, image: Uint8Array | null): Uint8Array {
+export function encodeCall(call: DesktopCall, payload: Uint8Array | null): Uint8Array {
   const command: Command = call.command;
-  const required = command.type === 'load' ? command.data.image_bytes : null;
-  if (required !== (image?.length ?? null)) throw new RangeError('Mismatched load image');
-  if (required !== null && (required < 1 || required > controlLimit))
-    throw new RangeError('Invalid image length');
+  const patch =
+    command.type === 'execute' && command.data.action.type === 'write_memory'
+      ? command.data.action.data
+      : null;
+  const required = command.type === 'load' ? command.data.image_bytes : (patch?.length ?? null);
+  if (required !== (payload?.length ?? null)) throw new RangeError('Mismatched binary payload');
+  if (
+    required !== null &&
+    (required < 1 || required > (patch === null ? controlLimit : binaryLimit))
+  )
+    throw new RangeError('Invalid payload length');
   const metadata = encoder.encode(JSON.stringify(call));
   if (metadata.length > controlLimit) throw new RangeError('Invalid frame length');
-  const imageLength = image?.length ?? 0;
+  const payloadLength = payload?.length ?? 0;
   const result = new Uint8Array(
-    8 + metadata.length + imageLength + 8 * Math.ceil(imageLength / binaryLimit),
+    8 + metadata.length + payloadLength + 8 * Math.ceil(payloadLength / binaryLimit),
   );
   const header = new DataView(result.buffer);
   let offset = 0;
@@ -92,9 +99,9 @@ export function encodeCall(call: DesktopCall, image: Uint8Array | null): Uint8Ar
     offset += 8 + bytes.length;
   }
   write(0, metadata);
-  if (image !== null)
-    for (let start = 0; start < image.length; start += binaryLimit)
-      write(1, image.subarray(start, start + binaryLimit));
+  if (payload !== null)
+    for (let start = 0; start < payload.length; start += binaryLimit)
+      write(1, payload.subarray(start, start + binaryLimit));
   return result;
 }
 
@@ -128,7 +135,7 @@ export function decodeResponse(buffer: ArrayBuffer): {
 /**
  * Decode a Rust-validated subscription event and its complete memory window.
  *
- * @returns The event and an owned memory buffer, or `null` when no bytes follow.
+ * @returns The event and its owned memory buffer; the `memory` field is `null` when absent.
  * @throws RangeError - Framing, memory bounds or payload completeness is invalid.
  * @throws TypeError - A JSON body is not valid UTF-8.
  * @throws SyntaxError - An event body is not valid JSON.

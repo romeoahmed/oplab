@@ -10,8 +10,8 @@ type Stream = ReturnType<typeof decodeStream>;
 export type WorkerPort = {
   /** Attach to the worker, or replace it and discard its state when `restart` is true. */
   connect: (restart: boolean) => Promise<ConnectionInfo>;
-  /** Resolve after the complete reply arrives; engine failures remain tagged reply values. */
-  request: (command: Command, image?: Uint8Array) => Promise<ReturnType<typeof decodeResponse>>;
+  /** Resolve a complete reply, including tagged engine errors; transport failures reject. */
+  request: (command: Command, payload?: Uint8Array) => Promise<ReturnType<typeof decodeResponse>>;
   /** Return delivery credit after consuming an event; detached views have no credit to return. */
   acknowledge: (subscription: Counter, sequence: Counter) => Promise<void>;
   /** Invalidate this view immediately and release its native lease asynchronously. */
@@ -55,12 +55,12 @@ export function desktopWorker(
       attachment = info;
       return info;
     },
-    async request(command, image) {
+    async request(command, payload) {
       if (attachment === null) throw new Error('Worker not connected');
       const current = epoch;
       const bytes = encodeCall(
         { connection: attachment.connection, view: attachment.view, command },
-        image ?? null,
+        payload ?? null,
       );
       const response = await invoke<ArrayBuffer>('worker_request', bytes);
       if (current !== epoch) throw new DOMException('Detached workbench', 'AbortError');

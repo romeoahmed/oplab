@@ -18,6 +18,8 @@ export const defaultPreferences: Preferences = {
 
 /**
  * Recover preferences from parsed JSON, validating each field independently.
+ *
+ * @remarks
  * Finite sizes are clamped and rounded; missing or invalid values use defaults.
  */
 export function readPreferences(value: unknown): Preferences {

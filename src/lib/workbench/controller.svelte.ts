@@ -24,8 +24,8 @@ import {
 
 import aarch64 from '../../../examples/aarch64.s?raw';
 import x86_64 from '../../../examples/x86_64.s?raw';
-import { initialMemory } from './machine/memory';
-import { initialState, type SetupInput } from './machine/setup';
+import { initialMemory, patchBytes } from './machine/memory';
+import { initialState, unsigned, type SetupInput } from './machine/setup';
 import { readScratch } from './scratch';
 
 type Stream = { event: StreamEvent; memory: Uint8Array | null };
@@ -455,22 +455,32 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       };
     });
   }
-  async function execute(action: SessionAction): Promise<void> {
+  async function execute(action: SessionAction, payload?: Uint8Array): Promise<void> {
     if (port === null || snapshot === null || controlling || !connected) return;
     controlling = true;
     problem = null;
     unknown = false;
     try {
-      const message = await port.request({
-        type: 'execute',
-        data: { session: snapshot.observation.key, action },
-      });
+      const message = await port.request(
+        {
+          type: 'execute',
+          data: { session: snapshot.observation.key, action },
+        },
+        payload,
+      );
       lifetime.signal.throwIfAborted();
       const result = message.response.result;
       if (result.type === 'error') throw new RequestError(result.data.code);
       if (result.type === 'observed') {
         publish({ observation: result.data, memory: message.payloads[0] ?? null });
         if (action.type === 'reset') await subscribe();
+        if (action.type === 'write_memory' && result.data.status.type !== 'crashed') {
+          inspected = null;
+          memoryAddress = action.data.address;
+          memoryLength = action.data.length;
+          memoryRequested = true;
+          await subscribe();
+        }
       } else if (result.type === 'session_closed') {
         snapshot = null;
         inspected = null;
@@ -658,6 +668,30 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       raw.target = target;
     },
     loadRaw,
+    async writeRegister(name: string, value: string) {
+      try {
+        await execute({
+          type: 'write_register',
+          data: { name, value: formatCounter(unsigned(value)) },
+        });
+      } catch (error) {
+        report(error);
+      }
+    },
+    async writeMemory(address: string, text: string) {
+      try {
+        const bytes = patchBytes(text);
+        await execute(
+          {
+            type: 'write_memory',
+            data: { address: normalizeAddress(address), length: bytes.length },
+          },
+          bytes,
+        );
+      } catch (error) {
+        report(error);
+      }
+    },
     async breakpoint(address: string, enabled: boolean) {
       try {
         await execute({
@@ -688,6 +722,8 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     load,
     execute,
     async inspect() {
+      problem = null;
+      unknown = false;
       memoryRequested = true;
       try {
         await subscribe();

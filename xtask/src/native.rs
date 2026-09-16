@@ -1,4 +1,4 @@
-//! Stage Cargo's actual executable and analyze cc-rs's actual compiler invocation.
+//! Stage Cargo-reported executables and run Clang tools with the native build configuration.
 
 use super::{
     Result,
@@ -6,7 +6,7 @@ use super::{
 };
 use cargo_metadata::{Message, MetadataCommand};
 use serde::Deserialize;
-use std::{env, fs, path::PathBuf, process::Command};
+use std::{collections::BTreeMap, env, fs, path::PathBuf, process::Command};
 
 pub(super) fn sidecar(release: bool) -> Result {
     let target = env::var("TAURI_ENV_TARGET_TRIPLE")
@@ -80,6 +80,7 @@ pub(super) fn format(check: bool) -> Result {
 #[derive(Deserialize)]
 struct NativeTools {
     bin: PathBuf,
+    environment: BTreeMap<String, String>,
 }
 #[derive(Deserialize)]
 struct CompileCommand {
@@ -123,6 +124,7 @@ pub(super) fn lint() -> Result {
             .bin
             .join(format!("clang-tidy{}", env::consts::EXE_SUFFIX)),
     )
+    .envs(toolchain.environment)
     .args(["--quiet", "-p"])
     .arg(directory)
     .args(sources))

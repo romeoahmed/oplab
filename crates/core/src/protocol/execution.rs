@@ -38,7 +38,7 @@ pub struct InitialState {
     pub mappings: Vec<Mapping>,
 }
 
-/// One exact initial general-purpose or stack-pointer value.
+/// One exact general-purpose or stack-pointer value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct RegisterValue {
@@ -54,7 +54,7 @@ pub struct RegisterValue {
 pub struct Mapping {
     /// Backend-page-aligned starting address.
     pub address: HexAddress,
-    /// Nonzero byte length, a multiple of backend page size. Total memory <= 64 MiB.
+    /// Nonzero byte length, a multiple of backend page size. Total mapped memory is at most 64 MiB.
     pub length: u32,
     /// Standard ELF permission bits: `PF_R=4`, `PF_W=2`, `PF_X=1`; zero is a guard region.
     pub flags: u8,
@@ -72,19 +72,22 @@ pub struct SessionKey {
     pub generation: Counter,
 }
 
-/// A bounded memory observation, captured together with the returned registers.
+/// A contiguous guest range for a memory observation or patch.
+///
+/// Observations capture this range together with registers; patches supply its bytes separately.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct MemoryWindow {
     /// First guest byte.
     pub address: HexAddress,
-    /// Byte count, limited to 64 KiB and one mapped region.
+    /// Nonzero byte count, limited to 64 KiB within one mapped region.
     pub length: u32,
 }
 
-/// Controls apply between native slices. Run and step acknowledge acceptance;
-/// their observation may still be Running and is not a promise of completion.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+/// Session operations applied between native execution slices.
+///
+/// Run and step acknowledge acceptance; the returned state may still be running.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(
     tag = "type",
     content = "data",
@@ -100,8 +103,14 @@ pub enum SessionAction {
     Pause,
     /// Terminate execution as cancelled.
     Cancel,
-    /// Restore the bound initial image and advance its generation.
+    /// Restore initial memory and registers, clear counters and advance the reset generation.
     Reset,
+    /// Write one canonical GPR while ready/paused; reset restores the initial value.
+    WriteRegister(RegisterValue),
+    /// Write 1–65,536 bytes from following binary frames while ready or paused.
+    ///
+    /// Guest permissions remain unchanged; executable translations are invalidated.
+    WriteMemory(MemoryWindow),
     /// Set or remove a session address breakpoint; source provenance is not checked.
     Breakpoint {
         /// Guest address to test before instruction effects; target alignment is required.
@@ -109,7 +118,7 @@ pub enum SessionAction {
         /// Whether the breakpoint should be retained.
         enabled: bool,
     },
-    /// Capture a full integer observation, optionally with one memory window.
+    /// Capture control state and available integer registers, optionally with memory.
     Observe {
         /// Null requests registers and control state only.
         memory: Option<MemoryWindow>,
@@ -185,7 +194,7 @@ pub struct Fault {
     pub pc: HexAddress,
     /// Access address, if reported.
     pub address: Option<HexAddress>,
-    /// Access width, if reported.
+    /// Access width in bytes, if reported.
     pub size: Option<Counter>,
 }
 
@@ -205,13 +214,13 @@ pub struct Observation {
     pub instructions: Counter,
     /// Native dispatch work, including REP iterations.
     pub dispatches: Counter,
-    /// Null only when the native machine has been lost.
+    /// Null only when native machine state is unusable (`crashed`).
     pub registers: Option<Registers>,
     /// Most recent terminal guest fault, if any.
     pub fault: Option<Fault>,
     /// Sorted, distinct address breakpoints retained across reset; at most 256.
     pub breakpoints: Vec<HexAddress>,
-    /// Metadata for the binary memory payload immediately following the reply.
+    /// Metadata for the binary memory payload following this response or full stream event.
     pub memory: Option<MemoryWindow>,
 }
 

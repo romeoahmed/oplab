@@ -22,9 +22,9 @@ pub const VERSION: u32 = 1;
 pub const MAX_SOURCE_BYTES: usize = 256 * 1024;
 /// Maximum total allocated section size, including zero-fill but excluding ELF overhead.
 pub const MAX_ALLOCATED_BYTES: usize = 64 * 1024;
-/// Maximum input window for one bounded decode operation.
+/// Maximum input bytes for one decode operation.
 pub const MAX_DECODE_BYTES: usize = 64 * 1024;
-/// Maximum bytes in each complete ELF object or executable image.
+/// Maximum bytes in an ELF object, ELF executable or raw-code load payload.
 pub const MAX_OBJECT_BYTES: usize = 1024 * 1024;
 
 /// Exact settings that must still match before a build can replace a document result.
@@ -111,7 +111,7 @@ pub enum Command {
     },
     /// Bind an ELF image or raw code, supplied in binary frames after this request.
     Load {
-        /// Standard ELF interpretation or explicit raw-code placement.
+        /// ELF-defined layout or explicit raw-code placement.
         image: execution::LoadImage,
         /// Explicit initial GPRs and additional zero-filled mappings.
         initial: execution::InitialState,
@@ -119,7 +119,7 @@ pub enum Command {
         replace: Option<SessionKey>,
         /// Required guest architecture; ELF inputs must declare the same target.
         target: Target,
-        /// Explicit completion address before fetch.
+        /// Guest address at which execution completes before fetching an instruction.
         completion: HexAddress,
         /// Maximum architectural instruction starts.
         instruction_budget: Counter,
@@ -198,7 +198,7 @@ pub enum Reply {
 pub struct Capabilities {
     /// Negotiated protocol version.
     pub version: u32,
-    /// Targets supported by assembly and decoding adapters.
+    /// Guest targets supported by this worker.
     pub targets: Vec<Target>,
     /// Assembler used for this worker.
     pub assembler: AssemblerIdentity,
@@ -242,8 +242,6 @@ pub struct DecodedInstruction {
 pub enum DiagnosticCode {
     /// The connection has not negotiated a compatible protocol.
     Protocol,
-    /// A request identifier was reused or moved backwards.
-    RequestOrder,
     /// Invalid input or target-specific settings.
     InvalidInput,
     /// The requested assembler settings do not match the worker.

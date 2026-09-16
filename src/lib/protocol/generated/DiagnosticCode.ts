@@ -5,7 +5,6 @@
  */
 export type DiagnosticCode =
   | 'protocol'
-  | 'request_order'
   | 'invalid_input'
   | 'backend_mismatch'
   | 'backend_failure'

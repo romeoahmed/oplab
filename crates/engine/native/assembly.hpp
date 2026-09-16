@@ -4,8 +4,10 @@
 #include <cstdint>
 
 namespace oplab {
+enum class Architecture : std::uint8_t;
 struct ObjectResult;
-[[nodiscard]] ObjectResult assemble_object(rust::Str source, bool aarch64);
-[[nodiscard]] bool link_object(rust::Str input, rust::Str output, rust::Str script,
-                               std::uint64_t base);
+struct LinkRequest;
+
+[[nodiscard]] ObjectResult assemble_object(rust::Str source, Architecture architecture);
+[[nodiscard]] bool link_object(const LinkRequest &request);
 } // namespace oplab

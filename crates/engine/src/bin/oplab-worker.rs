@@ -1,4 +1,4 @@
-//! Framed worker executable. All user-facing operations remain in the engine library.
+//! Worker entry point; stdout carries framed protocol traffic only.
 
 fn main() -> std::process::ExitCode {
     // Keep dependency panic payloads and build-machine paths out of routine stderr.

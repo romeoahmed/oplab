@@ -42,6 +42,6 @@ pub struct ImageSymbol {
     pub name: String,
     /// Linked symbol value.
     pub address: HexAddress,
-    /// ELF symbol size, which may be zero for assembly labels.
+    /// ELF symbol size in bytes, which may be zero for assembly labels.
     pub size: Counter,
 }

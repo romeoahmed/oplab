@@ -1,14 +1,15 @@
-//! Partial-read-safe framed I/O with bounds checked before body allocation.
+//! Framed I/O that handles partial reads and bounds bodies before allocation.
 
 use super::{
     Command, MAX_OBJECT_BYTES, Reply, Request, Response,
+    execution::SessionAction,
     frame::{HEADER_BYTES, Header, HeaderError, Kind, MAX_BINARY_BYTES, MAX_CONTROL_BYTES},
     stream::{ObservationUpdate, StreamEvent},
 };
 use std::io::{self, Read, Write};
 use thiserror::Error;
 
-/// One complete frame. Operation-specific binary parsing is negotiated separately.
+/// One complete frame; the enclosing operation determines binary payload semantics.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Frame {
     /// Explicit payload format.
@@ -26,16 +27,16 @@ pub enum TransportError {
     /// Header fields or body bounds failed validation.
     #[error(transparent)]
     Header(#[from] HeaderError),
-    /// Request shape or scalar representation was invalid.
+    /// JSON syntax, message shape or scalar representation was invalid.
     #[error("invalid JSON protocol message")]
     Json,
-    /// A frame kind was not negotiated for this operation.
+    /// The frame kind does not match the expected message or payload.
     #[error("unexpected frame kind")]
     UnexpectedKind,
     /// Binary metadata, buffers, or chunk boundaries disagree with the operation.
     #[error("invalid binary payload length")]
     PayloadLength,
-    /// Serializing a response would exceed its control budget.
+    /// JSON serialization failed or exceeded the control-frame budget.
     #[error("protocol output budget exceeded")]
     OutputLimit,
 }
@@ -121,8 +122,9 @@ impl Write for LimitedBuffer {
     }
 }
 
-/// One complete response and its ordered binary files. Success is observed only
-/// after all declared payload bytes arrive; a control frame alone is incomplete.
+/// A response and its ordered binary payloads.
+///
+/// A response declaring payloads is complete only after all of their bytes arrive.
 #[derive(Debug)]
 pub struct Message {
     /// Correlated control metadata.
@@ -199,26 +201,27 @@ fn read_response(reader: &mut impl Read, body: &[u8]) -> Result<Message, Transpo
     Ok(Message { response, payloads })
 }
 
-/// Complete request with an optional standard ELF image. The machine cannot be
-/// mutated until the declared image transfer has completed and been validated.
+/// A request and its optional load image or memory patch.
+///
+/// Validate the complete payload before admitting a machine mutation.
 #[derive(Debug)]
 pub struct RequestMessage {
     /// Correlation and operation metadata.
     pub request: Request,
-    /// ELF image only for Load; never an implicit memory mapping.
-    pub image: Option<Vec<u8>>,
+    /// Exact load image or patch bytes, as declared by the command.
+    pub payload: Option<Vec<u8>>,
 }
 
 impl From<Request> for RequestMessage {
     fn from(request: Request) -> Self {
         Self {
             request,
-            image: None,
+            payload: None,
         }
     }
 }
 
-/// Read a control request and its ELF image, or `None` at EOF before the first header.
+/// Read a control request and its binary payload, or `None` at EOF before the first header.
 ///
 /// # Errors
 ///
@@ -231,10 +234,10 @@ pub fn read_request(reader: &mut impl Read) -> Result<Option<RequestMessage>, Tr
         return Err(TransportError::UnexpectedKind);
     }
     let request: Request = serde_json::from_slice(&frame.body).map_err(|_| TransportError::Json)?;
-    let image = request_length(&request)?
+    let payload = request_payload_length(&request.command)?
         .map(|length| read_payload(reader, length))
         .transpose()?;
-    Ok(Some(RequestMessage { request, image }))
+    Ok(Some(RequestMessage { request, payload }))
 }
 
 /// Write a complete request after checking its control and binary bounds.
@@ -249,31 +252,40 @@ pub fn write_request(
     validate_request(message)?;
     let body = encode_json(&message.request)?;
     write_frame(writer, Kind::Control, &body)?;
-    if let Some(image) = &message.image {
-        for chunk in image.chunks(MAX_BINARY_BYTES) {
+    if let Some(payload) = &message.payload {
+        for chunk in payload.chunks(MAX_BINARY_BYTES) {
             write_frame(writer, Kind::Binary, chunk)?;
         }
     }
     Ok(())
 }
 
-/// Check that a request owns exactly its declared binary image.
+/// Check that a request owns exactly its declared binary payload.
 ///
 /// # Errors
 ///
-/// Rejects missing, extra, empty, or oversized image data.
+/// Rejects missing, extra, empty, or oversized payload data.
 pub fn validate_request(message: &RequestMessage) -> Result<(), TransportError> {
-    if request_length(&message.request)? != message.image.as_ref().map(Vec::len) {
+    if request_payload_length(&message.request.command)? != message.payload.as_ref().map(Vec::len) {
         return Err(TransportError::PayloadLength);
     }
     Ok(())
 }
 
-fn request_length(request: &Request) -> Result<Option<usize>, TransportError> {
-    match request.command {
+/// Return the declared binary payload size, or `None` when the command has no payload.
+///
+/// # Errors
+///
+/// Rejects empty or oversized load images and memory patches before allocation.
+pub fn request_payload_length(command: &Command) -> Result<Option<usize>, TransportError> {
+    match command {
         Command::Load { image_bytes, .. } => {
-            checked_length(image_bytes, MAX_OBJECT_BYTES).map(Some)
+            checked_length(*image_bytes, MAX_OBJECT_BYTES).map(Some)
         }
+        Command::Execute {
+            action: SessionAction::WriteMemory(window),
+            ..
+        } => checked_length(window.length, MAX_BINARY_BYTES).map(Some),
         _ => Ok(None),
     }
 }
@@ -285,7 +297,7 @@ fn checked_length(length: u32, limit: usize) -> Result<usize, TransportError> {
         .ok_or(TransportError::PayloadLength)
 }
 
-/// Read one declared binary file or memory window in bounded ordered chunks.
+/// Read one binary payload in bounded, ordered chunks.
 ///
 /// # Errors
 ///

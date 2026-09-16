@@ -99,7 +99,7 @@ impl Session {
         self.instructions
     }
 
-    /// Most recent terminal guest fault, distinct from loss of the native worker.
+    /// Most recent terminal guest fault, distinct from an unusable native machine.
     #[must_use]
     pub const fn fault(&self) -> Option<GuestFault> {
         self.fault
@@ -268,11 +268,48 @@ impl Session {
         self.machine.breakpoints()
     }
 
+    /// Write a canonical GPR or stack pointer between execution slices.
+    ///
+    /// Counters, PC, flags, breakpoints and the retained reset image are unchanged.
+    /// An interrupted REP instruction remains one instruction when resumed.
+    ///
+    /// # Errors
+    ///
+    /// Rejects states other than ready or paused, and noncanonical names, before mutation.
+    /// A native failure invalidates the session; uncertain writes are never replayed.
+    pub fn write_register(&mut self, name: &str, value: u64) -> Result<(), MachineError> {
+        self.state.require_patchable()?;
+        let result = self.machine.write_register(name, value);
+        self.accept_write(result)
+    }
+
+    /// Patch 1–65,536 bytes in one mapped region without widening guest permissions.
+    ///
+    /// Success invalidates overlapping executable translations. Reset restores
+    /// original bytes; patching does not modify the source or assembled artifact.
+    ///
+    /// # Errors
+    ///
+    /// Rejects states other than ready or paused, and invalid ranges, before mutation.
+    /// Native write/cache failures invalidate the session, with no rollback guarantee.
+    pub fn write_memory(&mut self, address: Address, bytes: &[u8]) -> Result<(), MachineError> {
+        self.state.require_patchable()?;
+        let result = self.machine.write_memory(address, bytes);
+        self.accept_write(result)
+    }
+
+    const fn accept_write(&mut self, result: Result<(), MachineError>) -> Result<(), MachineError> {
+        if matches!(result, Err(MachineError::Backend)) {
+            self.state = ExecutionState::Crashed;
+        }
+        result
+    }
+
     /// Observe canonical integer registers between native slices.
     ///
     /// # Errors
     ///
-    /// Rejects a lost machine or failed native observation.
+    /// Rejects crashed sessions and native observation failures.
     pub fn read_registers(&self) -> Result<IntegerRegisters, MachineError> {
         if self.state == ExecutionState::Crashed {
             return Err(MachineError::Backend);
@@ -284,7 +321,7 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Rejects a lost machine, invalid ranges, and native observation failures.
+    /// Rejects crashed sessions, invalid ranges and native observation failures.
     pub fn read_memory(&self, address: Address, length: u64) -> Result<Vec<u8>, MachineError> {
         if self.state == ExecutionState::Crashed {
             return Err(MachineError::Backend);

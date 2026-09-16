@@ -4,7 +4,10 @@ import { preferredLocale } from './match';
 
 /**
  * Own locale selection and document metadata for the mounted application.
- * Changes persist in order without reloading; failed writes leave the locale intact.
+ *
+ * @remarks
+ * Call `initialize` after mounting. Changes persist in order without reloading;
+ * failed writes preserve the currently displayed locale and set `failed`.
  */
 export function createLocaleController() {
   let current = $state<Locale>('en');

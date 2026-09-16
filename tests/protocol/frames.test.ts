@@ -116,3 +116,34 @@ test.each([
     encodeCall({ connection: '1', view: '1', command: { type: 'shutdown' } }, new Uint8Array(1)),
   ).toThrow(RangeError);
 });
+
+test('patch calls preserve their metadata and enforce exact nonempty payloads', () => {
+  for (const length of [0, 1, 65536, 65537]) {
+    const payload = new Uint8Array(length).fill(0xa5);
+    const call: DesktopCall = {
+      connection: '1',
+      view: '1',
+      command: {
+        type: 'execute',
+        data: {
+          session: { session: '2', generation: '0' },
+          action: { type: 'write_memory', data: { address: '0x0000000000001000', length } },
+        },
+      },
+    };
+    expect(() => encodeCall(call, null)).toThrow(RangeError);
+    if (length === 0 || length > 65536) {
+      expect(() => encodeCall(call, payload)).toThrow(RangeError);
+      continue;
+    }
+    expect(() => encodeCall(call, payload.subarray(1))).toThrow(RangeError);
+    expect(() => encodeCall(call, new Uint8Array(length + 1))).toThrow(RangeError);
+    const framed = encodeCall(call, payload);
+    const view = new DataView(framed.buffer);
+    const offset = 8 + view.getUint32(4, true);
+    expect(JSON.parse(new TextDecoder().decode(framed.slice(8, offset)))).toEqual(call);
+    expect(framed.slice(offset, offset + 4)).toEqual(new Uint8Array([79, 80, 1, 0]));
+    expect(view.getUint32(offset + 4, true)).toBe(length);
+    expect(framed.slice(offset + 8)).toEqual(payload);
+  }
+});

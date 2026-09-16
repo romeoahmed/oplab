@@ -12,7 +12,7 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 capstone = { version = "0.14", default-features = false, features = ["std", "full", "arch_arm64"] }
 cargo_metadata = "0.23"
-cc = "1.4"
+cc = { version = "1.4", features = ["parallel"] }
 clap = { version = "4.6", features = ["derive"] }
 cxx = "1.0"
 cxx-build = "1.0"

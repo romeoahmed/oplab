@@ -69,7 +69,7 @@
   "instructions_started": "指令计数",
   "show_diagnostic": "定位到第 {line} 行，第 {column} 列",
   "error_assembly": "汇编失败，请检查源码与架构。",
-  "error_input": "请检查地址、内存范围、寄存器初值和执行上限。",
+  "error_input": "请检查地址、内存范围、寄存器值和执行上限。",
   "error_completion": "请指定终止地址，或唯一定义的符号。",
   "error_engine": "引擎不可用，请重启后继续。",
   "error_deadline": "引擎运行超时，已停止。请重启后继续。",
@@ -208,5 +208,13 @@
   "inspect_pc": "查看 PC 处内存",
   "current_instruction": "读取内存时的 PC",
   "live_decode_hint": "反汇编基于已读取的内存。要查看变化，请刷新内存后重新反汇编。",
-  "breakpoint_at": "{address} 处的断点"
+  "breakpoint_at": "{address} 处的断点",
+  "edit_register": "修改寄存器",
+  "write_register": "写入寄存器",
+  "write_memory": "修改内存",
+  "patch_address": "写入地址",
+  "patch_bytes": "十六进制字节",
+  "patch_hint": "每次最多写入 4 KiB 数据或机器码，重置后恢复装载时的内容。",
+  "register_edit_hint": "输入无符号十进制数或以 0x 开头的十六进制数。PC 和标志位只读，重置后恢复初值。",
+  "register_value": "数值"
 }

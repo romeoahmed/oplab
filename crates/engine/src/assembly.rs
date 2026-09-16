@@ -140,7 +140,11 @@ const fn validate_source(source: &str) -> Result<(), Diagnostic> {
 }
 
 fn assemble_object(source: &str, target: Target) -> Result<Vec<u8>, Diagnostic> {
-    let result = ffi::bridge::assemble_object(source, target == Target::Aarch64)
+    let architecture = match target {
+        Target::X86_64 => ffi::bridge::Architecture::X86_64,
+        Target::Aarch64 => ffi::bridge::Architecture::Aarch64,
+    };
+    let result = ffi::bridge::assemble_object(source, architecture)
         .map_err(|_| Diagnostic::new(DiagnosticCode::BackendFailure))?;
     match result.status {
         ffi::bridge::Status::Success => Ok(result.object),

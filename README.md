@@ -35,6 +35,8 @@ loaded machine intact.
   source diagnostics; unchanged GNU-style source assembled and linked by LLVM MC/LLD.
 - **Execute and inspect:** ELF or raw-code sessions; step, run, pause, stop, reset
   and address breakpoints; integer registers, flags, memory and bounded disassembly.
+- **Modify machine state:** write canonical integer registers and patch up to
+  4 KiB of data or code while ready or paused; reset restores the loaded state.
 - **Work with files:** import/export UTF-8 assembly and exact machine bytes;
   export complete ELF objects and images through native dialogs.
 - **Automate:** run source, static ELF or raw code from stdin with explicit
@@ -45,8 +47,8 @@ loaded machine intact.
 Import machine code from **Files**, then use **Raw code** to set its architecture,
 load address, entry and stop address. Loading is explicit and replaces the machine.
 Select **Captured memory** in **Instructions** to disassemble observed bytes and
-toggle address breakpoints. Source-to-instruction mapping, live register/memory
-editing and multiple documents are [planned](docs/roadmap.md#next-product-work).
+toggle address breakpoints. PC and flags are read-only. Source-to-instruction
+mapping, register aliases and multiple documents are [planned](docs/roadmap.md#next-product-work).
 Instruction recognition does not guarantee emulator support for every extension.
 
 ## Build from source

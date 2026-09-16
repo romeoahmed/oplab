@@ -36,6 +36,7 @@
   import Instructions from './instructions/Instructions.svelte';
   import Machine from './machine/Machine.svelte';
   import Memory from './machine/Memory.svelte';
+  import Patch from './machine/Patch.svelte';
   import Raw from './machine/Raw.svelte';
   import Setup from './machine/Setup.svelte';
   import { defaultPreferences, readPreferences } from './preferences';
@@ -449,6 +450,9 @@
           onbreakpoint={(address: string, enabled: boolean) => {
             void work.breakpoint(address, enabled);
           }}
+          onregister={(name: string, value: string) => {
+            void work.writeRegister(name, value);
+          }}
           locale={language.current}
         />
         <Tabs.Root bind:value={observationTab} class="observation-pane">
@@ -505,6 +509,13 @@
               <button disabled={!work.connected || observation === undefined}
                 >{m.inspect_memory({}, options)}<ArrowRight size={14} aria-hidden="true" /></button
               >
+              <Patch
+                disabled={!work.connected || !resumable || work.controlling}
+                locale={language.current}
+                onwrite={(address: string, bytes: string) => {
+                  void work.writeMemory(address, bytes);
+                }}
+              />
             </form>
             <Memory
               window={captured?.observation.memory ?? null}

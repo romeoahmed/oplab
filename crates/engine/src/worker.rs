@@ -19,7 +19,7 @@ use oplab_core::protocol::{
 };
 use thiserror::Error;
 
-/// Connection failures do not imply a request succeeded and are never retried internally.
+/// Connection failures may leave request outcomes unknown; no request is retried internally.
 #[derive(Debug, Error)]
 pub enum WorkerError {
     /// Framing, decoding, or I/O failed.
@@ -121,7 +121,7 @@ impl Worker {
         &mut self,
         message: transport::RequestMessage,
     ) -> Result<transport::Message, WorkerError> {
-        let transport::RequestMessage { request, image } = message;
+        let transport::RequestMessage { request, payload } = message;
         if let Command::Assemble { identity, source } = request.command {
             return Ok(builds::build_message(
                 request.id,
@@ -139,7 +139,7 @@ impl Worker {
                 .execution
                 .as_ref()
                 .ok_or(WorkerError::ExecutionLost)?
-                .request(request.id, request.command, image);
+                .request(request.id, request.command, payload);
         }
         if request.command == Command::Shutdown {
             self.close()?;

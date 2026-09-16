@@ -79,10 +79,16 @@ fabricated location. Macro expansion buffers can lack an original-source offset;
 link failures have no source point. An offset is not an instruction range or source
 map. DWARF is retained; macro provenance and source breakpoints remain planned.
 
-The C++23/CXX adapter uses RAII ownership and call-scoped borrows. MC
+The C++23/CXX adapter uses RAII ownership and call-scoped borrows. A guest enum
+selects MC; named borrowed paths form one LLD request. Assembly and linking use
+separate translation units, with native handles confined to each call. MC
 finalization runs exactly once, including pools, relaxation, layout, fixups and
 DWARF. Calling layout as an extra preflight can mutate state and is prohibited.
-CXX translates exceptions; native aborts/hangs require process supervision.
+CXX translates initialization exceptions into backend failures; structured assembly
+errors remain independent of LLVM's wording. LLD calls are serialized to protect
+its process-wide context; each call retains LLD's default internal parallelism.
+An unrecoverable `lldMain` result exits through LLD's own cleanup API. Native aborts
+and hangs still require process supervision.
 
 ### Job boundaries and limits
 
@@ -237,7 +243,7 @@ experiment loader, not a general operating-system executable loader.
 | Program headers      | 256                        |
 | Page-rounded regions | 64                         |
 | Total mapped memory  | 64 MiB                     |
-| Debugger read        | 64 KiB, within one mapping |
+| Debugger read/write  | 64 KiB, within one mapping |
 
 These are separate from assembly's tighter emission limits. Host initialization
 through `mem_write` does not grant guest write access to RX pages. Debugger reads
@@ -278,8 +284,8 @@ ELF addresses, entry and permissions remain authoritative.
 
 Initialization failure drops the new native handle; worker replacement failure
 preserves the old session. The complete setup is retained for
-[reset](#breakpoints-observations-and-reset). Live register writes, executable
-patches and translated-code invalidation remain planned.
+[reset](#breakpoints-observations-and-reset). [Live edits](#live-editing) change only
+the active machine; they do not alter this retained setup.
 
 ## Execution
 
@@ -345,7 +351,8 @@ architectural-definedness claim. Integer observations are not full CPU snapshots
 Faults distinguish unmapped, prohibited and unaligned access, invalid instructions
 and processor exceptions, retaining access address/width where available. PC is an
 observation, not inferred source provenance. Partial guest effects remain visible.
-Infrastructure failure produces Crashed and null registers. Syscall/sysenter,
+An unusable native machine produces Crashed and null registers. Process loss is
+reported separately by the supervisor. Syscall/sysenter,
 software environment requests, port I/O and wait/halt terminate as
 UnsupportedEnvironment without acquiring host services. This is not an OS ABI or
 a promise of arbitrary privileged-instruction support.
@@ -359,3 +366,31 @@ commands for stale generations cannot mutate the current machine.
 [Protocol](protocol.md) defines asynchronous replies, subscriptions and backpressure.
 [Testing](testing.md) defines acceptance; the [roadmap](roadmap.md#release-gates)
 tracks containment and distribution work.
+
+### Live editing
+
+`Session::write_register` and `Session::write_memory` accept Ready and Paused
+sessions, including breakpoint/step pauses. Running, terminated and crashed
+sessions reject writes. Inputs are validated before native mutation. These are
+explicit debugger operations, independent of source, artifacts and initial setup.
+
+Register writes accept one lowercase canonical GPR, including RSP/SP, and an exact
+unsigned 64-bit value. Other registers, PC and flags remain unchanged. Aliases,
+PC, flags, SIMD and system-register writes are not implemented. Editing a GPR
+while an x86 REP instruction is paused preserves that instruction's continuation
+and instruction-start accounting.
+
+Memory writes accept 1–65,536 bytes in one mapped region, including RX and guard
+pages. They do not change mapping permissions or require guest write access.
+Executable writes invalidate overlapping translations through Unicorn's
+[`ctl_remove_cache`](https://docs.rs/unicorn-engine/latest/unicorn_engine/struct.Unicorn.html#method.ctl_remove_cache).
+The API takes an exclusive `u64` end; a patch ending at `2^64` uses a full cache flush.
+Writes occur outside native execution, so no in-hook PC rewrite is needed; see
+[Unicorn's cache guidance](https://github.com/unicorn-engine/unicorn/wiki/FAQ#editing-an-instruction-doesnt-take-effecthooks-added-during-emulation-are-not-called).
+This is debugger patching, not a general self-modifying-code guarantee.
+
+Writes preserve counters, completion policy, generation and breakpoints. Reset
+restores original bytes and initial registers. Validation failures leave the
+machine intact. A native write or invalidation failure may have partial effects:
+the session becomes Crashed, cannot resume or reset, and must be loaded again.
+There is no rollback or automatic mutation retry.

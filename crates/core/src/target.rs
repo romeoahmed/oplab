@@ -11,7 +11,7 @@ pub enum Target {
 }
 
 impl Target {
-    /// Required instruction-start alignment, independent of mapping granularity.
+    /// Required instruction-start alignment in bytes, independent of page size.
     #[must_use]
     pub const fn instruction_alignment(self) -> u64 {
         match self {

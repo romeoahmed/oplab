@@ -1,4 +1,4 @@
-//! LLD owns final section placement and relocation; host code never executes guest bytes.
+//! LLD section placement and relocation through a temporary standard ELF file.
 
 use super::{ObjectArtifact, elf, ffi};
 use object::{Object, ObjectSection};
@@ -32,9 +32,8 @@ pub(super) fn image(object: &ObjectArtifact, base: Address) -> Result<Vec<u8>, D
     let script = scratch.path().join("layout.ld");
     fs::write(&input, object.bytes())
         .map_err(|_| Diagnostic::new(DiagnosticCode::BackendFailure))?;
-    // Anchor .text and separate following data at the target's maximum page size.
-    // LLD places orphan sections using their standard ELF attributes; no source
-    // section, symbol, note, or debugging data is discarded here.
+    // Anchor .text, then align to the target's maximum page size. LLD places
+    // orphan sections by their ELF attributes; the script discards no sections.
     fs::write(
         &script,
         format!(
@@ -43,7 +42,13 @@ pub(super) fn image(object: &ObjectArtifact, base: Address) -> Result<Vec<u8>, D
         ),
     )
     .map_err(|_| Diagnostic::new(DiagnosticCode::BackendFailure))?;
-    if !ffi::bridge::link_object(path(&input)?, path(&output)?, path(&script)?, base.get())
+    let request = ffi::bridge::LinkRequest {
+        input: path(&input)?,
+        output: path(&output)?,
+        script: path(&script)?,
+        base: base.get(),
+    };
+    if !ffi::bridge::link_object(&request)
         .map_err(|_| Diagnostic::new(DiagnosticCode::BackendFailure))?
     {
         return Err(Diagnostic::new(DiagnosticCode::Assembly));

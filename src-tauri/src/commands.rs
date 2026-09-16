@@ -2,7 +2,7 @@
 
 use crate::supervisor::Service;
 use oplab_core::protocol::{
-    Command, MAX_OBJECT_BYTES,
+    MAX_OBJECT_BYTES,
     desktop::{ConnectionInfo, DesktopCall, DesktopFailure, FailureCode},
     frame::Kind,
     scalar::Counter,
@@ -53,8 +53,8 @@ pub(crate) async fn worker_request(
     service: tauri::State<'_, Service>,
 ) -> Result<Response> {
     authorize(&window)?;
-    let (call, image) = decode(request.body())?;
-    let ticket = service.request(call.connection, call.view, call.command, image)?;
+    let (call, payload) = decode(request.body())?;
+    let ticket = service.request(call.connection, call.view, call.command, payload)?;
     tauri::async_runtime::spawn_blocking(move || {
         let message = ticket.wait()?;
         let mut bytes = Vec::new();
@@ -103,7 +103,7 @@ fn decode(body: &InvokeBody) -> Result<(DesktopCall, Option<Vec<u8>>)> {
     let InvokeBody::Raw(bytes) = body else {
         return Err(DesktopFailure::new(FailureCode::Protocol));
     };
-    // The extra metadata allowance is independent of the optional one-MiB image.
+    // The extra metadata allowance is independent of the optional one-MiB payload.
     if bytes.len() > 2 * MAX_OBJECT_BYTES + 1024 {
         return Err(DesktopFailure::new(FailureCode::Protocol));
     }
@@ -114,18 +114,15 @@ fn decode(body: &InvokeBody) -> Result<(DesktopCall, Option<Vec<u8>>)> {
         .ok_or_else(|| DesktopFailure::new(FailureCode::Protocol))?;
     let call: DesktopCall = serde_json::from_slice(&frame.body)
         .map_err(|_| DesktopFailure::new(FailureCode::Protocol))?;
-    let image = if let Command::Load { image_bytes, .. } = &call.command {
-        let length = usize::try_from(*image_bytes)
-            .map_err(|_| DesktopFailure::new(FailureCode::Protocol))?;
-        Some(
-            transport::read_payload(&mut input, length)
-                .map_err(|_| DesktopFailure::new(FailureCode::Protocol))?,
-        )
-    } else {
-        None
-    };
+    let payload = transport::request_payload_length(&call.command)
+        .and_then(|length| {
+            length
+                .map(|length| transport::read_payload(&mut input, length))
+                .transpose()
+        })
+        .map_err(|_| DesktopFailure::new(FailureCode::Protocol))?;
     if !input.is_empty() {
         return Err(DesktopFailure::new(FailureCode::Protocol));
     }
-    Ok((call, image))
+    Ok((call, payload))
 }

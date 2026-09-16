@@ -11,7 +11,7 @@ export type Capabilities = {
    */
   version: number;
   /**
-   * Targets supported by assembly and decoding adapters.
+   * Guest targets supported by this worker.
    */
   targets: Array<Target>;
   /**

@@ -12,10 +12,8 @@ fn main() -> Result<()> {
     let mut build = cxx_build::bridge("src/assembly/ffi.rs");
     build
         .file("native/assembly.cpp")
-        .include("native")
+        .file("native/link.cpp")
         .std("c++23")
-        .warnings(true)
-        .extra_warnings(true)
         .warnings_into_errors(true);
     cpp::configure(&mut build, &toolchain.includes)?;
     cpp::write_compilation_database(&build, &toolchain)?;

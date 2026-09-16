@@ -13,6 +13,7 @@ implemented scope from planned work; [testing](testing.md) defines acceptance an
 | Loading       | Validated static ELF64 program headers, entry, permissions, BSS and padding; raw-code loading in desktop/worker/CLI                                                      |
 | Execution     | Both guests; step/run/pause/stop/reset, explicit completion and budgets, managed address breakpoints, integer/flags/memory observations and fault outcomes               |
 | Initial state | Canonical GPRs and extra zero-filled mappings in desktop/worker/CLI; shared validation, failed-load preservation and reset to retained setup                             |
+| Live editing  | Ready/paused canonical GPR writes and memory patches (4 KiB desktop, 64 KiB engine/worker), executable cache invalidation, unchanged permissions and reset               |
 | Inspection    | Bounded raw/ELF-segment/observed-memory disassembly and on-demand instruction metadata in desktop/worker/CLI; static recognition remains distinct from execution support |
 | Editor        | CodeMirror/Lezer lexical assistance, completion, search/history/comments and build-scoped diagnostics with verified Unicode positions                                    |
 | Workbench     | Separate document/artifact/session state, stale-result rejection, local scratch recovery, configuration, focus mode and adjustable panels                                |
@@ -31,8 +32,8 @@ implemented scope from planned work; [testing](testing.md) defines acceptance an
 2. **Execution coverage:** extend the tested guest/extension matrix beyond static
    recognition; CPU selection, SIMD observations and precise unsupported behavior
    need explicit contracts.
-3. **Live machine editing:** register/alias writes, executable patches and
-   translated-code invalidation, with explicit mutation and failure semantics.
+3. **Extended machine editing:** register aliases with architectural width/zero-extension
+   rules and an explicit PC/flags write policy. SIMD state belongs with execution coverage.
 4. **Workbench expansion:** multiple source documents, coordinated source/instruction
    focus, accessible draggable separators and large-data views as needed.
 
@@ -75,19 +76,21 @@ signed, independently installed distributions remain unverified.
 
 Recorded verification through **2026-09-16**:
 
-| Evidence                   | Result                                                                                                                                                                                       |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace checks           | `cargo xtask check`; strict Rust/C++/frontend checks, formatting and 46 generated TypeScript declarations verified                                                                           |
-| Automated tests            | `cargo xtask test`: 99 Rust unit/integration tests, 2 doctests and 68 frontend tests, including 40 Chromium cases                                                                            |
-| Rust documentation         | Rustdoc passed with warnings denied                                                                                                                                                          |
-| Native form validation     | Fresh macOS static bundle rejected empty and oversized memory lengths through Inspect at PC, retained captured memory, and accepted corrected input; both interface languages exercised      |
-| Native setup and execution | Both guests consumed full-width GPR inputs and explicit mappings; reset restored initial values, and invalid replacement preserved the existing machine                                      |
-| Raw-code desktop           | Both guests imported through native dialogs, stopped before effects, resumed/stepped to 42 and reset; failed entry preserved the machine; observed-memory PC and breakpoint toggles verified |
-| Desktop bundle             | Normal Tauri build hooks; both guests assembled, loaded, stepped and stored 42; reset, failed assembly and bounded pause/stop flows exercised                                                |
-| Bundled examples           | Both signed-array sorting programs ran in the static desktop bundle; native tests verified sorted output, sum 42, unchanged input and reset at two link addresses                            |
-| Files and diagnostics      | Unicode diagnostic navigation, exact source/raw-byte transfers and a 126,980-byte ELF segment exported and decoded through its end                                                           |
-| Interface                  | Compact command header, 1440×900 default and 40% observation panel; responsive layouts at 1280, 880, 800 and 414px; both languages and native breakpoint spacing verified                    |
-| Icon conversion            | All 10 ICNS representations and 6 ICO layers matched PNG references on 2026-09-14                                                                                                            |
+| Evidence                   | Result                                                                                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Workspace checks           | `cargo xtask check`; strict Rust/C++/frontend checks, formatting and 46 generated TypeScript declarations verified                                                                                           |
+| Automated tests            | `cargo xtask test`: 109 Rust unit/integration tests, 2 doctests and 72 frontend tests, including 42 Chromium cases                                                                                           |
+| Native bridge/build        | LLVM/LLD 23.1.1 and CXX 1.0.202: parallel C++ builds, standalone bridge header, both guests, arbitrary ELF data preservation, paths with spaces and target-specific overrides verified                       |
+| Rust documentation         | Rustdoc passed with warnings denied                                                                                                                                                                          |
+| Live-editing acceptance    | Both guests in the fresh macOS static bundle: GPR write, code patch, execution to 42 and reset to original values/bytes; English and Simplified Chinese, keyboard submission and native hex parsing verified |
+| Memory inspection          | Fresh macOS static bundle: invalid/unmapped addresses and empty/oversized lengths preserved captured memory; corrected input cleared errors. Both languages, Enter and Inspect at PC verified                |
+| Native setup and execution | Both guests consumed full-width GPR inputs and explicit mappings; reset restored initial values, and invalid replacement preserved the existing machine                                                      |
+| Raw-code desktop           | Both guests imported through native dialogs, stopped before effects, resumed/stepped to 42 and reset; failed entry preserved the machine; observed-memory PC and breakpoint toggles verified                 |
+| Desktop bundle             | Normal Tauri build hooks; both guests assembled, loaded, stepped and stored 42; reset, failed assembly and bounded pause/stop flows exercised                                                                |
+| Bundled examples           | Both signed-array sorting programs ran in the static desktop bundle; native tests verified sorted output, sum 42, unchanged input and reset at two link addresses                                            |
+| Files and diagnostics      | Unicode diagnostic navigation, exact source/raw-byte transfers and a 126,980-byte ELF segment exported and decoded through its end                                                                           |
+| Interface                  | Compact command header, 1440×900 default and 40% observation panel; responsive layouts at 1280, 880, 800 and 414px; both languages and native breakpoint spacing verified                                    |
+| Icon conversion            | All 10 ICNS representations and 6 ICO layers matched PNG references on 2026-09-14                                                                                                                            |
 
 These are recorded results, not a substitute for checks after later changes.
 [Testing](testing.md) defines coverage, acceptance procedures and the known Vitest/Vite

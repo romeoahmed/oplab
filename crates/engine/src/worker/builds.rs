@@ -103,8 +103,8 @@ impl Queue {
     }
 }
 
-/// Called only by the assembly thread. Cancellation is a latch, not a channel
-/// carrying other shared state, so relaxed atomic loads suffice at checkpoints.
+/// Assemble on the build thread, checking cancellation between native stages.
+/// The cancellation flag carries no other state, so relaxed atomic loads suffice.
 pub(super) fn run(job: Job) -> Message {
     let result = assembly::assemble_cancellable(job.identity, &job.source, || {
         job.cancelled.load(Ordering::Relaxed)

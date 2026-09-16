@@ -7,7 +7,7 @@ import Workbench from '$lib/workbench/Workbench.svelte';
 import { settled } from 'svelte';
 import { beforeEach, afterEach, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 
 import en from '../../messages/en.json';
 import zh from '../../messages/zh-CN.json';
@@ -200,6 +200,10 @@ test('controls preserve captures; changed bytes and reset invalidate decoded ins
   const add = page.getByRole('button', { name: en.add_breakpoint });
   await expect.element(add).toBeEnabled();
   await expect.poll(() => subscriptions.length).toBe(1);
+  await page.getByRole('textbox', { name: en.address, exact: true }).fill('invalid');
+  await page.getByRole('button', { name: en.inspect_memory }).click();
+  await expect.element(page.getByRole('alert')).toBeVisible();
+  expect(subscriptions).toHaveLength(1);
   const length = page.getByRole('spinbutton', { name: en.window_size });
   const inspectPC = page.getByRole('button', { name: en.inspect_pc });
   for (const invalid of ['4097', '']) {
@@ -211,6 +215,7 @@ test('controls preserve captures; changed bytes and reset invalidate decoded ins
   await length.fill('2');
   await inspectPC.click();
   await expect.poll(() => subscriptions.length).toBe(2);
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
   expect(subscriptions[1]).toEqual({
     type: 'subscribe',
     data: { session: machine.key, memory: { address: '0x0000000000001000', length: 2 } },
@@ -300,3 +305,152 @@ test('controls preserve captures; changed bytes and reset invalidate decoded ins
   ]);
   expect(replies).toEqual([]);
 });
+
+test.each([
+  { locale: 'en', target: 'x86_64', name: 'rsp' },
+  { locale: 'zh-CN', target: 'aarch64', name: 'sp' },
+] as const)(
+  'live editing in $locale waits for authoritative replies and refreshes patched memory',
+  async ({ locale, target, name }) => {
+    localStorage.setItem('PARAGLIDE_LOCALE', locale);
+    const copy = locale === 'en' ? en : zh;
+    let machine = observation('1', target);
+    const writes: { command: Command; bytes: Uint8Array | undefined }[] = [];
+    const registerReply = Promise.withResolvers<Awaited<ReturnType<WorkerPort['request']>>>();
+    let rejectPatch = true;
+    let patched: Uint8Array | undefined;
+    await render(Workbench, {
+      portFactory: (
+        receive: (stream: { event: StreamEvent; memory: Uint8Array | null }) => void,
+      ): WorkerPort => ({
+        connect: () => Promise.resolve(connection(machine)),
+        request: (command, bytes) => {
+          if (command.type === 'subscribe') {
+            if (patched !== undefined)
+              receive({
+                event: {
+                  subscription: '3',
+                  update: {
+                    type: 'full',
+                    data: { ...machine, sequence: '6', memory: command.data.memory },
+                  },
+                },
+                memory: patched,
+              });
+            return Promise.resolve({
+              response: { id: '3', result: { type: 'subscribed', data: '3' } },
+              payloads: [],
+            });
+          }
+          writes.push({ command, bytes });
+          if (command.type !== 'execute') throw new Error('Unexpected command');
+          if (command.data.action.type === 'write_register') return registerReply.promise;
+          if (command.data.action.type !== 'write_memory') throw new Error('Unexpected action');
+          if (rejectPatch) {
+            rejectPatch = false;
+            return Promise.resolve({
+              response: {
+                id: '4',
+                result: {
+                  type: 'error',
+                  data: { code: 'invalid_input', address: null, source_offset: null },
+                },
+              },
+              payloads: [],
+            });
+          }
+          patched = bytes;
+          return Promise.resolve({
+            response: {
+              id: '5',
+              result: {
+                type: 'observed',
+                data: { ...machine, sequence: '5' },
+              },
+            },
+            payloads: [],
+          });
+        },
+        acknowledge: () => Promise.resolve(),
+        detach: () => {},
+      }),
+    });
+    const edit = page.getByRole('button', { name: copy.edit_register, exact: true });
+    await expect.element(edit).toBeEnabled();
+    await edit.click();
+    const register = page.getByRole('combobox', { name: copy.register_name });
+    await register.selectOptions(name);
+    const value = page.getByRole('textbox', { name: copy.register_value });
+    const write = page.getByRole('button', { name: copy.write_register, exact: true });
+    await value.fill('18446744073709551616');
+    await userEvent.keyboard('{Enter}');
+    await expect.element(page.getByRole('alert')).toBeVisible();
+    expect(writes).toEqual([]);
+    await value.fill('0xffffffffffffffff');
+    await userEvent.keyboard('{Enter}');
+    await expect.element(write).toBeDisabled();
+    await expect
+      .element(page.getByText('ffffffffffffffff', { exact: true }))
+      .not.toBeInTheDocument();
+    expect(writes).toEqual([
+      {
+        command: {
+          type: 'execute',
+          data: {
+            session: machine.key,
+            action: { type: 'write_register', data: { name, value: '18446744073709551615' } },
+          },
+        },
+        bytes: undefined,
+      },
+    ]);
+    const next = structuredClone(machine);
+    next.sequence = '4';
+    if (next.registers?.type === 'x86_64') next.registers.data.gpr[4] = '18446744073709551615';
+    if (next.registers?.type === 'aarch64') next.registers.data.sp = '18446744073709551615';
+    machine = next;
+    registerReply.resolve({
+      response: { id: '4', result: { type: 'observed', data: next } },
+      payloads: [],
+    });
+    await expect.element(write).toBeEnabled();
+    await expect.element(register).toHaveValue(name);
+    await page.getByRole('button', { name: copy.close, exact: true }).click();
+    await expect.element(page.getByText('ffffffffffffffff', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: copy.write_memory, exact: true }).click();
+    await page.getByRole('textbox', { name: copy.patch_address }).fill('1000');
+    const hex = page.getByRole('textbox', { name: copy.patch_bytes });
+    await hex.fill('a');
+    const apply = page
+      .getByRole('form', { name: copy.write_memory })
+      .getByRole('button', { name: copy.write_memory, exact: true });
+    await apply.click();
+    await expect.element(page.getByRole('alert')).toBeVisible();
+    expect(writes).toHaveLength(1);
+    await hex.fill('2a 00 ff');
+    await apply.click();
+    await expect.poll(() => writes.length).toBe(2);
+    await expect.element(apply).toBeEnabled();
+    await expect.element(page.getByRole('alert')).toBeVisible();
+    await expect.element(hex).toHaveValue('2a 00 ff');
+    // Retry only after a new user action; a rejected mutation must not replay itself.
+    await settled();
+    expect(writes).toHaveLength(2);
+    await apply.click();
+    await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+    await page.getByRole('button', { name: copy.close, exact: true }).click();
+    await expect.element(page.getByRole('cell', { name: '2a 00 ff', exact: true })).toBeVisible();
+    expect(writes.slice(1)).toEqual(
+      Array.from({ length: 2 }, () => ({
+        command: {
+          type: 'execute',
+          data: {
+            session: machine.key,
+            action: { type: 'write_memory', data: { address: '0x0000000000001000', length: 3 } },
+          },
+        },
+        bytes: new Uint8Array([42, 0, 255]),
+      })),
+    );
+  },
+);

@@ -34,7 +34,7 @@ export type Observation = {
    */
   dispatches: Counter;
   /**
-   * Null only when the native machine has been lost.
+   * Null only when native machine state is unusable (`crashed`).
    */
   registers: Registers | null;
   /**
@@ -46,7 +46,7 @@ export type Observation = {
    */
   breakpoints: Array<HexAddress>;
   /**
-   * Metadata for the binary memory payload immediately following the reply.
+   * Metadata for the binary memory payload following this response or full stream event.
    */
   memory: MemoryWindow | null;
 };

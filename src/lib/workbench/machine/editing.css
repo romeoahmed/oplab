@@ -1,0 +1,27 @@
+.machine-edit {
+  display: grid;
+  gap: 12px;
+
+  label {
+    display: grid;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  input,
+  textarea,
+  select {
+    min-inline-size: 0;
+    inline-size: 100%;
+    font-family: var(--mono);
+  }
+
+  textarea {
+    resize: vertical;
+  }
+
+  button {
+    justify-self: end;
+  }
+}

@@ -1,4 +1,4 @@
-//! The only C++ trust boundary; native objects never cross it.
+//! CXX bridge carrying owned bytes and call-scoped borrows, never LLVM/LLD handles.
 
 // Apply expectations outside CXX's attribute parser, only to this bridge module.
 #![expect(
@@ -9,15 +9,20 @@
 )]
 #[cxx::bridge(namespace = "oplab")]
 pub(super) mod bridge {
-    /// Native outcomes are independent of localized LLVM diagnostic strings.
+    /// Guest ISA; independent of the host compiler target.
+    enum Architecture {
+        X86_64,
+        Aarch64,
+    }
+
+    /// Assembly outcomes independent of LLVM diagnostic wording.
     enum Status {
         Success,
         Assembly,
         ResourceLimit,
-        BackendFailure,
     }
 
-    /// Bounded object output and a stable error category, without LLVM messages.
+    /// Bounded ELF output or a diagnostic with an optional original-source byte offset.
     struct ObjectResult {
         object: Vec<u8>,
         status: Status,
@@ -25,11 +30,19 @@ pub(super) mod bridge {
         has_source_offset: bool,
     }
 
-    // SAFETY: Inputs are borrowed only for the call; output owns its bytes.
-    // The bridge retains no Rust pointers and serializes LLD's global context.
+    /// Paths are owned by the calling Rust frame and borrowed for one LLD call.
+    struct LinkRequest<'a> {
+        input: &'a str,
+        output: &'a str,
+        script: &'a str,
+        base: u64,
+    }
+
+    // SAFETY: C++ retains no input borrows; returned bytes own their storage.
+    // LLVM handles remain call-local, and LLD's process-wide context is serialized.
     unsafe extern "C++" {
-        include!("assembly.hpp");
-        fn assemble_object(source: &str, aarch64: bool) -> Result<ObjectResult>;
-        fn link_object(input: &str, output: &str, script: &str, base: u64) -> Result<bool>;
+        include!("oplab-engine/native/assembly.hpp");
+        fn assemble_object(source: &str, architecture: Architecture) -> Result<ObjectResult>;
+        fn link_object(request: &LinkRequest) -> Result<bool>;
     }
 }

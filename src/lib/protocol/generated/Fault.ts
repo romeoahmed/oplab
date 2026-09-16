@@ -20,7 +20,7 @@ export type Fault = {
    */
   address: HexAddress | null;
   /**
-   * Access width, if reported.
+   * Access width in bytes, if reported.
    */
   size: Counter | null;
 };

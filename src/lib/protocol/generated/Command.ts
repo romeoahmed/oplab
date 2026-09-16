@@ -86,7 +86,7 @@ export type Command =
       type: 'load';
       data: {
         /**
-         * Standard ELF interpretation or explicit raw-code placement.
+         * ELF-defined layout or explicit raw-code placement.
          */
         image: LoadImage;
         /**
@@ -102,7 +102,7 @@ export type Command =
          */
         target: Target;
         /**
-         * Explicit completion address before fetch.
+         * Guest address at which execution completes before fetching an instruction.
          */
         completion: HexAddress;
         /**
