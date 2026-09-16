@@ -2,8 +2,6 @@
   display: grid;
   gap: 10px;
   margin-block: 16px;
-  border-block-start: 1px solid var(--border);
-  padding-block-start: 12px;
 
   h3 {
     display: flex;

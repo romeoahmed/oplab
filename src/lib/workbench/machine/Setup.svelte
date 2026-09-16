@@ -4,7 +4,7 @@
   import type { Target } from '$lib/protocol/generated/Target';
   import { Plus, Trash } from '@lucide/svelte';
 
-  import { registerNames, type SetupInput } from './setup';
+  import { cpuModels, cpuNames, registerNames, type SetupInput } from './setup';
 
   import './setup.css';
 
@@ -22,6 +22,14 @@
 
 <div class="machine-setup">
   <p class="muted-note">{m.initial_setup_hint({}, options)}</p>
+  <label class="setup-cpu"
+    >{m.cpu_model({}, options)}
+    <select bind:value={value.cpu}>
+      <option value={null}>{m.cpu_default({}, options)}</option>
+      {#each cpuModels(target) as cpu (cpu)}<option value={cpu}>{cpuNames[cpu]}</option>{/each}
+    </select>
+  </label>
+  <p class="muted-note compact">{m.cpu_hint({}, options)}</p>
   <details>
     <summary>{m.initial_registers({}, options)} <span>{value.registers.length}</span></summary>
     <p class="muted-note">{m.initial_registers_hint({}, options)}</p>

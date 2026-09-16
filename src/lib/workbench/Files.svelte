@@ -83,7 +83,7 @@
     <ChevronDown size={12} aria-hidden="true" />
   </DropdownMenu.Trigger>
   <DropdownMenu.Portal>
-    <DropdownMenu.Content class="file-menu" align="start" sideOffset={6}>
+    <DropdownMenu.Content collisionPadding={12} class="file-menu" align="start" sideOffset={6}>
       <DropdownMenu.Item
         onSelect={() => {
           open('source', m.import_source({}, options));

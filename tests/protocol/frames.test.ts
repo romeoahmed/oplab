@@ -85,7 +85,7 @@ test.each([
           completion: '0x0000000000001008',
           instruction_budget: '100',
           image_bytes: length,
-          initial: { registers: [], mappings: [] },
+          initial: { cpu: null, registers: [], mappings: [] },
         },
       },
     };

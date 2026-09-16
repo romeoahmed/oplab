@@ -6,7 +6,7 @@ use oplab_core::{
     diagnostic::ValidationError,
     execution::{ExecutionState, Termination},
     memory::{MAX_MAPPED_BYTES, Permissions},
-    registers::{InitialRegisters, IntegerRegisters},
+    registers::{InitialRegisters, MachineRegisters},
     target::Target,
 };
 use oplab_engine::{
@@ -92,6 +92,7 @@ fn raw_entries_and_extra_mappings_reject_invalid_initial_conditions() -> TestRes
                 Target::X86_64,
                 4096,
                 MachineSetup {
+                    cpu: None,
                     mappings,
                     registers: None
                 }
@@ -122,6 +123,7 @@ fn raw_entries_and_extra_mappings_reject_invalid_initial_conditions() -> TestRes
         );
     }
     let wrong = MachineSetup {
+        cpu: None,
         registers: Some(InitialRegisters::Aarch64([0; 32])),
         mappings: vec![],
     };
@@ -172,6 +174,7 @@ fn check_initial_effects(value: u64, add: u64) -> TestResult {
         // Fixed architectural encodings: add first two GPRs; store result at SP.
         let initial = [0xa5; 8];
         let setup = MachineSetup {
+            cpu: None,
             registers: Some(InitialRegisters::from_assignments(
                 target,
                 [(names[0], value), (names[1], add), (names[2], 0x8000)],
@@ -274,15 +277,16 @@ fn guest_stores_verify_every_named_register_independently_of_the_observation_ada
             Image::Elf(&image),
             target,
             MachineSetup {
+                cpu: None,
                 registers: Some(InitialRegisters::from_assignments(target, initial)?),
                 mappings: vec![mapping(0x80000, 4096, vec![])?],
             },
         )?;
         let observed: Vec<_> = match machine.read_registers()? {
-            IntegerRegisters::X86_64 { gpr, .. } => {
+            MachineRegisters::X86_64 { gpr, .. } => {
                 gpr.into_iter().flat_map(u64::to_le_bytes).collect()
             }
-            IntegerRegisters::Aarch64 { x, sp, .. } => x
+            MachineRegisters::Aarch64 { x, sp, .. } => x
                 .into_iter()
                 .chain([sp])
                 .flat_map(u64::to_le_bytes)
@@ -319,6 +323,7 @@ fn elf_setup_preserves_entry_permissions_and_runs_with_an_explicit_stack() -> Te
         let image =
             assembly::link(&object, Address::new(0x1000)).map_err(|error| format!("{error:?}"))?;
         let setup = MachineSetup {
+            cpu: None,
             registers: Some(InitialRegisters::from_assignments(
                 target,
                 [(first, 42), (stack, 0x9000)],
@@ -348,11 +353,11 @@ fn elf_setup_preserves_entry_permissions_and_runs_with_an_explicit_stack() -> Te
             ExecutionState::Terminated(Termination::Completed)
         );
         match session.read_registers()? {
-            IntegerRegisters::X86_64 { gpr, .. } => {
+            MachineRegisters::X86_64 { gpr, .. } => {
                 assert_eq!(gpr[3], 42); // RBX receives the popped value.
                 assert_eq!(gpr[4], 0x9000); // RSP returns to the stack top.
             }
-            IntegerRegisters::Aarch64 { x, sp, .. } => {
+            MachineRegisters::Aarch64 { x, sp, .. } => {
                 assert_eq!(x[1], 42);
                 assert_eq!(sp, 0x9000);
             }

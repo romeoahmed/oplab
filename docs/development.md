@@ -298,9 +298,8 @@ arrays without shell escaping; paths and arguments must be UTF-8.
 C++ formatting inherits LLVM style with C++23 and a 100-column limit. clang-tidy
 owns brace enforcement, correctness, modernization and direct-include checks;
 formatting does not insert control-flow syntax. Both tools come from the selected
-LLVM installation. Root Cargo dependencies and lints are inherited throughout the
-workspace. Knip declares the dynamically imported Svelte editor as an entry so its
-dependency tree remains checked. Its two dependency exceptions cover Oxfmt invoked
+LLVM installation. Knip declares the dynamically imported Svelte editor as an
+entry so its dependency tree remains checked. Its two dependency exceptions cover Oxfmt invoked
 by Rust and the inlang-owned message-format plugin.
 
 `static/icon.svg` is the application icon master and README logo. Review it in a

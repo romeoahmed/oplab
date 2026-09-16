@@ -577,3 +577,84 @@ fn invalid_setup_is_rejected_before_running() -> TestResult {
     }
     Ok(())
 }
+
+#[test]
+fn cpu_profiles_control_guest_identity_and_reject_wrong_architectures() -> TestResult {
+    for (target, cpu, code, bank, mask, expected) in [
+        (
+            "x86_64",
+            "nehalem",
+            "mov eax, 1\ncpuid",
+            "gpr",
+            0x0fff_0ff0_u64,
+            0x0001_06a0_u64,
+        ),
+        (
+            "x86_64",
+            "haswell",
+            "mov eax, 1\ncpuid",
+            "gpr",
+            0x0fff_0ff0,
+            0x0003_06c0,
+        ),
+        (
+            "aarch64",
+            "cortex-a53",
+            "mrs x0, midr_el1",
+            "x",
+            0xff00_fff0,
+            0x4100_d030,
+        ),
+        (
+            "aarch64",
+            "cortex-a72",
+            "mrs x0, midr_el1",
+            "x",
+            0xff00_fff0,
+            0x4100_d080,
+        ),
+    ] {
+        let source = format!(".text\n{code}\ndone: nop\n");
+        let (output, json) = run(
+            &[
+                "run",
+                "source",
+                target,
+                "0x1000",
+                "--until-symbol",
+                "done",
+                "--cpu",
+                cpu,
+                "--budget",
+                "100",
+            ],
+            source.as_bytes(),
+        )?;
+        assert!(output.status.success(), "{cpu}: {json}");
+        assert_eq!(json["data"]["cpu"], cpu.replace('-', "_"));
+        let signature: u64 = json["data"]["registers"]["data"][bank][0]
+            .as_str()
+            .ok_or("missing signature")?
+            .parse()?;
+        assert_eq!(signature & mask, expected, "{cpu}");
+    }
+    for (target, cpu) in [("x86_64", "cortex-a53"), ("aarch64", "haswell")] {
+        reject(
+            &[
+                "run",
+                "source",
+                target,
+                "0x1000",
+                "--until-symbol",
+                "done",
+                "--cpu",
+                cpu,
+                "--budget",
+                "100",
+            ],
+            b".text\nnop\ndone: nop\n",
+            "invalid_input",
+        )?;
+    }
+    Ok(())
+}

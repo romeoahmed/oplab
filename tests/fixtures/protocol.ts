@@ -3,11 +3,13 @@ import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
 import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
 import type { Observation } from '$lib/protocol/generated/Observation';
+import type { Registers } from '$lib/protocol/generated/Registers';
 import type { Target } from '$lib/protocol/generated/Target';
 
 // Shared protocol data; native behavior is exercised by the Rust process tests.
 export function observation(sequence = '9007199254740993', target: Target = 'x86_64'): Observation {
   return {
+    cpu: target === 'x86_64' ? 'haswell' : 'cortex_a72',
     key: { session: '2', generation: '0' },
     sequence,
     status: { type: 'ready' },
@@ -54,6 +56,12 @@ export function observation(sequence = '9007199254740993', target: Target = 'x86
               sp: '0',
               pc: '0x0000000000001000',
               nzcv: 0,
+              v: Array(32).fill('0x00000000000000000000000000000000') as Extract<
+                Registers,
+                { type: 'aarch64' }
+              >['data']['v'],
+              fpcr: 0,
+              fpsr: 0,
             },
           }
         : {
@@ -62,6 +70,11 @@ export function observation(sequence = '9007199254740993', target: Target = 'x86
               gpr: ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
               rip: '0x0000000000001000',
               rflags: '2',
+              xmm: Array(16).fill('0x00000000000000000000000000000000') as Extract<
+                Registers,
+                { type: 'x86_64' }
+              >['data']['xmm'],
+              mxcsr: 0,
             },
           },
     memory: null,

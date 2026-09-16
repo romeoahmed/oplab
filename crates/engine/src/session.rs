@@ -6,8 +6,8 @@ use oplab_core::{
     diagnostic::ValidationError,
     execution::{ControlEvent, ExecutionState, Generation, GuestFault, PauseReason, Termination},
     policy::ExecutionPolicy,
-    registers::{IntegerRegisters, RegisterEdit, RegisterStorage},
-    target::Target,
+    registers::{MachineRegisters, RegisterEdit, RegisterStorage},
+    target::{CpuModel, Target},
 };
 
 /// A loaded image, execution policy and machine owned by one thread.
@@ -69,6 +69,12 @@ impl Session {
             stepping: false,
             bypass: None,
         })
+    }
+
+    /// Processor profile selected when the session was loaded.
+    #[must_use]
+    pub const fn cpu(&self) -> CpuModel {
+        self.machine.initial().cpu()
     }
 
     /// Current control state at the last ownership boundary.
@@ -316,12 +322,12 @@ impl Session {
         result
     }
 
-    /// Observe canonical integer registers between native slices.
+    /// Observe coherent integer and 128-bit SIMD registers between native slices.
     ///
     /// # Errors
     ///
     /// Rejects crashed sessions and native observation failures.
-    pub fn read_registers(&self) -> Result<IntegerRegisters, MachineError> {
+    pub fn read_registers(&self) -> Result<MachineRegisters, MachineError> {
         if self.state == ExecutionState::Crashed {
             return Err(MachineError::Backend);
         }

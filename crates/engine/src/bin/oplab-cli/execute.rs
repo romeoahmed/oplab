@@ -12,7 +12,7 @@ use oplab_core::{
         execution::{Fault, Registers},
         scalar::{Counter, HexAddress},
     },
-    target::Target,
+    target::{CpuModel, Target},
 };
 use oplab_engine::machine::MachineError;
 use serde::Serialize;
@@ -31,6 +31,7 @@ enum Output<'a> {
 
 #[derive(Serialize)]
 struct Report {
+    cpu: CpuModel,
     target: Target,
     completion: HexAddress,
     outcome: Outcome,
@@ -120,6 +121,7 @@ fn execute(prepared: Prepared) -> Result<Report, Diagnostic> {
         .transpose()
         .map_err(|error| diagnostic(&error))?;
     Ok(Report {
+        cpu: session.cpu(),
         target,
         completion: HexAddress::new(completion),
         outcome,

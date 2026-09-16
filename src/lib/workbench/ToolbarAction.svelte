@@ -7,6 +7,7 @@
     shortcut,
     disabled = false,
     primary = false,
+    prominent = false,
     onclick,
     children,
   }: {
@@ -15,6 +16,7 @@
     shortcut?: string | undefined;
     disabled?: boolean;
     primary?: boolean | undefined;
+    prominent?: boolean | undefined;
     onclick: () => void;
     children: Snippet;
   } = $props();
@@ -25,7 +27,7 @@
     {#snippet child({ props })}
       <Toolbar.Button
         {...props}
-        class={primary ? 'action primary' : 'action'}
+        class={['action', { primary, prominent }]}
         {disabled}
         aria-label={label}
         aria-keyshortcuts={shortcut}
@@ -35,7 +37,8 @@
     {/snippet}
   </Tooltip.Trigger>
   <Tooltip.Portal>
-    <Tooltip.Content class="tooltip" side="bottom" sideOffset={8}>
+    <Tooltip.Content collisionPadding={12} class="tooltip" side="bottom" sideOffset={8}>
+      <strong>{label}</strong>
       {hint}{#if shortcut}<kbd
           >{shortcut === 'Meta+Enter Control+Enter' ? 'Ctrl / ⌘ + Enter' : shortcut}</kbd
         >{/if}

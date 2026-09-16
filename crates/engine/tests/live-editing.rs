@@ -3,7 +3,7 @@
 use oplab_core::{
     address::Address,
     execution::{Access, ExecutionState, FaultKind, PauseReason, Termination},
-    registers::IntegerRegisters,
+    registers::MachineRegisters,
     target::Target,
 };
 use oplab_engine::{
@@ -33,10 +33,10 @@ fn session(target: Target, code: &[u8]) -> Result<Session, MachineError> {
     )
 }
 
-const fn integer(registers: &IntegerRegisters) -> u64 {
+const fn integer(registers: &MachineRegisters) -> u64 {
     match registers {
-        IntegerRegisters::X86_64 { gpr, .. } => gpr[0],
-        IntegerRegisters::Aarch64 { x, .. } => x[0],
+        MachineRegisters::X86_64 { gpr, .. } => gpr[0],
+        MachineRegisters::Aarch64 { x, .. } => x[0],
     }
 }
 
@@ -70,8 +70,8 @@ proptest! {
             let mut expected = initial.clone();
             for (index, (name, value)) in names.iter().zip(values).enumerate() {
                 match &mut expected {
-                    IntegerRegisters::X86_64 { gpr, .. } => gpr[index] = value,
-                    IntegerRegisters::Aarch64 { x, sp, .. } => {
+                    MachineRegisters::X86_64 { gpr, .. } => gpr[index] = value,
+                    MachineRegisters::Aarch64 { x, sp, .. } => {
                         if index == 31 { *sp = value; } else { x[index] = value; }
                     }
                 }
@@ -245,6 +245,7 @@ fn editing_a_paused_rep_continuation_preserves_instruction_accounting() -> TestR
             },
             Target::X86_64,
             MachineSetup {
+                cpu: None,
                 registers: Some(InitialRegisters::from_assignments(
                     Target::X86_64,
                     [("rax", 1), ("rcx", 5000), ("rdi", 0x8000)],
@@ -270,7 +271,7 @@ fn editing_a_paused_rep_continuation_preserves_instruction_accounting() -> TestR
         }
         machine.pause()?;
         assert_eq!(machine.instructions(), 1);
-        let IntegerRegisters::X86_64 { gpr, rip, .. } = machine.read_registers()? else {
+        let MachineRegisters::X86_64 { gpr, rip, .. } = machine.read_registers()? else {
             return Err("wrong target".into());
         };
         assert_eq!(rip, Address::new(0x1000));
@@ -329,6 +330,7 @@ fn maximum_patches_fit_one_mapping_and_cannot_span_adjacent_mappings() -> TestRe
             },
             target,
             MachineSetup {
+                cpu: None,
                 registers: None,
                 mappings: vec![InitialMapping {
                     range: AddressRange::new(Address::new(0x11000), 4096, 4096)?,
@@ -430,8 +432,8 @@ fn debugger_alias_writes_match_real_mov_instructions() -> TestResult {
             assert_eq!(edited.state(), ExecutionState::Ready);
             let mut expected = executed.read_registers()?;
             match &mut expected {
-                IntegerRegisters::X86_64 { rip, .. } => *rip = pc,
-                IntegerRegisters::Aarch64 { pc: address, .. } => *address = pc,
+                MachineRegisters::X86_64 { rip, .. } => *rip = pc,
+                MachineRegisters::Aarch64 { pc: address, .. } => *address = pc,
             }
             assert_eq!(actual, expected, "{name}");
         }
@@ -472,10 +474,10 @@ fn flag_writes_drive_guest_conditions_and_preserve_other_bits() -> TestResult {
             for &(name, bit) in flags {
                 let mut expected = machine.read_registers()?;
                 match &mut expected {
-                    IntegerRegisters::X86_64 { rflags, .. } => {
+                    MachineRegisters::X86_64 { rflags, .. } => {
                         *rflags = (*rflags & !(1 << bit)) | (set << bit);
                     }
-                    IntegerRegisters::Aarch64 { nzcv, .. } => {
+                    MachineRegisters::Aarch64 { nzcv, .. } => {
                         *nzcv = (*nzcv & !(1 << bit)) | (u32::try_from(set)? << bit);
                     }
                 }

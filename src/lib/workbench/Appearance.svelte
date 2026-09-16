@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as m from '$lib/paraglide/messages.js';
   import type { Locale } from '$lib/paraglide/runtime';
-  import { RotateCcw, SlidersHorizontal, X } from '@lucide/svelte';
+  import { RotateCcw, Palette, X } from '@lucide/svelte';
   import { Popover } from 'bits-ui';
 
   import { defaultPreferences, type Preferences } from './preferences';
@@ -11,11 +11,14 @@
 </script>
 
 <Popover.Root>
-  <Popover.Trigger class="icon-button" aria-label={m.appearance({}, options)}
-    ><SlidersHorizontal size={18} aria-hidden="true" /></Popover.Trigger
+  <Popover.Trigger
+    class="icon-button"
+    aria-label={m.appearance({}, options)}
+    title={m.appearance({}, options)}><Palette size={18} aria-hidden="true" /></Popover.Trigger
   >
   <Popover.Portal>
     <Popover.Content
+      collisionPadding={12}
       class="settings-popover"
       sideOffset={10}
       align="end"

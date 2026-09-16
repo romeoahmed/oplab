@@ -1,9 +1,10 @@
 //! Exact session identities and coherent observations at the wire boundary.
 
-use super::scalar::{Counter, HexAddress};
+use super::scalar::{Counter, HexAddress, VectorBits};
 use crate::{
     execution::{FaultKind, GuestFault, Termination},
-    registers::IntegerRegisters,
+    registers::MachineRegisters,
+    target::CpuModel,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -32,6 +33,8 @@ pub enum LoadImage {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct InitialState {
+    /// Null selects Haswell for `x86_64` or Cortex-A72 for `AArch64`.
+    pub cpu: Option<CpuModel>,
     /// Distinct canonical GPR names; omitted registers are zero. Maximum 32 entries.
     pub registers: Vec<RegisterValue>,
     /// Additional zero-filled regions, disjoint from image pages and each other.
@@ -121,7 +124,7 @@ pub enum SessionAction {
         /// Whether the breakpoint should be retained.
         enabled: bool,
     },
-    /// Capture control state and available integer registers, optionally with memory.
+    /// Capture control state and available registers, optionally with memory.
     Observe {
         /// Null requests registers and control state only.
         memory: Option<MemoryWindow>,
@@ -151,12 +154,15 @@ pub enum Status {
     Breakpoint(HexAddress),
     /// Execution ended with an explicit outcome.
     Terminated(Termination),
-    /// The native state is unusable; integer observations are unavailable.
+    /// The native state is unusable; register observations are unavailable.
     Crashed,
 }
 
-/// Complete canonical integer banks. Precision-sensitive values use decimal
-/// strings; these are raw bit values, without inferred flag definedness.
+/// Coherent integer and 128-bit SIMD banks.
+///
+/// 64-bit register values use decimal strings, addresses and vectors use fixed-width
+/// hex, and 32-bit controls use JSON numbers.
+/// Raw bits do not imply flag definedness.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(
     tag = "type",
@@ -165,18 +171,22 @@ pub enum Status {
     deny_unknown_fields
 )]
 pub enum Registers {
-    /// x86 ISA encoding order: RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI, R8–R15.
+    /// `x86_64` integer and SIMD banks.
     X86_64 {
-        /// Canonical general-purpose values.
+        /// ISA encoding order: RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI, R8–R15.
         gpr: [Counter; 16],
         /// Observed instruction pointer; faults may leave it at the faulting instruction.
         rip: HexAddress,
         /// Raw flags and reserved bits from the processor model.
         rflags: Counter,
+        /// XMM0–XMM15; excludes AVX upper halves and x87 state.
+        xmm: Box<[VectorBits; 16]>,
+        /// Raw backend MXCSR; accrued floating-point exception flags may be incomplete.
+        mxcsr: u32,
     },
-    /// A64 X0–X30, with SP stored independently.
+    /// A64 integer and SIMD banks, with SP stored independently.
     Aarch64 {
-        /// Canonical general-purpose values.
+        /// X0–X30 in register-number order.
         x: [Counter; 31],
         /// Stack pointer value.
         sp: Counter,
@@ -184,6 +194,12 @@ pub enum Registers {
         pc: HexAddress,
         /// Raw NZCV representation, with flags in bits 31 through 28.
         nzcv: u32,
+        /// V0–V31, including aliased scalar floating-point bits.
+        v: Box<[VectorBits; 32]>,
+        /// Raw floating-point control.
+        fpcr: u32,
+        /// Raw floating-point exception status.
+        fpsr: u32,
     },
 }
 
@@ -207,6 +223,8 @@ pub struct Fault {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct Observation {
+    /// Resolved emulator profile, retained across reset.
+    pub cpu: CpuModel,
     /// Session and reset generation that produced these values.
     pub key: SessionKey,
     /// Strictly increasing within the session, including across reset.
@@ -227,19 +245,38 @@ pub struct Observation {
     pub memory: Option<MemoryWindow>,
 }
 
-impl From<IntegerRegisters> for Registers {
-    fn from(registers: IntegerRegisters) -> Self {
+impl From<MachineRegisters> for Registers {
+    fn from(registers: MachineRegisters) -> Self {
         match registers {
-            IntegerRegisters::X86_64 { gpr, rip, rflags } => Self::X86_64 {
+            MachineRegisters::X86_64 {
+                gpr,
+                rip,
+                rflags,
+                xmm,
+                mxcsr,
+            } => Self::X86_64 {
                 gpr: gpr.map(Counter::new),
                 rip: HexAddress::new(rip),
                 rflags: Counter::new(rflags),
+                xmm: Box::new(xmm.map(VectorBits::new)),
+                mxcsr,
             },
-            IntegerRegisters::Aarch64 { x, sp, pc, nzcv } => Self::Aarch64 {
+            MachineRegisters::Aarch64 {
+                x,
+                sp,
+                pc,
+                nzcv,
+                v,
+                fpcr,
+                fpsr,
+            } => Self::Aarch64 {
                 x: x.map(Counter::new),
                 sp: Counter::new(sp),
                 pc: HexAddress::new(pc),
                 nzcv,
+                v: Box::new(v.map(VectorBits::new)),
+                fpcr,
+                fpsr,
             },
         }
     }

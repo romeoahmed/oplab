@@ -4,7 +4,7 @@ use object::{Object, ObjectSymbol};
 use oplab_core::{
     address::Address,
     execution::{Access, ExecutionState, FaultKind, PauseReason, Termination},
-    registers::IntegerRegisters,
+    registers::MachineRegisters,
     target::Target,
 };
 use oplab_engine::{assembly, session::Session};
@@ -42,8 +42,8 @@ fn settle(session: &mut Session) -> TestResult {
 
 fn first_integer(session: &Session) -> TestResult<u64> {
     Ok(match session.read_registers()? {
-        IntegerRegisters::X86_64 { gpr, .. } => gpr[0],
-        IntegerRegisters::Aarch64 { x, .. } => x[0],
+        MachineRegisters::X86_64 { gpr, .. } => gpr[0],
+        MachineRegisters::Aarch64 { x, .. } => x[0],
     })
 }
 
@@ -124,8 +124,8 @@ fn integer_aliases_flags_and_explicit_completion_follow_the_architecture() -> Te
         let registers = session.read_registers()?;
         assert_eq!(registers.instruction_pointer(), symbol(&image, "done")?);
         match registers {
-            IntegerRegisters::X86_64 { rflags, .. } => assert_ne!(rflags & (1 << 6), 0),
-            IntegerRegisters::Aarch64 { nzcv, .. } => assert_ne!(nzcv & (1 << 30), 0),
+            MachineRegisters::X86_64 { rflags, .. } => assert_ne!(rflags & (1 << 6), 0),
+            MachineRegisters::Aarch64 { nzcv, .. } => assert_ne!(nzcv & (1 << 30), 0),
         }
         assert!(session.start().is_err());
     }
@@ -198,7 +198,7 @@ fn repeat_step_finishes_the_instruction_and_reset_restores_written_memory() -> T
         symbol(&image, "after_repeat")?
     );
     assert_eq!(session.read_memory(output, 8)?, [42; 8]);
-    let IntegerRegisters::X86_64 { gpr, .. } = session.read_registers()? else {
+    let MachineRegisters::X86_64 { gpr, .. } = session.read_registers()? else {
         return Err("wrong register bank".into());
     };
     assert_eq!(gpr[1], 0); // RCX exhausted; next INC has not executed.
@@ -494,10 +494,10 @@ fn canonical_banks_preserve_every_integer_register_and_distinct_stack_storage() 
             ExecutionState::Terminated(Termination::Completed)
         );
         match session.read_registers()? {
-            IntegerRegisters::X86_64 { gpr, .. } => {
+            MachineRegisters::X86_64 { gpr, .. } => {
                 assert_eq!(gpr, std::array::from_fn(|index| index as u64 + 1));
             }
-            IntegerRegisters::Aarch64 { x, sp, .. } => {
+            MachineRegisters::Aarch64 { x, sp, .. } => {
                 assert_eq!(x, std::array::from_fn(|index| index as u64 + 1));
                 assert_eq!(sp, 31);
             }

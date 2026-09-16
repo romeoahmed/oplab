@@ -1,0 +1,56 @@
+.vector-format {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.vector-bank {
+  margin-block: 12px;
+
+  > div {
+    padding-block: 8px;
+    border-block-end: 1px solid var(--border);
+  }
+
+  dt {
+    margin-block-end: 4px;
+    color: var(--muted);
+    font: 11px var(--mono);
+  }
+
+  dd {
+    margin: 0;
+  }
+}
+
+.vector-bits {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vector-lanes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 110px), 1fr));
+  gap: 4px 12px;
+  margin-block: 8px 0;
+  padding-inline-start: 2ch;
+
+  li {
+    margin-inline-start: 2ch;
+    min-inline-size: 0;
+  }
+
+  li::marker {
+    color: var(--muted);
+    font: 10px var(--mono);
+  }
+
+  code {
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+}

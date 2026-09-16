@@ -6,7 +6,7 @@
   import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
   import type { Target } from '$lib/protocol/generated/Target';
   import { normalizeAddress } from '$lib/protocol/scalars';
-  import { ArrowRight, Circle, CornerDownRight, ListOrdered } from '@lucide/svelte';
+  import { ArrowRight, Circle, CornerDownRight, ListTree } from '@lucide/svelte';
   import { onDestroy, type Snippet } from 'svelte';
 
   import { problemLabel } from '../presentation';
@@ -144,7 +144,7 @@
         /></label
       >
       <button disabled={!connected || busy}>
-        <ListOrdered size={14} aria-hidden="true" />{m.disassemble({}, options)}
+        <ListTree size={14} aria-hidden="true" />{m.disassemble({}, options)}
       </button>
       <button
         type="button"

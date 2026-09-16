@@ -98,8 +98,8 @@ Three independent lifetimes prevent accidental state changes:
 Source edits do not patch the machine. Reattaching a view does not invent an association
 between retained machine state and current source. Missing memory differs from zero;
 instruction starts differ from retired instructions; raw flags do not imply definedness.
-Human addresses use ordinary hexadecimal input. Exact 64-bit JSON scalars use the
-canonical representation defined in [protocol](protocol.md).
+Human addresses use ordinary hexadecimal input. Exact 64-bit scalars and 128-bit
+SIMD values use the canonical JSON representations defined in [protocol](protocol.md).
 
 A functional core validates inputs and computes state transitions. Native and UI
 owners perform effects. Rust newtypes and tagged enums enforce domain constraints;
@@ -132,11 +132,11 @@ root manifests own requirements and lockfiles own exact resolutions.
 The source editor, right-hand machine panel and bottom observations remain visible
 through the edit/build/execute loop. Configuration distinguishes build inputs from
 load inputs: changing the link address requires assembly; completion, budget,
-initial GPRs and extra mappings apply on load. Per-target setup survives target and
-locale switches for the current window without mutating an artifact or session.
+CPU profile, initial GPRs and extra mappings apply on load. Per-target setup survives
+target and locale switches for the current window without mutating an artifact or session.
 
 Raw-code configuration owns its target, base, entry and completion; per-target
-GPR/mapping setup and the instruction budget are shared with source loading.
+CPU/GPR/mapping setup and the instruction budget are shared with source loading.
 Each load captures its bytes and settings before awaiting IPC. Later edits remain
 editable inputs and cannot alter the pending load or the machine it creates.
 Code freshness compares the source build identity or raw bytes/target/base/entry.
@@ -174,12 +174,12 @@ to follow the same path. Buttons retain `disabled`, and library event/attachment
 composition remains intact. Bits UI keeps inactive tab panels hidden without losing state.
 Use semantic landmarks, labelled fields, tables and definition lists.
 
-A compact application header combines files, execution and settings. Below 1200px
-it moves execution controls to a second row. Window decorations and controls remain
-native; macOS retains Tauri's default application menu. Tauri's
-[window menu](https://tauri.app/learn/window-menu/) API provides menus, not a portable
-native toolbar. Platform toolbar bridges and
-[overlay titlebars](https://tauri.app/learn/window-customization/) are not implemented.
+A compact application header combines files, execution and settings. Container
+queries progressively hide secondary action labels while retaining accessible names
+and Bits UI tooltips. Execution moves to a second row only at 800px and below.
+Floating controls use Bits UI collision padding to stay clear of viewport edges.
+Window decorations and controls remain native; macOS retains Tauri's default
+application menu. No custom titlebar or platform toolbar bridge is required.
 
 Native CSS uses Grid/Flexbox, logical properties, nesting, `oklch`, `color-mix`,
 container queries and dynamic viewport units. Newly Baseline features require
@@ -187,20 +187,18 @@ actual WebView acceptance; Vite does not polyfill missing Web APIs.
 
 The default window is 1440×900 logical pixels, fitted to the monitor work area by
 Tauri's `preventOverflow`, with an 880×600 minimum. The machine panel starts at
-28% width and the observation panel at 40% of viewport height. Minimum row sizes
+28% width with a 320px minimum; the observation panel starts at 40% of viewport
+height. Narrow memory panels group inputs above a row of actions. Minimum row sizes
 protect the editor and observations. At 800px and below, panels stack vertically;
 forms reflow with Grid and the tab strip scrolls without compressing its controls.
 This also accommodates zoomed WebViews without JavaScript resize handlers. Raw-code
-loading stays beside the panel heading, ahead of optional setup. Existing saved
-panel sizes remain; Reset layout applies the defaults without changing other preferences.
+loading stays beside the panel heading, ahead of optional setup. Reset layout
+restores default proportions without changing other preferences.
 Focus mode hides inspectors without unmounting the editor or disconnecting the worker.
 
 JetBrains Mono defaults to 14px with ligatures disabled. Preferences offer system
 monospace, 12–22px text and wrapping; the app does not enumerate installed fonts.
-Visual and keyboard acceptance covers narrow layouts, zoom, both locales and long
-values. The layout takes cues from
-[VS Code](https://code.visualstudio.com/docs/getstarted/userinterface) and
-[Binary Ninja](https://docs.binary.ninja/guide/index.html).
+[Testing](testing.md#browser-coverage) defines layout and interaction acceptance.
 
 ### Instruction inspection
 
@@ -227,6 +225,19 @@ controls. They are enabled while ready/paused and wait for authoritative replies
 static artifact/imported rows cannot change the session. Breakpoints use the latest
 observation and retain the engine's reset semantics. Setting PC uses the register-write
 path without running the machine or rewriting a prior capture's PC.
+
+### Register views
+
+Bits UI tabs separate integer registers, SIMD registers and address breakpoints
+without changing the machine. Their strip stays visible when scrolling long banks;
+the breakpoint tab includes the active count. The compact session summary shows
+the resolved CPU profile and instruction count. SIMD views retain format
+selection across observations and tab changes; a crashed machine clears values.
+Native selectors choose raw hexadecimal, signed/unsigned 8/16/32/64-bit lanes or
+32/64-bit floating-point lanes. Lane zero is the least significant; raw hex remains
+visible in every format, retaining NaN payloads and exact bits. Native ordered
+lists number lanes from zero. `BigInt` preserves integer precision; `DataView`
+interprets IEEE-754 values directly from the most-significant-first wire bytes.
 
 ### Live machine editing
 

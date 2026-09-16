@@ -5,7 +5,7 @@ use oplab_core::{
     protocol::{
         Command, Diagnostic, DiagnosticCode, Reply, Request, Response,
         frame::{Header, Kind, MAX_CONTROL_BYTES},
-        scalar::{Counter, HexAddress},
+        scalar::{Counter, HexAddress, VectorBits},
     },
 };
 use proptest::prelude::*;
@@ -22,6 +22,14 @@ proptest! {
         prop_assert_eq!(&address_json, &format!("\"0x{value:016x}\""));
         prop_assert_eq!(serde_json::from_str::<Counter>(&decimal_json)?, counter);
         prop_assert_eq!(serde_json::from_str::<HexAddress>(&address_json)?, address);
+    }
+
+    #[test]
+    fn vector_bits_round_trip_without_precision_loss(value in any::<u128>()) {
+        let bits = VectorBits::new(value);
+        let json = serde_json::to_string(&bits)?;
+        prop_assert_eq!(&json, &format!("\"0x{value:032x}\""));
+        prop_assert_eq!(serde_json::from_str::<VectorBits>(&json)?, bits);
     }
 
     #[test]
@@ -58,6 +66,16 @@ fn wire_schema_rejects_ambiguous_scalars_and_unknown_commands()
         "\"0x00000000000000FF\"",
     ] {
         assert!(serde_json::from_str::<HexAddress>(input).is_err());
+    }
+    for input in [
+        "0",
+        "\"0x0\"",
+        "\"0X00000000000000000000000000000000\"",
+        "\"0x0000000000000000000000000000000F\"",
+        "\"0x0000000000000000000000000000000g\"",
+        "\"0x100000000000000000000000000000000\"",
+    ] {
+        assert!(serde_json::from_str::<VectorBits>(input).is_err());
     }
     for input in [
         r#"{"id":"1","command":{"type":"shutdown","extra":true}}"#,
@@ -97,6 +115,8 @@ fn execution_observations_preserve_wide_registers_and_strict_session_keys()
         gpr: [Counter::new(u64::MAX); 16],
         rip: HexAddress::new(Address::new(u64::MAX)),
         rflags: Counter::new(2),
+        xmm: Box::new([VectorBits::new(0); 16]),
+        mxcsr: 0x1f80,
     };
     let mut json = serde_json::to_value(&registers)?;
     assert_eq!(json["data"]["gpr"][0], "18446744073709551615");

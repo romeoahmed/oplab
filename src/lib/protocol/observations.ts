@@ -51,6 +51,7 @@ function applyDelta(base: Snapshot, delta: ObservationDelta, memory: Uint8Array 
     throw new RangeError('Invalid delta memory');
   return {
     observation: {
+      cpu: base.observation.cpu,
       key: delta.key,
       sequence: delta.sequence,
       status: delta.status,

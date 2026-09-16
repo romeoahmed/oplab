@@ -10,6 +10,7 @@ import { observation } from '../fixtures/protocol';
 
 function baseline(target: Target = 'x86_64'): { observation: Observation; memory: Uint8Array } {
   const value = observation(undefined, target);
+  value.cpu = target === 'x86_64' ? 'nehalem' : 'cortex_a53';
   value.memory = { address: '0x0000000000002000', length: 8 };
   return { observation: value, memory: new Uint8Array(8) };
 }
@@ -44,6 +45,7 @@ test.each(['x86_64', 'aarch64'] as const)(
             breakpoints: fc.uniqueArray(fc.bigInt({ min: 0n, max: (1n << 64n) - 1n }), {
               maxLength: 16,
             }),
+            vector: fc.option(fc.bigInt({ min: 0n, max: (1n << 128n) - 1n })),
             value: fc.option(fc.bigInt({ min: 0n, max: (1n << 64n) - 1n })),
             memory: fc.option(fc.uint8Array({ minLength: 8, maxLength: 8 })),
           }),
@@ -69,6 +71,10 @@ test.each(['x86_64', 'aarch64'] as const)(
               const registers = bank.type === 'x86_64' ? bank.data.gpr : bank.data.x;
               registers[0] = String(sample.value);
             }
+            if (sample.vector !== null) {
+              const vectors = bank.type === 'x86_64' ? bank.data.xmm : bank.data.v;
+              vectors[vectors.length - 1] = `0x${sample.vector.toString(16).padStart(32, '0')}`;
+            }
             expected.memory = sample.memory ?? previous.memory;
             const packet: StreamEvent = sample.full
               ? { subscription: '3', update: { type: 'full', data: expected.observation } }
@@ -76,7 +82,9 @@ test.each(['x86_64', 'aarch64'] as const)(
                   ...delta(expected.observation, expected.observation.sequence),
                   base: previous.observation.sequence,
                   registers:
-                    sample.value === null ? { type: 'unchanged' } : { type: 'replace', data: bank },
+                    sample.value === null && sample.vector === null
+                      ? { type: 'unchanged' }
+                      : { type: 'replace', data: bank },
                   memory_bytes: sample.memory === null ? 0 : 8,
                 });
             const model = structuredClone(expected);

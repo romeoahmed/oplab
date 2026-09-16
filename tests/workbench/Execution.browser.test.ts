@@ -93,6 +93,7 @@ test.each([
     await expect.poll(() => payloads.length).toBe(1);
     await expect.element(pane.getByRole('button', { name: copy.load_raw })).toBeEnabled();
     await expect.element(page.getByRole('alert')).toBeVisible();
+    await page.getByRole('tab', { name: copy.breakpoint_view, exact: false }).click();
     await expect
       .element(
         page.getByRole('button', {
@@ -111,7 +112,7 @@ test.each([
         target,
         completion: `0x${completion.slice(2).padStart(16, '0')}`,
         image_bytes: bytes.length,
-        initial: { registers: [], mappings: [] },
+        initial: { cpu: null, registers: [], mappings: [] },
         replace: initial.key,
       },
     });
@@ -197,6 +198,7 @@ test('controls preserve captures; changed bytes and reset invalidate decoded ins
       };
     },
   });
+  await page.getByRole('tab', { name: en.breakpoint_view, exact: false }).click();
   const add = page.getByRole('button', { name: en.add_breakpoint });
   await expect.element(add).toBeEnabled();
   await expect.poll(() => subscriptions.length).toBe(1);

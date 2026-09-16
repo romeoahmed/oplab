@@ -425,14 +425,10 @@ test('imported source reaches assembly unchanged and binary inspection never loa
 });
 
 test('initial setup is target-specific, survives locale changes and applies only on load', async () => {
-  const disclosure = (configuration: string, label: string) => {
-    const panel = page.getByLabelText(configuration, { exact: true }).element();
-    const summary = Array.from(panel.querySelectorAll('summary')).find((element) =>
-      element.textContent.includes(label),
-    );
-    if (summary === undefined) throw new Error('Missing setup disclosure');
-    return page.elementLocator(summary);
-  };
+  const disclosure = (configuration: string, label: string) =>
+    page
+      .getByLabelText(configuration, { exact: true })
+      .getByText(new RegExp(`^${RegExp.escape(label)}(?:\\s|$)`));
   const commands: Command[] = [];
   await render(Workbench, {
     portFactory: (): WorkerPort => ({
@@ -457,6 +453,7 @@ test('initial setup is target-specific, survives locale changes and applies only
     }),
   });
   await page.getByRole('button', { name: en.configuration, exact: true }).click();
+  await page.getByRole('combobox', { name: en.cpu_model }).selectOptions('nehalem');
   await disclosure(en.configuration, en.initial_registers).click();
   await page.getByRole('button', { name: en.add_register }).click();
   await page.getByRole('textbox', { name: /RAX/ }).fill('0xffffffffffffffff');
@@ -476,6 +473,7 @@ test('initial setup is target-specific, survives locale changes and applies only
   expect(commands).toEqual([]);
   await page.getByRole('combobox', { name: en.target }).selectOptions('aarch64');
   await page.getByRole('button', { name: en.configuration, exact: true }).click();
+  await page.getByRole('combobox', { name: en.cpu_model }).selectOptions('cortex_a53');
   await disclosure(en.configuration, en.initial_registers).click();
   await expect
     .element(page.getByRole('combobox', { name: en.register_name, exact: true }))
@@ -484,6 +482,7 @@ test('initial setup is target-specific, survives locale changes and applies only
   await page.getByRole('combobox', { name: en.target }).selectOptions('x86_64');
   await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
   await page.getByRole('button', { name: zh.configuration, exact: true }).click();
+  await expect.element(page.getByRole('combobox', { name: zh.cpu_model })).toHaveValue('nehalem');
   await disclosure(zh.configuration, zh.initial_registers).click();
   await expect
     .element(page.getByRole('textbox', { name: /RAX/ }))
@@ -503,6 +502,7 @@ test('initial setup is target-specific, survives locale changes and applies only
   const load = commands.find((command) => command.type === 'load');
   if (load?.type !== 'load') throw new Error('Missing load request');
   expect(load.data.initial).toEqual({
+    cpu: 'nehalem',
     registers: [{ name: 'rax', value: '18446744073709551615' }],
     mappings: [{ address: '0x0000000000080000', length: 4096, flags: 6 }],
   });

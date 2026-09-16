@@ -7,7 +7,7 @@
   import {
     Binary,
     Hammer,
-    Download,
+    Import,
     Play,
     StepForward,
     Pause,
@@ -16,12 +16,13 @@
     FileCode,
     Settings2,
     X,
-    Focus,
-    Database,
+    Maximize2,
+    Minimize2,
+    MemoryStick,
     Box,
     ArrowRight,
     CircleCheck,
-    ListOrdered,
+    ListTree,
     LocateFixed,
     RefreshCw,
   } from '@lucide/svelte';
@@ -144,6 +145,7 @@
       icon: Hammer,
       disabled: !work.connected || work.building,
       primary: true,
+      prominent: true,
       shortcut: 'Meta+Enter Control+Enter',
       run: () => {
         void work.assemble();
@@ -152,7 +154,8 @@
     {
       label: m.load_artifact({}, options),
       hint: m.load_hint({}, options),
-      icon: Download,
+      icon: Import,
+      prominent: true,
       disabled: !work.connected || !work.artifactCurrent || work.controlling || running,
       run: () => {
         void work.load();
@@ -162,6 +165,7 @@
       label: m.run({}, options),
       hint: m.run_hint({}, options),
       icon: Play,
+      prominent: true,
       disabled: !work.connected || !resumable || work.controlling,
       shortcut: 'F5',
       run: () => {
@@ -294,20 +298,23 @@
               hint={action.hint}
               disabled={action.disabled}
               primary={action.primary}
+              prominent={action.prominent}
               shortcut={action.shortcut}
               onclick={action.run}><action.icon size={16} aria-hidden="true" /></ToolbarAction
             >
           {/each}
         </Toolbar.Root>
         <Popover.Root>
-          <Popover.Trigger class="configuration-button"
-            ><Settings2 size={16} aria-hidden="true" />{m.configuration(
-              {},
-              options,
-            )}</Popover.Trigger
+          <Popover.Trigger
+            class="configuration-button"
+            aria-label={m.configuration({}, options)}
+            title={m.configuration({}, options)}
+            ><Settings2 size={16} aria-hidden="true" /><span>{m.configuration({}, options)}</span
+            ></Popover.Trigger
           >
           <Popover.Portal>
             <Popover.Content
+              collisionPadding={12}
               class="settings-popover configuration-popover"
               sideOffset={10}
               align="end"
@@ -385,7 +392,11 @@
                 aria-pressed={focused}
                 onclick={() => {
                   focused = !focused;
-                }}><Focus size={16} aria-hidden="true" /></button
+                }}
+                >{#if focused}<Minimize2 size={16} aria-hidden="true" />{:else}<Maximize2
+                    size={16}
+                    aria-hidden="true"
+                  />{/if}</button
               >
             </div>
           </header>
@@ -459,9 +470,9 @@
           <div class="pane-header">
             <Tabs.List class="panel-tabs" aria-label={m.observation_views({}, options)}
               ><Tabs.Trigger value="memory"
-                ><Database size={15} aria-hidden="true" />{m.memory({}, options)}</Tabs.Trigger
+                ><MemoryStick size={15} aria-hidden="true" />{m.memory({}, options)}</Tabs.Trigger
               ><Tabs.Trigger value="instructions"
-                ><ListOrdered size={15} aria-hidden="true" />{m.instructions(
+                ><ListTree size={15} aria-hidden="true" />{m.instructions(
                   {},
                   options,
                 )}</Tabs.Trigger

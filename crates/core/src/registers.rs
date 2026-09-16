@@ -1,4 +1,4 @@
-//! Integer initialization, edits and observations, independent of a native backend.
+//! Register initialization, integer edits and machine observations.
 
 use crate::{address::Address, diagnostic::ValidationError, target::Target};
 
@@ -71,12 +71,12 @@ impl InitialRegisters {
     }
 }
 
-/// Raw integer registers captured between native execution slices.
+/// Canonical integer and 128-bit SIMD registers captured between native execution slices.
 ///
 /// Flag values do not imply that every bit is architecturally defined by prior code.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum IntegerRegisters {
-    /// x86 long-mode registers; subregister aliases refer to this canonical storage.
+pub enum MachineRegisters {
+    /// x86 long-mode registers, including the SSE bank (not AVX upper halves).
     X86_64 {
         /// ISA encoding order: RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI, R8 through R15.
         gpr: [u64; 16],
@@ -84,8 +84,12 @@ pub enum IntegerRegisters {
         rip: Address,
         /// Raw RFLAGS, including reserved bits supplied by the processor model.
         rflags: u64,
+        /// XMM0–XMM15 as raw 128-bit values; lane zero occupies the low bits.
+        xmm: Box<[u128; 16]>,
+        /// Raw backend MXCSR; accrued floating-point exception flags may be incomplete.
+        mxcsr: u32,
     },
-    /// A64 integer registers; SP and the zero register are distinct architectural roles.
+    /// A64 integer and SIMD registers; SP is distinct from the zero register.
     Aarch64 {
         /// X0 through X30. W-register writes zero-extend into their X register.
         x: [u64; 31],
@@ -95,10 +99,16 @@ pub enum IntegerRegisters {
         pc: Address,
         /// Raw NZCV representation, with flags in bits 31 through 28.
         nzcv: u32,
+        /// V0–V31 as raw 128-bit values; scalar FP views alias this bank.
+        v: Box<[u128; 32]>,
+        /// Raw floating-point control.
+        fpcr: u32,
+        /// Raw floating-point exception status.
+        fpsr: u32,
     },
 }
 
-impl IntegerRegisters {
+impl MachineRegisters {
     /// Architecture-independent instruction pointer without reinterpreting GPR indices.
     #[must_use]
     pub const fn instruction_pointer(&self) -> Address {

@@ -5,10 +5,10 @@ use oplab_core::{
     address::{Address, AddressRange},
     diagnostic::ValidationError,
     memory::Permissions,
-    target::Target,
+    target::{CpuModel, Target},
 };
 use unicorn_engine::{
-    Unicorn,
+    Arm64CpuModel, Unicorn, X86CpuModel,
     unicorn_const::{Arch, Mode, Prot},
 };
 
@@ -70,7 +70,11 @@ impl Machine {
         target: Target,
         setup: MachineSetup,
     ) -> Result<Self, MachineError> {
-        let native = open(target)?;
+        let cpu = setup.cpu.unwrap_or_else(|| CpuModel::default_for(target));
+        if cpu.target() != target {
+            return Err(ValidationError::Target.into());
+        }
+        let native = open(cpu)?;
         let page_size = native
             .ctl_get_page_size()
             .map_err(|_| MachineError::Backend)?;
@@ -84,7 +88,7 @@ impl Machine {
     }
 
     pub(crate) fn reset(&mut self) -> Result<(), MachineError> {
-        let mut replacement = initialize(open(self.initial.target())?, &self.initial)?;
+        let mut replacement = initialize(open(self.initial.cpu())?, &self.initial)?;
         replacement.get_data_mut().breakpoints =
             std::mem::take(&mut self.native.get_data_mut().breakpoints);
         self.native = replacement;
@@ -180,13 +184,24 @@ impl Machine {
     }
 }
 
-fn open(target: Target) -> Result<Unicorn<'static, Monitor>, MachineError> {
-    let (architecture, mode) = match target {
+fn open(cpu: CpuModel) -> Result<Unicorn<'static, Monitor>, MachineError> {
+    let (architecture, mode) = match cpu.target() {
         Target::X86_64 => (Arch::X86, Mode::MODE_64),
         Target::Aarch64 => (Arch::ARM64, Mode::LITTLE_ENDIAN),
     };
-    Unicorn::new_with_data(architecture, mode, Monitor::new(target))
-        .map_err(|_| MachineError::Backend)
+    let mut native = Unicorn::new_with_data(architecture, mode, Monitor::new(cpu.target()))
+        .map_err(|_| MachineError::Backend)?;
+    let model = match cpu {
+        CpuModel::Nehalem => X86CpuModel::NEHALEM as i32,
+        CpuModel::Haswell => X86CpuModel::HASWELL as i32,
+        CpuModel::CortexA53 => Arm64CpuModel::A53 as i32,
+        CpuModel::CortexA72 => Arm64CpuModel::A72 as i32,
+    };
+    // Set before the first query/register/memory operation initializes Unicorn's CPU.
+    native
+        .ctl_set_cpu_model(model)
+        .map_err(|_| MachineError::Backend)?;
+    Ok(native)
 }
 
 fn initialize(
@@ -199,6 +214,7 @@ fn initialize(
     if u64::from(page_size) != initial.page_size() {
         return Err(MachineError::Backend);
     }
+    registers::configure_simd(&mut native, initial.target())?;
     for region in initial.memory().regions() {
         native
             .mem_map(

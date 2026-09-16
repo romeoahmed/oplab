@@ -11,8 +11,8 @@ implemented scope from planned work; [testing](testing.md) defines acceptance an
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Assembly      | LLVM 23 MC/LLD through CXX/C++23; unchanged GNU-style source, separate compile/link APIs and complete ELF object/image output                                                    |
 | Loading       | Validated static ELF64 program headers, entry, permissions, BSS and padding; raw-code loading in desktop/worker/CLI                                                              |
-| Execution     | Both guests; step/run/pause/stop/reset, explicit completion and budgets, managed address breakpoints, integer/flags/memory observations and fault outcomes                       |
-| Initial state | Canonical GPRs and extra zero-filled mappings in desktop/worker/CLI; shared validation, failed-load preservation and reset to retained setup                                     |
+| Execution     | Both guests; step/run/pause/stop/reset, explicit completion and budgets, managed address breakpoints, integer/SIMD/flags/memory observations and fault outcomes                  |
+| Initial state | CPU profiles, canonical GPRs and extra zero-filled mappings in desktop/worker/CLI; shared validation, failed-load preservation and reset to retained setup                       |
 | Live editing  | Ready/paused GPR and subregister writes, RIP/PC redirection, individual application flags and memory patches (4 KiB desktop, 64 KiB engine/worker); reset restores initial state |
 | Inspection    | Bounded raw/ELF-segment/observed-memory disassembly and on-demand instruction metadata in desktop/worker/CLI; static recognition remains distinct from execution support         |
 | Editor        | CodeMirror/Lezer lexical assistance, completion, search/history/comments and build-scoped diagnostics with verified Unicode positions                                            |
@@ -30,8 +30,8 @@ implemented scope from planned work; [testing](testing.md) defines acceptance an
    including macros, duplicate locations, Unicode, data and padding. Diagnostic
    points are implemented; they are not instruction provenance.
 2. **Execution coverage:** extend the tested guest/extension matrix beyond static
-   recognition; CPU selection, SIMD observations and precise unsupported behavior
-   need explicit contracts.
+   recognition; CPU profiles and 128-bit SIMD observations are implemented. Broader
+   extension coverage, vector editing and precise unsupported behavior remain.
 3. **Workbench expansion:** multiple source documents, coordinated source/instruction
    focus, accessible draggable separators and large-data views as needed.
 
@@ -71,29 +71,25 @@ Add dependencies and modules when implementing a capability, not as placeholders
 
 ## Verification
 
-Evidence is limited to Apple Silicon macOS development. Windows/Linux builds and
-signed, independently installed distributions remain unverified.
+Recorded through **2026-09-16** on Apple Silicon macOS. These results describe
+development builds; Windows/Linux and signed, independently installed distributions
+remain unverified.
 
-Recorded verification through **2026-09-16**:
+| Area                   | Evidence                                                                                                                                                                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace              | `cargo xtask check`: strict Rust/C++/frontend checks, formatting and 48 generated TypeScript declarations; Rustdoc passed with warnings denied                                                                                                                 |
+| Tests                  | `cargo xtask test`: 125 Rust unit/integration tests, 2 doctests and 82 frontend tests, including 48 Chromium cases                                                                                                                                             |
+| CPU and SIMD           | All four profiles: CPU identity, every XMM/V register, packed arithmetic, rounding, initial controls, guest stores and reset; exact wire values, stream replacement/clearing and lane properties                                                               |
+| Native SIMD views      | Fresh macOS bundle: Haswell/Cortex-A53 packed additions and stored 42s, both guests' f32 special values, AArch64 f64 lanes, lane numbering, retained format and reset                                                                                          |
+| Build and bridge       | LLVM/LLD 23.1.1 and CXX 1.0.202: parallel builds, standalone bridge header, both guests, arbitrary ELF data, paths with spaces and target-specific overrides; normal Tauri bundle hooks                                                                        |
+| Loading and execution  | Native desktop source/raw loading, explicit setup, breakpoints, step/run/pause/stop and failed-load preservation; both sorting examples return 42 with sorted memory and unchanged input; native tests also cover two link addresses                           |
+| Live editing           | Both guests: native alias/MOV equivalence, flags, PC/REP/breakpoint restart and stale-write rejection. Static desktop: GPR writes, code patches and reset on both guests; x86 AH/EAX, ZF/SETZ and PC redirection                                               |
+| Files and inspection   | Exact source/raw-byte transfers, Unicode diagnostic navigation and a 126,980-byte ELF segment decoded through its end; invalid memory inputs preserve prior captures, corrected inputs recover                                                                 |
+| Interface and recovery | Responsive layouts at 1280, 880, 800 and 414px, including bilingual browser checks; native keyboard tabs, sticky tab strip, retained input/format and popover placement. Clean native startup after cache/storage reset, both bundled guests and AArch64 reset |
+| Icon assets            | All 10 ICNS representations and 6 ICO layers matched PNG references on 2026-09-14                                                                                                                                                                              |
 
-| Evidence                   | Result                                                                                                                                                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Workspace checks           | `cargo xtask check`; strict Rust/C++/frontend checks, formatting and 46 generated TypeScript declarations verified                                                                                                             |
-| Automated tests            | `cargo xtask test`: 117 Rust unit/integration tests, 2 doctests and 76 frontend tests, including 46 Chromium cases                                                                                                             |
-| Native bridge/build        | LLVM/LLD 23.1.1 and CXX 1.0.202: parallel C++ builds, standalone bridge header, both guests, arbitrary ELF data preservation, paths with spaces and target-specific overrides verified                                         |
-| Rust documentation         | Rustdoc passed with warnings denied                                                                                                                                                                                            |
-| Live-editing acceptance    | Both guests in the fresh macOS static bundle: GPR write, code patch, execution to 42 and reset to original values/bytes; English and Simplified Chinese, keyboard submission and native hex parsing verified                   |
-| Extended integer editing   | Both real guests: MOV/alias equivalence including WSP, flag set/clear, PC/REP/breakpoint restart, reset and stale-write rejection; bilingual forms and reply/capture separation verified                                       |
-| Extended desktop editing   | Fresh macOS bundle: x86 AH preservation, EAX zero-extension, ZF/SETZ, decoded-row PC redirection, breakpoint re-entry and reset passed. AArch64 Chinese loading/full-width writes passed; remaining interactive checks pending |
-| Memory inspection          | Fresh macOS static bundle: invalid/unmapped addresses and empty/oversized lengths preserved captured memory; corrected input cleared errors. Both languages, Enter and Inspect at PC verified                                  |
-| Native setup and execution | Both guests consumed full-width GPR inputs and explicit mappings; reset restored initial values, and invalid replacement preserved the existing machine                                                                        |
-| Raw-code desktop           | Both guests imported through native dialogs, stopped before effects, resumed/stepped to 42 and reset; failed entry preserved the machine; observed-memory PC and breakpoint toggles verified                                   |
-| Desktop bundle             | Normal Tauri build hooks; both guests assembled, loaded, stepped and stored 42; reset, failed assembly and bounded pause/stop flows exercised                                                                                  |
-| Bundled examples           | Both signed-array sorting programs ran in the static desktop bundle; native tests verified sorted output, sum 42, unchanged input and reset at two link addresses                                                              |
-| Files and diagnostics      | Unicode diagnostic navigation, exact source/raw-byte transfers and a 126,980-byte ELF segment exported and decoded through its end                                                                                             |
-| Interface                  | Compact command header, 1440×900 default and 40% observation panel; responsive layouts at 1280, 880, 800 and 414px; both languages and native breakpoint spacing verified                                                      |
-| Icon conversion            | All 10 ICNS representations and 6 ICO layers matched PNG references on 2026-09-14                                                                                                                                              |
-
-These are recorded results, not a substitute for checks after later changes.
-[Testing](testing.md) defines coverage, acceptance procedures and the known Vitest/Vite
-mock-hook warning. No desktop WebDriver harness is installed.
+Interactive AArch64 subregister, flag and PC-editing acceptance is still incomplete;
+full-width writes, bundled-program flags and reset have passed in the native app.
+No desktop WebDriver harness is installed. [Testing](testing.md) defines acceptance
+procedures and records the known Vitest/Vite mock-hook warning. Rerun the relevant
+checks when behavior changes; this record does not replace them.

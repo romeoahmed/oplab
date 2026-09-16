@@ -1,8 +1,10 @@
+import type { CpuModel } from '$lib/protocol/generated/CpuModel';
 import type { InitialState } from '$lib/protocol/generated/InitialState';
 import type { Target } from '$lib/protocol/generated/Target';
 import { formatCounter, normalizeAddress } from '$lib/protocol/scalars';
 
 export type SetupInput = {
+  cpu: CpuModel | null;
   registers: { name: string; value: string }[];
   mappings: { address: string; length: string; flags: number }[];
 };
@@ -58,6 +60,7 @@ export function initialState(input: SetupInput): InitialState {
   if (input.registers.length > 32 || input.mappings.length > 63)
     throw new RangeError('Too many initial conditions');
   return {
+    cpu: input.cpu,
     registers: input.registers.map(({ name, value }) => ({
       name,
       value: formatCounter(unsigned(value)),
@@ -69,4 +72,17 @@ export function initialState(input: SetupInput): InitialState {
       return { address: normalizeAddress(address), length: Number(size), flags };
     }),
   };
+}
+
+/** Product names for the supported emulator profiles; model names are not translated. */
+export const cpuNames: Record<CpuModel, string> = {
+  haswell: 'Haswell',
+  nehalem: 'Nehalem',
+  cortex_a53: 'Cortex-A53',
+  cortex_a72: 'Cortex-A72',
+};
+
+/** Default first, followed by the alternate verified profile for this guest. */
+export function cpuModels(target: Target): readonly CpuModel[] {
+  return target === 'x86_64' ? ['haswell', 'nehalem'] : ['cortex_a72', 'cortex_a53'];
 }

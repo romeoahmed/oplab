@@ -138,6 +138,7 @@ impl BoundSession {
         };
         let fault = self.machine.fault().map(Into::into);
         let observation = Observation {
+            cpu: self.machine.cpu(),
             key: self.key(),
             sequence: Counter::new(sequence),
             status: status(self.machine.state()),
@@ -316,6 +317,7 @@ fn setup(target: Target, initial: &InitialState) -> Result<MachineSetup, Machine
         })
         .collect::<Result<_, ValidationError>>()?;
     Ok(MachineSetup {
+        cpu: initial.cpu,
         registers: Some(registers),
         mappings,
     })

@@ -5,13 +5,16 @@ use oplab_core::{
     memory::{MAX_MAPPED_BYTES, Permissions},
     protocol::{Diagnostic, DiagnosticCode},
     registers::InitialRegisters,
-    target::Target,
+    target::{CpuModel, Target},
 };
 use oplab_engine::load::{InitialMapping, MachineSetup};
 use std::str::FromStr;
 
 #[derive(clap::Args)]
 pub(crate) struct Setup {
+    /// Emulator profile. Defaults to haswell (`x86_64`) or cortex-a72 (`AArch64`).
+    #[arg(long, value_enum)]
+    cpu: Option<Cpu>,
     /// Initial canonical GPR or stack pointer; repeat for distinct registers.
     ///
     /// Lowercase names, decimal or 0x-prefixed unsigned 64-bit values. Unspecified
@@ -24,6 +27,25 @@ pub(crate) struct Setup {
     /// or - for a guard region. Cannot overlap image pages. Total memory <= 64 MiB.
     #[arg(long = "map", value_name = "ADDRESS:SIZE:PERMISSIONS", value_parser = mapping)]
     mappings: Vec<InitialMapping>,
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum Cpu {
+    Nehalem,
+    Haswell,
+    CortexA53,
+    CortexA72,
+}
+
+impl From<Cpu> for CpuModel {
+    fn from(cpu: Cpu) -> Self {
+        match cpu {
+            Cpu::Nehalem => Self::Nehalem,
+            Cpu::Haswell => Self::Haswell,
+            Cpu::CortexA53 => Self::CortexA53,
+            Cpu::CortexA72 => Self::CortexA72,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -98,6 +120,7 @@ impl Setup {
         )
         .map_err(|_| Diagnostic::new(DiagnosticCode::InvalidInput))?;
         Ok(MachineSetup {
+            cpu: self.cpu.map(Into::into),
             registers: Some(registers),
             mappings: self.mappings,
         })

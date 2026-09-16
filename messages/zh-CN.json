@@ -177,7 +177,7 @@
   "flow_transaction": "事务控制",
   "flow_exception": "异常",
   "reset_layout": "恢复默认布局",
-  "initial_setup_hint": "寄存器和内存配置按架构分别保留，关闭窗口后清除。",
+  "initial_setup_hint": "CPU、寄存器和内存配置按架构分别保留，关闭窗口后清除。",
   "initial_registers": "寄存器初值",
   "register_name": "寄存器",
   "initial_register_value": "{name} 初值",
@@ -224,5 +224,18 @@
   "set_pc_at": "将下一条指令的地址设为 {address}",
   "register_flags": "标志位",
   "register_width": "{bits} 位",
-  "register_value": "数值"
+  "register_value": "数值",
+  "machine_views": "机器视图",
+  "breakpoint_view": "断点",
+  "simd_registers": "SIMD 寄存器",
+  "vector_format": "显示格式",
+  "vector_hex": "十六进制",
+  "vector_lanes_hint": "从最低位开始为各元素编号；十六进制值保留完整的 128 位。",
+  "vector_x86_scope": "仅显示 XMM 寄存器，不包含 AVX 高位和 x87 状态。",
+  "vector_arm_scope": "V 寄存器与标量浮点寄存器共享存储，不显示 SVE 状态。",
+  "cpu_model": "CPU 型号",
+  "cpu_default": "默认",
+  "cpu_hint": "加载时生效。x86_64 默认 Haswell，AArch64 默认 Cortex-A72；模拟器尚未支持这些型号的全部特性。",
+  "integer_view": "整数",
+  "vector_x86_status": "MXCSR 按模拟器返回值显示，累计异常标志可能缺失。"
 }

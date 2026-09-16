@@ -43,9 +43,10 @@ implementation in the expected result or merely round-trip two production helper
 | Instruction analysis       | Fixed effects, generated MOV/signed-branch operands, full-width destinations and independent extension encodings                                                                          |
 | Batch CLI                  | Full-width arithmetic and memory from source/ELF/raw inputs; exit outcomes, sectionless ELF and completion symbols                                                                        |
 | Live editing               | GPR isolation, alias edits compared with real MOV execution, flag preservation and guest conditions, PC/REP/breakpoint restart semantics, byte-patch/reset and stale-generation rejection |
-| Guest execution            | Generated add/subtract/XOR programs compared with wrapping `u32` arithmetic on both guests                                                                                                |
+| Guest execution            | Scalar arithmetic; four CPU profiles with packed arithmetic, every XMM/V register, initial controls, guest stores, rounding, FP status, identity and reset                                |
 | Build scheduling           | Latest valid request per document, cancellation and exactly-once delivery without assuming unrelated reply order                                                                          |
-| Observations               | Both register banks, full-width breakpoint histories, independent complete samples, retained baselines and stale identities                                                               |
+| Observations               | Integer/SIMD bank replacement and clearing, CPU/breakpoint inheritance, independent complete samples, retained baselines and stale identities                                             |
+| Vector presentation        | Integer lane reconstruction and bounds; independently encoded IEEE-754 values, signed zero, NaN, infinities and subnormals                                                                |
 | Editor language            | Target-specific literal/comment examples and incremental parsing compared with a fresh parse after generated edits                                                                        |
 | Source locations           | Unicode byte boundaries against CodeMirror text/line positions, explicit CRLF/BOM cases and invalid-boundary rejection                                                                    |
 | File inspection            | Exact ELF extents, arbitrary 64-bit byte windows, standard filesystem I/O and documented size/encoding boundaries                                                                         |
@@ -89,8 +90,9 @@ architectural facts, including signed displacements, address wraparound and AArc
 bit-test branches with multiple immediate operands. Real worker tests verify that
 analysis of either architecture, including rejected input, preserves the loaded
 guest's registers, memory, status and execution counters. The
-[capability samples](engine.md#verified-capability-samples) establish assembly and
-recognition evidence, not extension execution support. Allow improved backend
+[capability matrix](engine.md#verified-capability-samples) records assembly,
+recognition and execution separately; a passing sample does not establish complete
+extension support. Allow improved backend
 metadata without freezing known omissions into the expected behavior.
 
 Use white-box tests only where deterministic control adds evidence: holding a native
@@ -139,8 +141,13 @@ Browser coverage follows observable workflows:
   analysis/retry, late success/failure, input changes and reversions, locale
   retention and narrow-panel return without another decode. Re-decoding clears
   selection. Workbench tests also exercise the complete request/reply adapter.
-- **Initial setup:** target-specific inputs and locale retention, exact full-width
-  scalar conversion, add/remove controls, and rejection of invalid values before load
+- **Machine views:** pointer/keyboard tab switching retains SIMD format and unfinished
+  breakpoint input. Tabs remain reachable while scrolling long banks; the count
+  reflects authoritative breakpoints. SIMD covers exact 64/128-bit values,
+  signed zero/NaN/Infinity, new observations and unavailable state. Opening a view
+  never changes the machine.
+- **Initial setup:** target-specific CPU/register inputs and locale retention, exact
+  full-width scalar conversion, add/remove controls, and rejection of invalid values before load
   followed by successful correction.
 - **Execution:** assembly/import does not load, loading does not run, exact raw
   placement and bytes reach the request for both targets. Rejected controls preserve
@@ -216,7 +223,9 @@ For UI changes, verify a fresh static desktop bundle as well as the browser:
    Exercise subregister preservation/zero-extension, condition flags, PC redirection
    and a decoded row's Set next instruction action. Verify rejected input, both
    languages and native WebView hex parsing.
-7. Verify fonts, dynamic editor loading, both locales and focus behavior under the
+7. Select a CPU profile for each guest, execute SIMD arithmetic, compare lanes with
+   stored memory and reset. Verify profile retention and native floating-point views.
+8. Verify fonts, dynamic editor loading, both locales and focus behavior under the
    actual WebView origin/CSP. Test failure/restart when the supervisor changes.
 
 The [engine contract](engine.md) defines the supported runtime and metadata limits.

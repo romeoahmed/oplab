@@ -75,6 +75,7 @@
       >
       <Popover.Portal>
         <Popover.Content
+          collisionPadding={12}
           class="settings-popover"
           sideOffset={8}
           align="end"

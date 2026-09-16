@@ -50,11 +50,13 @@ automatically retrying a mutation. Replies may arrive out of order, so correlate
 | -------------------------------------------- | ---------------------------------------------------- |
 | Address                                      | `0x` plus sixteen lowercase hexadecimal digits       |
 | 64-bit counter or GPR value                  | Decimal string, no leading zeros except `0` itself   |
+| 128-bit SIMD value                           | `0x` plus 32 lowercase hexadecimal digits            |
 | Unavailable diagnostic address/source offset | Explicit `null`                                      |
 | Source offset                                | Original UTF-8 byte position, not a source range/map |
 
-Exact scalar values are bounded to unsigned 64-bit ranges; JSON numbers are rejected
-where exact strings are required. Human input is not constrained to wire spelling.
+Counters and addresses are bounded to unsigned 64-bit ranges; SIMD values to 128 bits.
+JSON numbers are rejected where exact strings are required. Human input is not
+constrained to wire spelling.
 Build identity includes document, revision, target, base and assembler name/version.
 Compare the entire identity before displaying a build.
 
@@ -80,10 +82,12 @@ No guest memory is mapped until the transfer and loader validation succeed.
 a non-running state. Failure preserves the old machine.
 Success uses the load request ID as session ID and starts generation zero.
 
-`initial` contains `registers: [{name, value}]` and
+`initial` contains `cpu`, `registers: [{name, value}]` and
 `mappings: [{address, length, flags}]`. Register values are canonical decimal strings;
 names must be distinct lowercase canonical GPRs for the selected target. Omitted
-GPRs are zero. Both arrays are required, including when empty. Mapping addresses
+GPRs are zero. Both arrays are required, including when empty. `cpu` accepts `haswell`,
+`nehalem`, `cortex_a72` or `cortex_a53`; null selects Haswell for x86_64 or Cortex-A72
+for AArch64. A profile from the other architecture is rejected. Mapping addresses
 use canonical hexadecimal; lengths are byte counts. Flags use ELF `PF_R=4`,
 `PF_W=2`, `PF_X=1`; zero describes a guard region. Extra regions are zero-filled.
 The [loader](engine.md#raw-code-and-initial-conditions) checks page geometry,
@@ -114,8 +118,8 @@ Crashed observation with no registers; framing or process loss retains the usual
 unknown-outcome semantics. Never replay a mutation to recover a missing observation.
 
 Other successful controls return `observed`: a complete snapshot containing key,
-increasing sequence, status, instruction/dispatch counters, canonical registers,
-fault metadata, sorted distinct `breakpoints` (at most 256) and optional memory
+increasing sequence, resolved `cpu`, status, instruction/dispatch counters, canonical
+registers, fault metadata, sorted distinct `breakpoints` (at most 256) and optional memory
 metadata. Breakpoints survive reset; a new load starts with an empty set.
 Sequence begins at one, continues across reset and never wraps. Run/step acceptance
 can report Running; poll or subscribe to learn completion. Newer observations can
@@ -125,6 +129,10 @@ a live view.
 Memory windows contain 1–65,536 bytes within one mapping and transfer after the
 snapshot. Registers, memory and counters are captured coherently at one owner boundary.
 64-bit register storage uses decimal strings; PC uses the canonical hex address.
+The same atomic register bank includes `xmm` (16 vectors) and `mxcsr` on x86,
+or `v` (32 vectors), `fpcr` and `fpsr` on AArch64. Each vector uses fixed-width
+128-bit hex; control/status values are unsigned 32-bit JSON numbers. The backend
+MXCSR read can omit accrued exception flags; see the [SIMD contract](engine.md#cpu-profiles-and-simd).
 Raw flags carry no definedness claim. Crashed snapshots have null registers and
 cannot supply fresh memory. Publish only after the entire transfer validates.
 
@@ -187,9 +195,9 @@ Kind `2` carries `StreamEvent { subscription, update }`, without a request ID:
 
 A delta retains or replaces the complete register bank, including explicit null
 after native loss. Zero memory length retains the baseline bytes; nonzero length
-replaces the entire window. Breakpoints come from the baseline. Changes to the
-window metadata or breakpoint set require `full`. There are no individual-register,
-breakpoint or byte-range patches.
+replaces the entire window. CPU and breakpoints come from the baseline. Changes to the
+window metadata, CPU profile or breakpoint set require `full`. There are no
+individual-register, breakpoint or byte-range patches.
 
 Only complete samples coalesce, in one dedicated output slot. The writer computes
 a delta against the last **delivered** sample and advances that baseline only after
@@ -337,6 +345,7 @@ cargo run --locked -p oplab-engine --bin oplab-cli -- run elf aarch64 --until 0x
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `--until ADDRESS` / `--until-symbol NAME` | Exactly one is required. Stop before fetching the resolved address; it must be aligned and distinct from the entry.                       |
 | `--entry ADDRESS`                         | Raw mode only: explicit initial fetch address, defaulting to BASE.                                                                        |
+| `--cpu MODEL`                             | `haswell`, `nehalem`, `cortex-a72` or `cortex-a53`; omitted selects the target default. Wrong-target models are rejected.                 |
 | `--register NAME=VALUE`                   | Repeat for distinct canonical GPRs, including RSP/SP. Values accept decimal or `0x` hex; unspecified GPRs are zero.                       |
 | `--map ADDRESS:SIZE:PERMISSIONS`          | Repeat for additional zero-filled page-aligned regions. Size accepts decimal or `0x` hex. Permissions are `r`, `w`, `x` in order, or `-`. |
 | `--budget N`                              | Required instruction-start limit, 1–100,000,000. REP iterations count as one instruction.                                                 |
@@ -352,9 +361,10 @@ address needs no symbols. Neither form establishes source provenance or an instr
 boundary; completion is an explicit control policy.
 
 Each invocation owns one session and captures final state after execution. PC comes
-from ELF or the explicit raw entry; flags retain backend defaults. Added mappings
-cannot overlap image pages or widen their permissions. No stack, return address,
-host ABI or system services are supplied implicitly.
+from ELF or the explicit raw entry; integer flags retain backend defaults.
+The [SIMD environment](engine.md#cpu-profiles-and-simd) is initialized explicitly.
+Added mappings cannot overlap image pages or widen their permissions. No stack,
+return address, host ABI or system services are supplied implicitly.
 
 For example, a source document can use `push rdi; pop rax` with `--register rdi=42`,
 `--register rsp=0x9000` and `--map 0x8000:4096:rw`, ending at its declared completion.
@@ -369,7 +379,7 @@ supervisor; this CLI does not inherit the desktop supervisor's deadlines or RSS 
 
 `run` writes one newline-terminated JSON object to stdout:
 
-- `{"type":"executed","data":{...}}` contains `target`, resolved `completion`,
+- `{"type":"executed","data":{...}}` contains `target`, resolved `cpu` and `completion`,
   `outcome`, decimal-string `instructions`/`dispatches`, canonical `registers`,
   nullable `fault`, and nullable `memory: {address, bytes}`. Memory uses a bounded
   JSON byte array; register/fault shapes and exact scalars match the worker contract.

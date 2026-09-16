@@ -65,8 +65,8 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   let completion = $state('done');
   let budget = $state('1000000');
   const setups = $state<Record<Target, SetupInput>>({
-    x86_64: { registers: [], mappings: [] },
-    aarch64: { registers: [], mappings: [] },
+    x86_64: { cpu: null, registers: [], mappings: [] },
+    aarch64: { cpu: null, registers: [], mappings: [] },
   });
   let memoryAddress = $state('0x2000');
   let memoryLength = $state(64);

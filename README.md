@@ -25,7 +25,7 @@ remain [release gates](docs/roadmap.md#release-gates).
    **Reset** restores the program and initial state, keeping address breakpoints.
 
 Use `Ctrl+Enter` / `⌘+Enter` to assemble. Configure the link address, completion
-address or symbol, instruction limit, initial registers and additional memory.
+address or symbol, instruction limit, CPU model, initial registers and additional memory.
 Assembly, loading and execution are explicit actions; editing source leaves the
 loaded machine intact.
 
@@ -34,7 +34,9 @@ loaded machine intact.
 - **Edit and build:** CodeMirror highlighting, completion, search, history and
   source diagnostics; unchanged GNU-style source assembled and linked by LLVM MC/LLD.
 - **Execute and inspect:** ELF or raw-code sessions; step, run, pause, stop, reset
-  and address breakpoints; integer registers, flags, memory and bounded disassembly.
+  and address breakpoints; integer/SIMD registers, flags, memory and bounded disassembly.
+  Choose a CPU profile and inspect read-only 128-bit SIMD registers as exact bits
+  or integer/floating-point lanes.
 - **Modify machine state:** edit integer registers and their aliases, set the next
   instruction address, change application flags and patch up to 4 KiB of data or
   code while ready or paused; reset restores the loaded state.
@@ -51,6 +53,8 @@ Select **Captured memory** in **Instructions** to disassemble observed bytes and
 toggle address breakpoints or set the next instruction without running it.
 Source-to-instruction mapping and multiple documents are [planned](docs/roadmap.md#next-product-work).
 Instruction recognition does not guarantee emulator support for every extension.
+SIMD inspection excludes x87, AVX upper halves, AVX-512 and SVE; see the
+[execution limits](docs/engine.md#cpu-profiles-and-simd).
 
 ## Build from source
 

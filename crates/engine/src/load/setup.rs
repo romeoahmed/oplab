@@ -7,7 +7,7 @@ use oplab_core::{
     memory::{MAX_MAPPED_BYTES, MAX_REGIONS, MemoryLayout, MemoryRegion, Permissions},
     protocol::MAX_OBJECT_BYTES,
     registers::InitialRegisters,
-    target::Target,
+    target::{CpuModel, Target},
 };
 
 /// Guest bytes retain their format; raw code needs explicit addresses.
@@ -40,6 +40,8 @@ pub struct InitialMapping {
 /// Explicit initial conditions, retained by the machine for reset.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MachineSetup {
+    /// `None` selects the target's stable project default.
+    pub cpu: Option<CpuModel>,
     /// `None` retains native defaults; an explicit bank must match the guest.
     pub registers: Option<InitialRegisters>,
     /// Additional mappings; overlap with each other or image pages is rejected.
@@ -59,6 +61,10 @@ impl LoadPlan {
         page_size: u64,
         setup: MachineSetup,
     ) -> Result<Self, LoadError> {
+        let cpu = setup.cpu.unwrap_or_else(|| CpuModel::default_for(target));
+        if cpu.target() != target {
+            return Err(ValidationError::Target.into());
+        }
         if setup
             .registers
             .as_ref()
@@ -85,6 +91,7 @@ impl LoadPlan {
             )?);
         }
         plan.memory = MemoryLayout::new(regions)?;
+        plan.cpu = cpu;
         plan.registers = setup.registers;
         Ok(plan)
     }
@@ -125,6 +132,7 @@ impl LoadPlan {
         )?;
         Ok(Self {
             target,
+            cpu: CpuModel::default_for(target),
             entry,
             page_size,
             memory: MemoryLayout::new(vec![region])?,

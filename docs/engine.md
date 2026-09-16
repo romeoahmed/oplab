@@ -183,17 +183,17 @@ not blanket extension-support claims. Exact dependency releases remain in lockfi
 | Guest / sample                                           | Assembly and recognition             | Static metadata                                                              | Execution evidence                                       |
 | -------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------- |
 | x86_64 integer arithmetic, branches and stack operations | Verified                             | Registers, memory, flags and control flow                                    | Existing integer/session tests; stack policy is explicit |
-| x86_64 SSE2 `PXOR`                                       | Verified                             | SSE2 tag and register effects                                                | Not verified by this matrix                              |
+| x86_64 SSE2 `PXOR`                                       | Verified                             | SSE2 tag and register effects                                                | SIMD initialization/FP-status tests                      |
 | x86_64 AVX `VADDPS`                                      | Verified                             | AVX tag and register effects                                                 | Not verified by this matrix                              |
 | AArch64 integer arithmetic, branches and writeback       | Verified                             | Registers, flags, destinations and writeback; memory direction/width unknown | Existing integer/session tests                           |
-| AArch64 Advanced SIMD `ADD`                              | Verified                             | NEON group                                                                   | Not verified by this matrix                              |
+| AArch64 Advanced SIMD `ADD`                              | Verified                             | NEON group                                                                   | Packed lane arithmetic on Cortex-A53/A72                 |
 | AArch64 crypto `AESE`                                    | Verified with `.arch armv8-a+crypto` | Crypto group                                                                 | Not verified by this matrix                              |
 | AArch64 SVE `PTRUE`                                      | Verified with `.arch armv8-a+sve`    | No SVE group returned by the current backend                                 | Not verified by this matrix                              |
 
 CPUID identifiers describe x86 decoder requirements. Capstone groups are a different,
 incomplete taxonomy; no groups does not mean no extension is required. Neither
-selects an emulator CPU or guarantees execution. Broader ISA coverage and an
-execution capability matrix remain planned.
+selects an emulator CPU or guarantees execution. CPU profiles affect execution only;
+they do not change LLVM assembly or decoder recognition. Broader ISA coverage remains planned.
 
 ## Loading
 
@@ -255,8 +255,8 @@ Unmapped reads fail; they never synthesize zero bytes.
 `Machine::load` accepts either an ELF image or an explicit `Image::Raw` byte extent.
 `LoadPlan::new` validates the complete setup against the backend's page size before
 mapping guest memory; `Session::new` binds the resulting machine to execution policy.
-ELF convenience constructors without an explicit register bank retain backend
-register defaults. Worker/CLI loads supply a bank and zero unspecified GPRs.
+ELF convenience constructors without an explicit GPR bank retain backend GPR
+defaults. Worker/CLI loads supply a bank and zero unspecified GPRs.
 
 Raw input is 1 byte–1 MiB, mapped RX at its supplied base without relocation or an
 ELF wrapper. The base need not be page-aligned. The aligned entry must fit the
@@ -266,14 +266,14 @@ fetch geometry, not decoding or instruction boundaries. Completion remains expli
 Desktop, worker and CLI expose raw execution through this same loader. Importing
 bytes alone never starts or replaces a session.
 
-`MachineSetup` optionally supplies an architecture-shaped `InitialRegisters` bank
-and additional `InitialMapping` regions. Canonical names are lowercase: the 16 x86
-GPRs (including `rsp`), or `x0`–`x30` and separate `sp`. Unspecified GPRs in an
-explicit bank are zero. Aliases, duplicate names, PC, flags and wrong-target banks
+`MachineSetup` optionally selects a CPU profile and supplies an architecture-shaped
+`InitialRegisters` bank and additional `InitialMapping` regions. Canonical names are
+lowercase: the 16 x86 GPRs (including `rsp`), or `x0`–`x30` and separate `sp`.
+Unspecified GPRs in an explicit bank are zero. Aliases, duplicate names, PC, flags and wrong-target banks
 are rejected.
 GPR values are arbitrary unsigned 64-bit bit patterns; a pointer value is not proof
 of a mapping or valid alignment for a later guest access. PC comes from the image;
-flags and other processor state retain backend defaults.
+integer flags retain backend defaults. The SIMD environment below is explicit.
 
 Additional regions must be page-aligned, disjoint from each other and all image
 pages, and fit the combined 64-region/64-MiB budget. Permissions remain exact; zero
@@ -330,6 +330,40 @@ fault is deferred to the next slice; admitted-instruction data faults remain imm
 A step can therefore pause at an unmapped destination and fault on the next step
 without starting another instruction.
 
+### CPU profiles and SIMD
+
+The loader explicitly selects Haswell (default) or Nehalem for x86_64, and
+Cortex-A72 (default) or Cortex-A53 for AArch64. A wrong-target profile is rejected
+before replacing a session. Reset preserves the resolved profile. These are
+Unicorn models, not cycle-accurate processors or promises of complete ISA support.
+
+The application floating-point environment is initialized on load and reset:
+
+- x86 enables CR4.OSFXSR and CR4.OSXMMEXCPT, preserving other CR4 bits, and sets
+  MXCSR to `0x1f80`: nearest-even rounding, masked exceptions, no flush-to-zero or
+  denormals-are-zero, cleared status. In Unicorn 2.1.5, Nehalem's default CR4 does
+  not enable SSE, so relying on native reset defaults is insufficient.
+- AArch64 sets CPACR_EL1.FPEN to `0b11` and initializes FPCR/FPSR to zero.
+  This enables FP/Advanced SIMD with nearest-even rounding and cleared status.
+- Vector storage starts at zero. Guest instructions may alter these controls;
+  observations report the resulting raw bits. No host floating-point environment
+  is copied into the guest.
+
+The adapter follows [Unicorn's register/control API](https://docs.rs/unicorn-engine/latest/unicorn_engine/struct.Unicorn.html)
+and its resolved native implementation. Architectural controls follow the
+[Intel SDM](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html)
+and Arm's AArch64 system-register definitions.
+
+The [verification record](roadmap.md#verification) covers profile identity, register
+banks, arithmetic, rounding, guest stores and reset. AArch64 reports inexact and
+divide-by-zero status in the tested cases.
+Unicorn 2.1.5 does not merge accrued SSE exception flags into MXCSR: both register
+reads and guest `stmxcsr` omit them. Rounding controls work, but the displayed
+status is not reliable floating-point exception history.
+Oplab reports the public register API unchanged; it does not inspect private
+backend layouts or execute hidden guest instructions to manufacture flags. These
+samples do not establish complete SSE/NEON, AVX or SVE support.
+
 ### Breakpoints, observations and reset
 
 Address breakpoints stop before effects. Resume bypasses the stop until admission,
@@ -342,11 +376,14 @@ observations carry the authoritative sorted set; repeated adds/removals are
 idempotent, and rejected changes leave it intact. Source breakpoints and watchpoints
 remain planned.
 
-Observations capture canonical x86_64 GPRs/RIP/RFLAGS or AArch64 X0–X30/SP/PC/NZCV,
-status, counters, fault data and an optional memory window at one owner boundary.
+Observations capture the resolved CPU, canonical x86_64 GPRs/RIP/RFLAGS and
+XMM0–XMM15/MXCSR, or AArch64 X0–X30/SP/PC/NZCV and V0–V31/FPCR/FPSR, together
+with status, counters, faults and optional memory at one owner boundary.
 Array order is defined in `oplab-core::registers`. Subregister effects appear in
 canonical storage, including effects of live alias writes. Raw flags make no
-architectural-definedness claim. Integer observations are not full CPU snapshots.
+architectural-definedness claim. SIMD values preserve all 128 raw bits; lane zero
+occupies the least-significant bits. x87, AVX upper halves, AVX-512, SVE and other
+system state are not captured, so observations are not full CPU snapshots.
 
 Faults distinguish unmapped, prohibited and unaligned access, invalid instructions
 and processor exceptions, retaining access address/width where available. PC is an

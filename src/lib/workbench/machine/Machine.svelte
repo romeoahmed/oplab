@@ -2,11 +2,14 @@
   import * as m from '$lib/paraglide/messages.js';
   import type { Locale } from '$lib/paraglide/runtime';
   import type { Observation } from '$lib/protocol/generated/Observation';
-  import { Cpu, Keyboard } from '@lucide/svelte';
+  import { Cpu, Keyboard, Binary, Rows3, Circle } from '@lucide/svelte';
+  import { Tabs } from 'bits-ui';
 
   import { stateLabel } from '../presentation';
   import Breakpoints from './Breakpoints.svelte';
   import Registers from './Registers.svelte';
+  import { cpuNames } from './setup';
+  import Vectors from './Vectors.svelte';
   const {
     observation,
     loadedCurrent,
@@ -74,7 +77,7 @@
             ? 'x86_64'
             : observation.registers?.type === 'aarch64'
               ? 'AArch64'
-              : '—'}</span
+              : '—'} · {cpuNames[observation.cpu]}</span
         ><span
           >{loadedKind === 'raw'
             ? m.loaded_raw({}, options)
@@ -96,13 +99,35 @@
           <dd>{observation.instructions}</dd>
         </div>
       </dl>
-      <Breakpoints
-        addresses={observation.breakpoints}
-        disabled={!editable}
-        {locale}
-        onchange={onbreakpoint}
-      />
-      <Registers bank={observation.registers} {locale} {editable} onwrite={onregister} />
+      <Tabs.Root value="integer" class="machine-banks">
+        <Tabs.List class="panel-tabs" aria-label={m.machine_views({}, options)}>
+          <Tabs.Trigger value="integer"
+            ><Binary size={14} aria-hidden="true" />{m.integer_view({}, options)}</Tabs.Trigger
+          >
+          <Tabs.Trigger value="simd"><Rows3 size={14} aria-hidden="true" />SIMD</Tabs.Trigger>
+          <Tabs.Trigger value="breakpoints">
+            <Circle size={12} aria-hidden="true" />{m.breakpoint_view({}, options)}
+            <span class="tab-count">{observation.breakpoints.length}</span>
+          </Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content value="integer"
+          ><Registers
+            bank={observation.registers}
+            {locale}
+            {editable}
+            onwrite={onregister}
+          /></Tabs.Content
+        >
+        <Tabs.Content value="simd"><Vectors bank={observation.registers} {locale} /></Tabs.Content>
+        <Tabs.Content value="breakpoints">
+          <Breakpoints
+            addresses={observation.breakpoints}
+            disabled={!editable}
+            {locale}
+            onchange={onbreakpoint}
+          />
+        </Tabs.Content>
+      </Tabs.Root>
     {/if}
   </div>
   <div class="inspector-footer">

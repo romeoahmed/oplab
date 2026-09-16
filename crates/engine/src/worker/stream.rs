@@ -141,6 +141,7 @@ impl Encoder {
             .filter(|base| {
                 base.subscription == capture.subscription
                     && base.observation.key == current.key
+                    && base.observation.cpu == current.cpu
                     && base.observation.memory == current.memory
                     && base.observation.breakpoints == current.breakpoints
                     && base.observation.sequence < current.sequence

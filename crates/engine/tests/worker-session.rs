@@ -15,7 +15,7 @@ use oplab_core::{
         },
         scalar::{Counter, HexAddress},
     },
-    target::Target,
+    target::{CpuModel, Target},
 };
 use oplab_engine::assembly;
 
@@ -56,10 +56,14 @@ fn execute(client: &mut Client, session: SessionKey, action: SessionAction) -> T
 }
 
 fn register_write(name: &str, value: u64) -> SessionAction {
-    SessionAction::WriteRegister(RegisterValue {
+    SessionAction::WriteRegister(register_value(name, value))
+}
+
+fn register_value(name: &str, value: u64) -> RegisterValue {
+    RegisterValue {
         name: name.into(),
         value: Counter::new(value),
-    })
+    }
 }
 
 fn load(
@@ -504,15 +508,13 @@ fn configured_loads_restore_initial_state_and_failed_replacements_preserve_the_m
         interactive::worker(|client| {
             client.request(Command::Hello { version: VERSION }, None)?;
             let initial = InitialState {
+                cpu: Some(match target {
+                    Target::X86_64 => CpuModel::Nehalem,
+                    Target::Aarch64 => CpuModel::CortexA53,
+                }),
                 registers: vec![
-                    RegisterValue {
-                        name: first.into(),
-                        value: Counter::new(u64::MAX),
-                    },
-                    RegisterValue {
-                        name: stack.into(),
-                        value: Counter::new(0x80000),
-                    },
+                    register_value(first, u64::MAX),
+                    register_value(stack, 0x80000),
                 ],
                 mappings: vec![Mapping {
                     address: address(0x80000),
@@ -534,6 +536,12 @@ fn configured_loads_restore_initial_state_and_failed_replacements_preserve_the_m
             let before = observed(&loaded)?;
             let key = before.key;
             assert_eq!(integer(before)?, u64::MAX);
+            assert_eq!(Some(before.cpu), initial.cpu);
+            let mut wrong_cpu = initial.clone();
+            wrong_cpu.cpu = Some(match target {
+                Target::X86_64 => CpuModel::CortexA72,
+                Target::Aarch64 => CpuModel::Haswell,
+            });
             let mut invalid = initial.clone();
             invalid.mappings[0].address = address(0x1000);
             let mut duplicates = initial.clone();
@@ -555,7 +563,7 @@ fn configured_loads_restore_initial_state_and_failed_replacements_preserve_the_m
             };
             let stored = execute(client, key, observe_memory.clone())?;
             assert_eq!(stored.payloads, vec![42_u64.to_le_bytes().to_vec()]);
-            for rejected in [invalid, duplicates, flags] {
+            for rejected in [invalid, duplicates, flags, wrong_cpu] {
                 let reply = client.request(command(rejected, Some(key)), Some(image.clone()))?;
                 assert!(
                     matches!(reply.response.result, Reply::Error(error) if error.code == DiagnosticCode::InvalidInput)
@@ -573,6 +581,7 @@ fn configured_loads_restore_initial_state_and_failed_replacements_preserve_the_m
             let reset = execute(client, key, SessionAction::Reset)?;
             let restored = observed(&reset)?;
             assert_eq!(restored.registers, before.registers);
+            assert_eq!(restored.cpu, before.cpu);
             assert_ne!(restored.key.generation, key.generation);
             let memory = execute(client, restored.key, observe_memory)?;
             assert_eq!(memory.payloads, vec![vec![0; 8]]);
@@ -623,6 +632,7 @@ fn verify_raw_session(
                 entry: address(entry),
             },
             initial: InitialState {
+                cpu: None,
                 registers: vec![RegisterValue {
                     name: register.into(),
                     value: Counter::new(40),
@@ -807,4 +817,54 @@ fn live_writes_return_authoritative_state_and_reject_obsolete_generations() -> T
         client.request(Command::Shutdown, None)?;
         Ok(())
     })
+}
+
+#[test]
+fn simd_observations_keep_all_bits_across_worker_framing_and_reset() -> TestResult {
+    use oplab_core::protocol::scalar::VectorBits;
+    for (target, code) in [
+        (Target::X86_64, "movdqu xmm15, [rip + output]"),
+        (Target::Aarch64, "adr x0, output\nldr q31, [x0]"),
+    ] {
+        let value = 0xffee_ddcc_bbaa_9988_7766_5544_3322_1100_u128;
+        let source = format!(
+            ".text\n{code}\ndone: nop\n.data\noutput: .quad 0x7766554433221100, 0xffeeddccbbaa9988\n"
+        );
+        let (image, completion, output) = fixture(target, &source)?;
+        interactive::worker(|client| {
+            client.request(Command::Hello { version: VERSION }, None)?;
+            let loaded = load(client, target, &image, completion, 100, None)?;
+            let before = observed(&loaded)?;
+            execute(client, before.key, SessionAction::Run)?;
+            assert_eq!(
+                observed(&settle(client, before.key)?)?.status,
+                Status::Terminated(Termination::Completed)
+            );
+            let captured = execute(
+                client,
+                before.key,
+                SessionAction::Observe {
+                    memory: Some(MemoryWindow {
+                        address: output,
+                        length: 16,
+                    }),
+                },
+            )?;
+            let registers = observed(&captured)?
+                .registers
+                .as_ref()
+                .ok_or("missing bank")?;
+            let last = match registers {
+                Registers::X86_64 { xmm, .. } => xmm[15],
+                Registers::Aarch64 { v, .. } => v[31],
+            };
+            assert_eq!(last, VectorBits::new(value));
+            assert_eq!(captured.payloads, vec![value.to_le_bytes().to_vec()]);
+            let reset = execute(client, before.key, SessionAction::Reset)?;
+            assert_eq!(observed(&reset)?.registers, before.registers);
+            client.request(Command::Shutdown, None)?;
+            Ok(())
+        })?;
+    }
+    Ok(())
 }

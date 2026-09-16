@@ -2,7 +2,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import type { Locale } from '$lib/paraglide/runtime';
   import type { Target } from '$lib/protocol/generated/Target';
-  import { Binary, Download } from '@lucide/svelte';
+  import { Binary, Import } from '@lucide/svelte';
 
   import type { SetupInput } from './setup';
   import Setup from './Setup.svelte';
@@ -41,7 +41,7 @@
     <h3>{m.raw_code({}, options)}</h3>
     {#if bytes !== undefined}<span>{bytes} B · RX</span>{/if}
     <button disabled={disabled || bytes === undefined}
-      ><Download size={15} aria-hidden="true" />{m.load_raw({}, options)}</button
+      ><Import size={15} aria-hidden="true" />{m.load_raw({}, options)}</button
     >
   </header>
   <p class="muted-note">

@@ -177,7 +177,7 @@
   "flow_transaction": "Transaction control",
   "flow_exception": "Exception",
   "reset_layout": "Reset layout",
-  "initial_setup_hint": "Register and memory settings are separate for each architecture and kept only in this window.",
+  "initial_setup_hint": "Each architecture keeps its own CPU, register and memory settings until this window closes.",
   "initial_registers": "Initial registers",
   "register_name": "Register",
   "initial_register_value": "{name} initial value",
@@ -224,5 +224,18 @@
   "set_pc_at": "Set next instruction to {address}",
   "register_flags": "Flags",
   "register_width": "{bits}-bit",
-  "register_value": "Value"
+  "register_value": "Value",
+  "machine_views": "Machine views",
+  "breakpoint_view": "Breakpoints",
+  "simd_registers": "SIMD registers",
+  "vector_format": "Interpret as",
+  "vector_hex": "Raw hex",
+  "vector_lanes_hint": "Lanes are numbered from the least-significant bits. Raw hex retains all 128 bits.",
+  "vector_x86_scope": "Shows XMM registers; excludes AVX upper halves and x87 state.",
+  "vector_arm_scope": "Scalar floating-point registers share the V register bank. SVE state is not shown.",
+  "cpu_model": "CPU model",
+  "cpu_default": "Default",
+  "cpu_hint": "Applies on load. Defaults: Haswell (x86_64), Cortex-A72 (AArch64). Some model features are not emulated.",
+  "integer_view": "Integer",
+  "vector_x86_status": "MXCSR shows the emulator's reported value. Accrued exception flags may be missing."
 }
