@@ -6,7 +6,7 @@
   import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
   import type { Target } from '$lib/protocol/generated/Target';
   import { normalizeAddress } from '$lib/protocol/scalars';
-  import { ArrowRight, Circle, ListOrdered } from '@lucide/svelte';
+  import { ArrowRight, Circle, CornerDownRight, ListOrdered } from '@lucide/svelte';
   import { onDestroy, type Snippet } from 'svelte';
 
   import { problemLabel } from '../presentation';
@@ -25,15 +25,17 @@
     live = false,
     pc,
     breakpoints = [],
-    canBreakpoint = false,
+    editable = false,
     onbreakpoint,
+    onsetpc,
   }: {
     source?: Snippet;
     live?: boolean;
     pc?: string | undefined;
     breakpoints?: readonly string[];
-    canBreakpoint?: boolean;
+    editable?: boolean;
     onbreakpoint?: (address: string, enabled: boolean) => void;
+    onsetpc?: (address: string) => void;
     bytes: Uint8Array | undefined;
     target: Target;
     base: string;
@@ -167,7 +169,7 @@
             <thead
               ><tr
                 >{#if live}<th scope="col"
-                    ><span class="sr-only">{m.breakpoints({}, options)}</span></th
+                    ><span class="sr-only">{m.execution_controls({}, options)}</span></th
                   >{/if}<th scope="col">{m.address({}, options)}</th><th scope="col"
                   >{m.bytes({}, options)}</th
                 ><th scope="col">{m.instruction({}, options)}</th></tr
@@ -180,12 +182,21 @@
                       ><button
                         class="instruction-breakpoint icon-button"
                         type="button"
-                        disabled={!canBreakpoint}
+                        disabled={!editable}
                         aria-label={m.breakpoint_at({ address: row.address }, options)}
                         aria-pressed={breakpoints.includes(row.address)}
                         onclick={() => {
                           onbreakpoint?.(row.address, !breakpoints.includes(row.address));
                         }}><Circle size={12} aria-hidden="true" /></button
+                      ><button
+                        class="icon-button"
+                        type="button"
+                        disabled={!editable}
+                        aria-label={m.set_pc_at({ address: row.address }, options)}
+                        title={m.set_pc_at({ address: row.address }, options)}
+                        onclick={() => {
+                          onsetpc?.(row.address);
+                        }}><CornerDownRight size={14} aria-hidden="true" /></button
                       ></td
                     >{/if}<td
                     >{#if row.address === pc}<ArrowRight

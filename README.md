@@ -35,8 +35,9 @@ loaded machine intact.
   source diagnostics; unchanged GNU-style source assembled and linked by LLVM MC/LLD.
 - **Execute and inspect:** ELF or raw-code sessions; step, run, pause, stop, reset
   and address breakpoints; integer registers, flags, memory and bounded disassembly.
-- **Modify machine state:** write canonical integer registers and patch up to
-  4 KiB of data or code while ready or paused; reset restores the loaded state.
+- **Modify machine state:** edit integer registers and their aliases, set the next
+  instruction address, change application flags and patch up to 4 KiB of data or
+  code while ready or paused; reset restores the loaded state.
 - **Work with files:** import/export UTF-8 assembly and exact machine bytes;
   export complete ELF objects and images through native dialogs.
 - **Automate:** run source, static ELF or raw code from stdin with explicit
@@ -47,8 +48,8 @@ loaded machine intact.
 Import machine code from **Files**, then use **Raw code** to set its architecture,
 load address, entry and stop address. Loading is explicit and replaces the machine.
 Select **Captured memory** in **Instructions** to disassemble observed bytes and
-toggle address breakpoints. PC and flags are read-only. Source-to-instruction
-mapping, register aliases and multiple documents are [planned](docs/roadmap.md#next-product-work).
+toggle address breakpoints or set the next instruction without running it.
+Source-to-instruction mapping and multiple documents are [planned](docs/roadmap.md#next-product-work).
 Instruction recognition does not guarantee emulator support for every extension.
 
 ## Build from source
@@ -106,6 +107,9 @@ Inspired by [cemu](https://github.com/hugsy/cemu).
 
 Created by [Romeo Ahmed](https://github.com/romeoahmed). Copyright © 2026 Romeo Ahmed.
 
-Licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+Licensed under the [Mozilla Public License 2.0 (MPL-2.0)](LICENSE).
 Unless explicitly stated otherwise, contributions use the same terms. Dependencies
 and bundled fonts retain their own licenses and notices.
+
+Unicorn is GPLv2-licensed. Distributing linked engine binaries also requires GPL
+compliance through MPL §3.3; see [distribution licensing](docs/development.md#distribution-licensing).

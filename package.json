@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "A desktop assembly workbench for x86_64 and AArch64",
-  "license": "MIT OR Apache-2.0",
+  "license": "MPL-2.0",
   "author": {
     "name": "Romeo Ahmed",
     "url": "https://github.com/romeoahmed"

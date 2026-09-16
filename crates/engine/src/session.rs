@@ -6,7 +6,7 @@ use oplab_core::{
     diagnostic::ValidationError,
     execution::{ControlEvent, ExecutionState, Generation, GuestFault, PauseReason, Termination},
     policy::ExecutionPolicy,
-    registers::IntegerRegisters,
+    registers::{IntegerRegisters, RegisterEdit, RegisterStorage},
     target::Target,
 };
 
@@ -268,19 +268,30 @@ impl Session {
         self.machine.breakpoints()
     }
 
-    /// Write a canonical GPR or stack pointer between execution slices.
+    /// Write an integer register, subregister, instruction pointer or application flag.
     ///
-    /// Counters, PC, flags, breakpoints and the retained reset image are unchanged.
-    /// An interrupted REP instruction remains one instruction when resumed.
+    /// Counters, breakpoints and reset inputs survive. GPR/flag writes preserve REP
+    /// continuation. Writing PC, even its current value, starts a new instruction
+    /// and rearms breakpoints; it does not execute or validate instruction bytes.
     ///
     /// # Errors
     ///
-    /// Rejects states other than ready or paused, and noncanonical names, before mutation.
+    /// Rejects states other than ready/paused, unsupported names, excess width and
+    /// misaligned A64 PC before mutation. Fetch permissions are checked on execution.
     /// A native failure invalidates the session; uncertain writes are never replayed.
     pub fn write_register(&mut self, name: &str, value: u64) -> Result<(), MachineError> {
         self.state.require_patchable()?;
-        let result = self.machine.write_register(name, value);
-        self.accept_write(result)
+        let edit = RegisterEdit::new(self.machine.initial().target(), name, value)?;
+        let result = self.machine.write_register(edit);
+        self.accept_write(result)?;
+        if edit.storage() == RegisterStorage::InstructionPointer {
+            self.bypass = None;
+            self.stepping = false;
+            if matches!(self.state, ExecutionState::Paused(_)) {
+                self.state = ExecutionState::Paused(PauseReason::Requested);
+            }
+        }
+        Ok(())
     }
 
     /// Patch 1–65,536 bytes in one mapped region without widening guest permissions.

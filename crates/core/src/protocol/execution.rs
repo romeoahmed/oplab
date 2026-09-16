@@ -38,13 +38,14 @@ pub struct InitialState {
     pub mappings: Vec<Mapping>,
 }
 
-/// One exact general-purpose or stack-pointer value.
+/// One exact integer assignment; accepted names depend on the operation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct RegisterValue {
-    /// Lowercase canonical target register; aliases, PC and flags are rejected.
+    /// Lowercase target name. Initial state accepts canonical GPRs only; live edits
+    /// also accept subregisters, RIP/PC and individual application flag names.
     pub name: String,
-    /// Unsigned 64-bit value, transported without JSON number rounding.
+    /// Exact unsigned value, limited to the selected register's width; flags use 0 or 1.
     pub value: Counter,
 }
 
@@ -105,7 +106,9 @@ pub enum SessionAction {
     Cancel,
     /// Restore initial memory and registers, clear counters and advance the reset generation.
     Reset,
-    /// Write one canonical GPR while ready/paused; reset restores the initial value.
+    /// Write an integer register, alias, RIP/PC or application flag while ready/paused.
+    ///
+    /// Reset restores initial state. PC writes rearm breakpoints and end REP continuation.
     WriteRegister(RegisterValue),
     /// Write 1–65,536 bytes from following binary frames while ready or paused.
     ///

@@ -97,11 +97,14 @@ Stale keys fail before mutation. Reset advances generation; close drops the owne
 even when running, and returns `session_closed`. IDs must also be qualified by the
 worker connection, because they can recur after restart.
 
-`write_register` carries `{name, value}` with the same canonical GPR names and exact
-scalar encoding as initial setup. `write_memory` carries `{address, length}` and
-1–65,536 following binary bytes; the declared length must match exactly. The
-desktop form limits each patch to 4 KiB. Tauri and the worker share payload-length
-validation. Both write operations require Ready/Paused state and follow the
+`write_register` carries `{name, value}`. Names accept canonical GPRs, subregisters,
+RIP/PC and individual application flags; values use exact decimal strings, including
+for RIP/PC. The [register policy](engine.md#live-editing) defines widths, preservation
+and PC restart behavior. Initial setup remains canonical-only.
+`write_memory` carries `{address, length}` and 1–65,536 following binary bytes;
+the declared length must match exactly. The desktop form limits each patch to
+4 KiB. Tauri and the worker share payload-length validation. Both write operations
+require Ready/Paused state and follow the
 [live-editing contract](engine.md#live-editing).
 
 Write acknowledgements contain a full register/control observation without memory,

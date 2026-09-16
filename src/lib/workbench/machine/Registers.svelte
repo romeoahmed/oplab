@@ -5,6 +5,7 @@
   import { Check, Pencil, X } from '@lucide/svelte';
   import { Popover } from 'bits-ui';
 
+  import { registerGroups } from './registers';
   import { registerNames } from './setup';
 
   import './editing.css';
@@ -21,8 +22,25 @@
   } = $props();
   let value = $state('');
   const options = $derived({ locale });
-  const names = $derived(bank === null ? [] : registerNames(bank.type));
-  let name = $derived(names[0] ?? '');
+  const groups = $derived(bank === null ? [] : registerGroups(bank.type));
+  let name = $derived(groups[0]?.names[0] ?? '');
+  const kind = $derived(groups.find((group) => group.names.includes(name))?.kind);
+  const hint = $derived.by(() => {
+    switch (kind) {
+      case 'pc':
+        return m.register_pc_hint({}, options);
+      case 'flags':
+        return m.register_flag_hint({}, options);
+      case '32':
+        return m.register_zero_extend_hint({}, options);
+      case '16':
+      case '8':
+        return m.register_partial_hint({}, options);
+      case '64':
+      case undefined:
+        return '';
+    }
+  });
   const values = $derived(
     bank === null
       ? []
@@ -77,9 +95,19 @@
           >
             <label
               >{m.register_name({}, options)}<select bind:value={name}>
-                {#each names as register (register)}<option value={register}
-                    >{register.toUpperCase()}</option
-                  >{/each}
+                {#each groups as group (group.kind)}
+                  <optgroup
+                    label={group.kind === 'pc'
+                      ? m.program_counter({}, options)
+                      : group.kind === 'flags'
+                        ? m.register_flags({}, options)
+                        : m.register_width({ bits: group.kind }, options)}
+                  >
+                    {#each group.names as register (register)}<option value={register}
+                        >{register.toUpperCase()}</option
+                      >{/each}
+                  </optgroup>
+                {/each}
               </select></label
             >
             <label
@@ -87,10 +115,15 @@
                 required
                 bind:value
                 spellcheck="false"
-                placeholder="0x2a"
+                pattern={kind === 'flags' ? '[01]' : undefined}
+                title={kind === 'flags' ? hint : undefined}
+                placeholder={kind === 'flags' ? '0 / 1' : kind === 'pc' ? '0x1000' : '0x2a'}
               /></label
             >
-            <p class="muted-note">{m.register_edit_hint({}, options)}</p>
+            <p class="muted-note">
+              {#if kind !== 'flags'}{m.register_edit_hint({}, options)}
+              {/if}{hint}
+            </p>
             <button disabled={!editable}
               ><Check size={14} aria-hidden="true" />{m.write_register({}, options)}</button
             >

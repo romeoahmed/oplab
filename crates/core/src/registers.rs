@@ -1,6 +1,9 @@
-//! Architecture-shaped integer initialization and observations, independent of a native backend.
+//! Integer initialization, edits and observations, independent of a native backend.
 
 use crate::{address::Address, diagnostic::ValidationError, target::Target};
+
+mod edit;
+pub use edit::{RegisterEdit, RegisterStorage};
 
 /// Canonical x86 general-purpose names in ISA encoding order.
 pub const X86_GPR_NAMES: [&str; 16] = [

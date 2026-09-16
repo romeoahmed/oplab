@@ -241,6 +241,29 @@ libraries. Inspect native dependencies and implement target-specific bundling,
 loader paths, licensing and signing/JIT policy before distribution. See the
 [release gates](roadmap.md#release-gates).
 
+### Distribution licensing
+
+Oplab's source uses standard MPL-2.0. The root `LICENSE` contains the unchanged
+[official text](https://www.mozilla.org/media/MPL/2.0/index.txt); the README names
+the copyright holder. No Exhibit B opt-out applies: retaining that exhibit in the
+standard text does not apply its notice to the project.
+
+The locked `unicorn-engine` and `unicorn-engine-sys` packages declare `GPL-2.0`,
+and [Unicorn identifies its license as GPLv2](https://www.unicorn-engine.org/).
+MPL §§1.12 and 3.3 permit combination with GPLv2 through secondary licensing;
+they do not relicense Unicorn under MPL or remove GPL obligations. When distributing
+the linked worker or CLI, distribute the combined work under GPLv2 and also make
+its MPL-covered source available under MPL, retaining existing notices. Supply
+the GPL text and complete corresponding source, including required build scripts,
+or another source-provision option permitted by GPLv2 §3. See
+[Mozilla's compatibility FAQ](https://www.mozilla.org/en-US/MPL/2.0/FAQ/#q14-may-i-combine-mpl-licensed-code-and-lgpl-licensed-code-in-the-same-executable-program)
+and [distribution guidance](https://www.mozilla.org/en-US/MPL/2.0/combining-mpl-and-gpl/).
+
+Before distribution, review compatibility across the complete linked dependency
+set, including LLVM/LLD, and package its licenses and notices. The MPL/GPL route
+alone does not clear a release, and a sidecar boundary alone does not establish
+independent works. Distribution remains a [release gate](roadmap.md#release-gates).
+
 ## Configuration and assets
 
 Each tool owns one configuration. `vite.config.ts` contains SvelteKit, Paraglide and

@@ -345,7 +345,7 @@ remain planned.
 Observations capture canonical x86_64 GPRs/RIP/RFLAGS or AArch64 X0–X30/SP/PC/NZCV,
 status, counters, fault data and an optional memory window at one owner boundary.
 Array order is defined in `oplab-core::registers`. Subregister effects appear in
-canonical storage; debugger alias writes are not implemented. Raw flags make no
+canonical storage, including effects of live alias writes. Raw flags make no
 architectural-definedness claim. Integer observations are not full CPU snapshots.
 
 Faults distinguish unmapped, prohibited and unaligned access, invalid instructions
@@ -374,11 +374,36 @@ sessions, including breakpoint/step pauses. Running, terminated and crashed
 sessions reject writes. Inputs are validated before native mutation. These are
 explicit debugger operations, independent of source, artifacts and initial setup.
 
-Register writes accept one lowercase canonical GPR, including RSP/SP, and an exact
-unsigned 64-bit value. Other registers, PC and flags remain unchanged. Aliases,
-PC, flags, SIMD and system-register writes are not implemented. Editing a GPR
-while an x86 REP instruction is paused preserves that instruction's continuation
-and instruction-start accounting.
+Register writes accept lowercase names and exact unsigned values that fit the
+selected width. Oversized values are rejected, never silently truncated.
+
+| Target  | Writable names                                 | Effect                                                                          |
+| ------- | ---------------------------------------------- | ------------------------------------------------------------------------------- |
+| x86_64  | rax–r15, including rsp                         | Replace the full 64-bit value                                                   |
+| x86_64  | eax–edi, r8d–r15d                              | Replace the low 32 bits and clear the upper 32 bits                             |
+| x86_64  | ax–di, r8w–r15w; al–dil, r8b–r15b; ah/ch/dh/bh | Replace only the selected word or byte; high-byte aliases address bits 15:8     |
+| AArch64 | x0–x30, sp; fp/lr                              | Replace the full value; fp/lr address X29/X30                                   |
+| AArch64 | w0–w30, wsp                                    | Zero-extend the 32-bit value into X0–X30 or SP                                  |
+| x86_64  | cf, pf, af, zf, sf, df, of                     | Set one bit to 0 or 1, preserving every other RFLAGS bit                        |
+| AArch64 | n, z, c, v                                     | Set one bit to 0 or 1 in NZCV bits 31:28                                        |
+| Both    | rip / pc                                       | Replace the next fetch address without executing; A64 requires 4-byte alignment |
+
+These are debugger writes, not execution of MOV or privileged status instructions.
+The pure register policy implements architectural operand widths; the native adapter
+merges into canonical storage rather than depending on debugger API alias behavior.
+See [Intel's architecture manuals](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html)
+and [Arm's NZCV definition](https://developer.arm.com/documentation/ddi0601/latest/AArch64-Registers/NZCV--Condition-Flags).
+Whole RFLAGS/NZCV, system registers, EIP/IP and zero-register writes are rejected;
+SIMD is not yet editable. Initial setup remains canonical-only to prevent overlapping
+assignments from depending on order.
+
+GPR and flag edits preserve interrupted REP continuation and instruction accounting.
+Writing PC, **even to its current value**, abandons continuation and rearms address
+breakpoints. A paused session becomes an ordinary requested pause; ready stays ready.
+The next dispatched instruction is counted as a new start. PC writes do not decode
+bytes, require an executable mapping or consume budget: fetch faults and explicit
+completion are observed only when execution resumes. Reset restores the image entry
+and initial flags.
 
 Memory writes accept 1–65,536 bytes in one mapped region, including RX and guard
 pages. They do not change mapping permissions or require guest write access.

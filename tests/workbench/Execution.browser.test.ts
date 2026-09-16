@@ -1,5 +1,5 @@
 import type { WorkerPort } from '$lib/desktop/worker';
-import { breakpoint_at, remove_breakpoint } from '$lib/paraglide/messages.js';
+import { breakpoint_at, remove_breakpoint, set_pc_at } from '$lib/paraglide/messages.js';
 import type { Command } from '$lib/protocol/generated/Command';
 import type { Reply } from '$lib/protocol/generated/Reply';
 import type { StreamEvent } from '$lib/protocol/generated/StreamEvent';
@@ -452,5 +452,145 @@ test.each([
         bytes: new Uint8Array([42, 0, 255]),
       })),
     );
+  },
+);
+
+test.each([
+  { locale: 'en', target: 'x86_64', pc: 'rip', bytes: [0x90], address: '0x0000000000001001' },
+  {
+    locale: 'zh-CN',
+    target: 'aarch64',
+    pc: 'pc',
+    bytes: [0x1f, 0x20, 0x03, 0xd5],
+    address: '0x0000000000001004',
+  },
+] as const)(
+  'setting the next decoded instruction waits for the $target machine in $locale',
+  async ({ locale, target, pc, bytes, address }) => {
+    localStorage.setItem('PARAGLIDE_LOCALE', locale);
+    const copy = locale === 'en' ? en : zh;
+    const machine = observation('1', target);
+    const commands: Command[] = [];
+    const pending = Promise.withResolvers<Awaited<ReturnType<WorkerPort['request']>>>();
+    const accepted = Promise.withResolvers<Awaited<ReturnType<WorkerPort['request']>>>();
+    let receiveCapture:
+      | ((stream: { event: StreamEvent; memory: Uint8Array | null }) => void)
+      | undefined;
+    await render(Workbench, {
+      portFactory: (
+        receive: (stream: { event: StreamEvent; memory: Uint8Array | null }) => void,
+      ): WorkerPort => ({
+        connect: () => {
+          receiveCapture = receive;
+          return Promise.resolve(connection(machine));
+        },
+        request: (command) => {
+          if (command.type === 'subscribe') {
+            receive({
+              event: {
+                subscription: '1',
+                update: {
+                  type: 'full',
+                  data: {
+                    ...machine,
+                    sequence: '2',
+                    memory: { address: '0x0000000000001000', length: bytes.length * 2 },
+                  },
+                },
+              },
+              memory: new Uint8Array([...bytes, ...bytes]),
+            });
+            return Promise.resolve({
+              response: { id: '1', result: { type: 'subscribed', data: '1' } },
+              payloads: [],
+            });
+          }
+          if (command.type === 'decode')
+            return Promise.resolve({
+              response: {
+                id: '2',
+                result: {
+                  type: 'decoded',
+                  data: [{ address, bytes: [...bytes], text: 'nop' }],
+                },
+              },
+              payloads: [],
+            });
+          if (command.type !== 'execute') throw new Error(`Unexpected ${command.type}`);
+          commands.push(command);
+          return commands.length === 1 ? pending.promise : accepted.promise;
+        },
+        acknowledge: () => Promise.resolve(),
+        detach: () => {},
+      }),
+    });
+    await page.getByRole('tab', { name: copy.instructions, exact: true }).click();
+    await page.getByRole('button', { name: copy.disassemble, exact: true }).click();
+    const move = page.getByRole('button', {
+      name: set_pc_at({ address }, { locale }),
+    });
+    const row = page.getByRole('row').filter({ has: move });
+    await move.click();
+    await expect.element(move).toBeDisabled();
+    await expect.element(row).not.toHaveAttribute('aria-current', 'step');
+    expect(commands).toEqual([
+      {
+        type: 'execute',
+        data: {
+          session: machine.key,
+          action: { type: 'write_register', data: { name: pc, value: BigInt(address).toString() } },
+        },
+      },
+    ]);
+    pending.resolve({
+      response: {
+        id: '3',
+        result: {
+          type: 'error',
+          data: { code: 'stale_session', address: null, source_offset: null },
+        },
+      },
+      payloads: [],
+    });
+    await expect.element(page.getByRole('alert')).toBeVisible();
+    await expect.element(move).toBeEnabled();
+    await expect
+      .element(page.getByRole('table', { name: copy.instructions, exact: true }))
+      .toBeVisible();
+    await expect.element(row).not.toHaveAttribute('aria-current', 'step');
+    expect(commands).toHaveLength(1);
+
+    await move.click();
+    await expect.element(move).toBeDisabled();
+    await expect.element(row).not.toHaveAttribute('aria-current', 'step');
+    const next = structuredClone(machine);
+    next.sequence = '3';
+    if (next.registers?.type === 'x86_64') next.registers.data.rip = address;
+    if (next.registers?.type === 'aarch64') next.registers.data.pc = address;
+    accepted.resolve({
+      response: { id: '4', result: { type: 'observed', data: next } },
+      payloads: [],
+    });
+    await expect.element(move).toBeEnabled();
+    await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+    await expect.element(page.getByText(address.slice(2), { exact: true })).toBeVisible();
+    await expect.element(row).not.toHaveAttribute('aria-current', 'step');
+    if (receiveCapture === undefined) throw new Error('Missing stream receiver');
+    receiveCapture({
+      event: {
+        subscription: '1',
+        update: {
+          type: 'full',
+          data: {
+            ...next,
+            sequence: '4',
+            memory: { address: '0x0000000000001000', length: bytes.length * 2 },
+          },
+        },
+      },
+      memory: new Uint8Array([...bytes, ...bytes]),
+    });
+    await expect.element(row).toHaveAttribute('aria-current', 'step');
+    expect(commands).toEqual([commands[0], commands[0]]);
   },
 );

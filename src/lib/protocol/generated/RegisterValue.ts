@@ -2,15 +2,16 @@
 import type { Counter } from './Counter.js';
 
 /**
- * One exact general-purpose or stack-pointer value.
+ * One exact integer assignment; accepted names depend on the operation.
  */
 export type RegisterValue = {
   /**
-   * Lowercase canonical target register; aliases, PC and flags are rejected.
+   * Lowercase target name. Initial state accepts canonical GPRs only; live edits
+   * also accept subregisters, RIP/PC and individual application flag names.
    */
   name: string;
   /**
-   * Unsigned 64-bit value, transported without JSON number rounding.
+   * Exact unsigned value, limited to the selected register's width; flags use 0 or 1.
    */
   value: Counter;
 };

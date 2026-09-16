@@ -222,15 +222,20 @@ uses the same retained capture. Manual inspection and Inspect at PC share native
 form validation for the desktop's 1–4,096-byte window; the engine still validates
 that the requested range lies in one mapping.
 
-Address breakpoint controls use the latest authoritative observation. They are
-editable only in ready/paused states, retain the engine's reset semantics and never
-optimistically publish a change. Static artifact/imported rows cannot change session
-breakpoints; only rows from the bound memory capture expose those controls.
+Only rows from the bound memory capture offer breakpoint and Set next instruction
+controls. They are enabled while ready/paused and wait for authoritative replies;
+static artifact/imported rows cannot change the session. Breakpoints use the latest
+observation and retain the engine's reset semantics. Setting PC uses the register-write
+path without running the machine or rewriting a prior capture's PC.
 
 ### Live machine editing
 
-The register panel offers a canonical GPR selector and exact decimal/hex value
-input. The memory toolbar offers explicit address and hex-byte input, limited to
+The register panel groups full-width GPRs, subregisters, instruction pointers and
+application flags in a native selector. Decimal/hex inputs remain exact; native
+form validation limits individual flags to 0 or 1. Contextual hints explain partial
+writes, zero-extension and PC restart semantics. Rust owns width/alignment validation
+and preserves unaffected bits; observations continue to contain canonical banks.
+The memory toolbar offers explicit address and hex-byte input, limited to
 4 KiB per desktop patch. Bits UI owns popover lifecycle; native forms own submission
 and required fields. Input is bounded to 12,288 UTF-16 code units and decoded
 output to 4 KiB. `Uint8Array.fromHex` decodes validated byte pairs after whitespace

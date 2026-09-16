@@ -215,6 +215,14 @@
   "patch_address": "Patch address",
   "patch_bytes": "Hex bytes",
   "patch_hint": "Write up to 4 KiB of data or code. Reset restores the loaded state.",
-  "register_edit_hint": "Enter unsigned decimal or 0x-prefixed hexadecimal. PC and flags are read-only. Reset restores initial values.",
+  "register_edit_hint": "Use unsigned decimal or 0x-prefixed hexadecimal. Reset restores initial values.",
+  "register_zero_extend_hint": "Writing a 32-bit value clears the upper 32 bits.",
+  "register_partial_hint": "Only the selected byte or word changes; all other bits are preserved.",
+  "register_pc_hint": "Sets the next instruction address and rearms breakpoints without executing. AArch64 requires 4-byte alignment.",
+  "register_flag_hint": "Enter 0 to clear or 1 to set this flag. Other bits stay unchanged. Reset restores initial flags.",
+  "program_counter": "Instruction pointer",
+  "set_pc_at": "Set next instruction to {address}",
+  "register_flags": "Flags",
+  "register_width": "{bits}-bit",
   "register_value": "Value"
 }

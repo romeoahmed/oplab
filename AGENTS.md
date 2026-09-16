@@ -62,7 +62,8 @@ and staged worker binaries remain ignored.
   and retain `oplab-` in Cargo package and executable names.
 - Inherit Rust dependencies and lints from workspace Cargo.toml. Use compatible
   minor-version requirements and preserve lockfiles unless dependencies change.
-  Keep `MIT OR Apache-2.0`, both license files and package metadata aligned.
+  Keep `MPL-2.0`, the unmodified official `LICENSE` and package metadata aligned.
+  Preserve secondary-license compatibility; do not apply the Exhibit B opt-out.
 - Clippy all/pedantic/nursery run with warnings denied. Fix findings; use a narrow,
   reasoned `#[expect]` only when justified, never `#[allow]`. Keep
   `redundant_pub_crate` disabled and retain explicit scoped visibility.

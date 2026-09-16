@@ -33,24 +33,24 @@ construct relevant inputs, retain shrinking and compare against an independent
 oracle. Keep exact boundary examples alongside properties. Do not reproduce the
 implementation in the expected result or merely round-trip two production helpers.
 
-| Boundary                   | Independent evidence                                                                                                                                   |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Addresses and wire scalars | Standard decimal/hex formatting and wider integer arithmetic                                                                                           |
-| Memory access              | Complete containment in one mapping and a permission bit-set model                                                                                     |
-| Framing                    | Published little-endian headers, chunk boundaries, fragmented/truncated input and invalid-header rejection before body reads                           |
-| Assembly output            | Arbitrary byte payloads preserved in relocatable objects and linked images on both guests; fixed instruction/relocation fixtures                       |
-| ELF loading                | Hand-built ELF64 headers, page envelopes, file bytes and observed zero-fill                                                                            |
-| Instruction analysis       | Fixed effects, generated MOV/signed-branch operands, full-width destinations and independent extension encodings                                       |
-| Batch CLI                  | Full-width arithmetic and memory from source/ELF/raw inputs; exit outcomes, sectionless ELF and completion symbols                                     |
-| Live editing               | Full-width GPR isolation, byte-patch surroundings/reset, real re-execution after code patching, preserved RX protection and stale-generation rejection |
-| Guest execution            | Generated add/subtract/XOR programs compared with wrapping `u32` arithmetic on both guests                                                             |
-| Build scheduling           | Latest valid request per document, cancellation and exactly-once delivery without assuming unrelated reply order                                       |
-| Observations               | Both register banks, full-width breakpoint histories, independent complete samples, retained baselines and stale identities                            |
-| Editor language            | Target-specific literal/comment examples and incremental parsing compared with a fresh parse after generated edits                                     |
-| Source locations           | Unicode byte boundaries against CodeMirror text/line positions, explicit CRLF/BOM cases and invalid-boundary rejection                                 |
-| File inspection            | Exact ELF extents, arbitrary 64-bit byte windows, standard filesystem I/O and documented size/encoding boundaries                                      |
-| Recovery                   | Unicode and incomplete inputs survive; source budgets count UTF-8 bytes; valid preferences survive independently of corrupt fields                     |
-| Localization               | Catalog key/parameter agreement and ordered supported-language preferences                                                                             |
+| Boundary                   | Independent evidence                                                                                                                                                                      |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Addresses and wire scalars | Standard decimal/hex formatting and wider integer arithmetic                                                                                                                              |
+| Memory access              | Complete containment in one mapping and a permission bit-set model                                                                                                                        |
+| Framing                    | Published little-endian headers, chunk boundaries, fragmented/truncated input and invalid-header rejection before body reads                                                              |
+| Assembly output            | Arbitrary byte payloads preserved in relocatable objects and linked images on both guests; fixed instruction/relocation fixtures                                                          |
+| ELF loading                | Hand-built ELF64 headers, page envelopes, file bytes and observed zero-fill                                                                                                               |
+| Instruction analysis       | Fixed effects, generated MOV/signed-branch operands, full-width destinations and independent extension encodings                                                                          |
+| Batch CLI                  | Full-width arithmetic and memory from source/ELF/raw inputs; exit outcomes, sectionless ELF and completion symbols                                                                        |
+| Live editing               | GPR isolation, alias edits compared with real MOV execution, flag preservation and guest conditions, PC/REP/breakpoint restart semantics, byte-patch/reset and stale-generation rejection |
+| Guest execution            | Generated add/subtract/XOR programs compared with wrapping `u32` arithmetic on both guests                                                                                                |
+| Build scheduling           | Latest valid request per document, cancellation and exactly-once delivery without assuming unrelated reply order                                                                          |
+| Observations               | Both register banks, full-width breakpoint histories, independent complete samples, retained baselines and stale identities                                                               |
+| Editor language            | Target-specific literal/comment examples and incremental parsing compared with a fresh parse after generated edits                                                                        |
+| Source locations           | Unicode byte boundaries against CodeMirror text/line positions, explicit CRLF/BOM cases and invalid-boundary rejection                                                                    |
+| File inspection            | Exact ELF extents, arbitrary 64-bit byte windows, standard filesystem I/O and documented size/encoding boundaries                                                                         |
+| Recovery                   | Unicode and incomplete inputs survive; source budgets count UTF-8 bytes; valid preferences survive independently of corrupt fields                                                        |
+| Localization               | Catalog key/parameter agreement and ordered supported-language preferences                                                                                                                |
 
 Properties use bounded inputs so failures remain small and reproducible. Fixed
 protocol boundaries use deterministic examples, not random selection from a short
@@ -74,6 +74,11 @@ provides DTOs, not a second worker or emulator. Browser ports return explicit
 scenario replies and reject unexpected commands; assertions verify outgoing mutations.
 Component fixtures exercise the frontend contract; process tests verify its native
 implementation.
+
+Register component tests cover native input constraints; workbench tests cover
+requests and authoritative replies. Native tests compare aliases with real MOV
+effects, check that edits leave PC unchanged and exercise flag set/clear from the
+opposite value.
 
 Editing workflows use a small scratch fixture independent of built-in examples.
 CodeMirror renders a viewport, not the entire document: verify long source through
@@ -144,9 +149,12 @@ Browser coverage follows observable workflows:
   and reset clears the capture. Inspect at PC shares memory-form validation; corrected
   input submits the chosen range and clears the error without losing retained memory.
 - **Live editing:** keyboard submission, overflow rejection, full-width stack-pointer
-  writes and retained register selection. Pending writes disable submission and wait
-  for authoritative state. Rejected patches retain input for explicit retry; successful
-  patches refresh memory. Both languages use the same behavior fixtures.
+  writes, aliases, PC, individual flags and retained register selection. Switching
+  away from a flag restores ordinary register input. Captured instruction rows send
+  explicit PC writes; their PC marker changes only with a fresh memory capture.
+  Pending writes disable submission. Rejected writes preserve displayed state for
+  explicit retry; successful patches refresh memory. Both languages use the same
+  behavior fixtures.
 
 Broader keyboard/screen-reader acceptance remains open, including toolbar focus
 when all actions begin disabled. Use Bits UI and native semantics without custom
@@ -173,7 +181,9 @@ cross-layer regressions covered:
   the expected ordering and sum, and reproduce results after reset.
 - Guest stores enforce mapping permissions; host patches preserve those permissions
   and invalidate executable translations, including at the address-space boundary.
-- REP continuation preserves instruction accounting after pause and register edits.
+- GPR/flag edits preserve REP continuation; explicit PC writes, including the same
+  address, start a new instruction and rearm breakpoints. Fetch faults and completion
+  remain execution outcomes rather than PC-write outcomes.
 - Invalid replacement and stale-generation writes preserve the active machine.
 - Controls remain serviceable during assembly and while observation credit is
   withheld. Shutdown drains accepted replies; reattachment never replays mutations.
@@ -203,7 +213,9 @@ For UI changes, verify a fresh static desktop bundle as well as the browser:
    machine. Repeat for both targets and languages without replacing source.
 6. While ready/paused, write a full-width GPR and patch data/code from the memory
    toolbar. Inspect fresh bytes and execute them; reset must restore initial state.
-   Exercise rejected input, both languages and native WebView hex parsing.
+   Exercise subregister preservation/zero-extension, condition flags, PC redirection
+   and a decoded row's Set next instruction action. Verify rejected input, both
+   languages and native WebView hex parsing.
 7. Verify fonts, dynamic editor loading, both locales and focus behavior under the
    actual WebView origin/CSP. Test failure/restart when the supervisor changes.
 

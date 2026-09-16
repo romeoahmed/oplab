@@ -535,12 +535,19 @@
               live={selectedBytes?.id === 'live'}
               pc={selectedBytes?.id === 'live' ? capturedPC : undefined}
               breakpoints={observation?.breakpoints ?? []}
-              canBreakpoint={selectedBytes?.id === 'live' &&
+              editable={selectedBytes?.id === 'live' &&
                 work.connected &&
                 resumable &&
                 !work.controlling}
               onbreakpoint={(address: string, enabled: boolean) => {
                 void work.breakpoint(address, enabled);
+              }}
+              onsetpc={(address: string) => {
+                if (selectedBytes?.id === 'live')
+                  void work.writeRegister(
+                    selectedBytes.target === 'x86_64' ? 'rip' : 'pc',
+                    address,
+                  );
               }}
             >
               {#snippet source()}

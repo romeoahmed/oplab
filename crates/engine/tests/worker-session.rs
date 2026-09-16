@@ -10,7 +10,9 @@ use oplab_core::{
     execution::Termination,
     protocol::{
         Command, DiagnosticCode, Reply, VERSION,
-        execution::{MemoryWindow, Observation, Registers, SessionAction, SessionKey, Status},
+        execution::{
+            MemoryWindow, Observation, RegisterValue, Registers, SessionAction, SessionKey, Status,
+        },
         scalar::{Counter, HexAddress},
     },
     target::Target,
@@ -51,6 +53,13 @@ fn observed(message: &Message) -> TestResult<&Observation> {
 
 fn execute(client: &mut Client, session: SessionKey, action: SessionAction) -> TestResult<Message> {
     client.request(Command::Execute { session, action }, None)
+}
+
+fn register_write(name: &str, value: u64) -> SessionAction {
+    SessionAction::WriteRegister(RegisterValue {
+        name: name.into(),
+        value: Counter::new(value),
+    })
 }
 
 fn load(
@@ -476,7 +485,7 @@ fn subscriptions_stream_both_guests_and_restart_cleanly_after_reset() -> TestRes
 #[test]
 fn configured_loads_restore_initial_state_and_failed_replacements_preserve_the_machine()
 -> TestResult {
-    use oplab_core::protocol::execution::{InitialState, Mapping, RegisterValue};
+    use oplab_core::protocol::execution::{InitialState, Mapping};
     for (target, source, first, stack) in [
         (
             Target::X86_64,
@@ -604,7 +613,7 @@ fn verify_raw_session(
     completion: u64,
     register: &str,
 ) -> TestResult {
-    use oplab_core::protocol::execution::{InitialState, LoadImage, RegisterValue};
+    use oplab_core::protocol::execution::{InitialState, LoadImage};
     let image_bytes = u32::try_from(bytes.len())?;
     interactive::worker(|client| {
         client.request(Command::Hello { version: VERSION }, None)?;
@@ -698,7 +707,7 @@ fn verify_raw_session(
 
 #[test]
 fn live_writes_return_authoritative_state_and_reject_obsolete_generations() -> TestResult {
-    use oplab_core::protocol::execution::{InitialState, LoadImage, RegisterValue};
+    use oplab_core::protocol::execution::{InitialState, LoadImage};
     interactive::worker(|client| {
         client.request(Command::Hello { version: VERSION }, None)?;
         let mut replace = None;
@@ -719,17 +728,23 @@ fn live_writes_return_authoritative_state_and_reject_obsolete_generations() -> T
                 Some(vec![0; 16]),
             )?;
             let key = observed(&loaded)?.key;
-            let register = SessionAction::WriteRegister(RegisterValue {
-                name: if target == Target::X86_64 {
-                    "rax"
-                } else {
-                    "x0"
-                }
-                .into(),
-                value: Counter::new(u64::MAX),
-            });
-            let written = execute(client, key, register.clone())?;
+            let (full, narrow, pc, flag) = if target == Target::X86_64 {
+                ("rax", "eax", "rip", "zf")
+            } else {
+                ("x0", "w0", "pc", "z")
+            };
+            let written = execute(client, key, register_write(full, u64::MAX))?;
             assert_eq!(integer(observed(&written)?)?, u64::MAX);
+            let alias = execute(client, key, register_write(narrow, 42))?;
+            assert_eq!(integer(observed(&alias)?)?, 42);
+            let rejected = execute(client, key, register_write(narrow, u64::MAX))?;
+            assert!(
+                matches!(rejected.response.result, Reply::Error(error) if error.code == DiagnosticCode::InvalidInput)
+            );
+            let unchanged = execute(client, key, SessionAction::Observe { memory: None })?;
+            assert_eq!(observed(&unchanged)?.registers, observed(&alias)?.registers);
+            assert_eq!(observed(&unchanged)?.status, observed(&alias)?.status);
+            assert_eq!(observed(&unchanged)?.instructions, Counter::new(0));
             let window = MemoryWindow {
                 address: address(0x1000),
                 length: 256,
@@ -752,12 +767,17 @@ fn live_writes_return_authoritative_state_and_reject_obsolete_generations() -> T
                 },
             )?;
             assert_eq!(memory.payloads, vec![bytes]);
-            assert_eq!(integer(observed(&patched)?)?, u64::MAX);
+            assert_eq!(integer(observed(&patched)?)?, 42);
             let reset = execute(client, key, SessionAction::Reset)?;
             let new_key = observed(&reset)?.key;
             assert_ne!(key, new_key);
             assert_eq!(integer(observed(&reset)?)?, 0);
-            for action in [register, SessionAction::WriteMemory(window)] {
+            for action in [
+                register_write(narrow, 42),
+                register_write(pc, 0x1004),
+                register_write(flag, 1),
+                SessionAction::WriteMemory(window),
+            ] {
                 let payload =
                     matches!(action, SessionAction::WriteMemory(_)).then(|| vec![0xff; 256]);
                 let rejected = client.request(
@@ -779,7 +799,9 @@ fn live_writes_return_authoritative_state_and_reject_obsolete_generations() -> T
                 },
             )?;
             assert_eq!(restored.payloads, vec![vec![0; 256]]);
-            assert_eq!(integer(observed(&restored)?)?, 0);
+            assert_eq!(observed(&restored)?.registers, observed(&reset)?.registers);
+            assert_eq!(observed(&restored)?.status, observed(&reset)?.status);
+            assert_eq!(observed(&restored)?.instructions, Counter::new(0));
             replace = Some(new_key);
         }
         client.request(Command::Shutdown, None)?;

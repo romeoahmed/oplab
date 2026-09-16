@@ -215,6 +215,14 @@
   "patch_address": "写入地址",
   "patch_bytes": "十六进制字节",
   "patch_hint": "每次最多写入 4 KiB 数据或机器码，重置后恢复装载时的内容。",
-  "register_edit_hint": "输入无符号十进制数或以 0x 开头的十六进制数。PC 和标志位只读，重置后恢复初值。",
+  "register_edit_hint": "输入无符号十进制数或以 0x 开头的十六进制数。重置后恢复初值。",
+  "register_zero_extend_hint": "写入 32 位数值时，高 32 位清零。",
+  "register_partial_hint": "仅修改所选字节或字，其余位保持不变。",
+  "register_pc_hint": "设置下一条指令的地址，断点重新生效，但不立即执行。AArch64 地址须按 4 字节对齐。",
+  "register_flag_hint": "输入 0 清除该标志，输入 1 置位，其余位不变。重置后恢复标志位初值。",
+  "program_counter": "指令指针",
+  "set_pc_at": "将下一条指令的地址设为 {address}",
+  "register_flags": "标志位",
+  "register_width": "{bits} 位",
   "register_value": "数值"
 }

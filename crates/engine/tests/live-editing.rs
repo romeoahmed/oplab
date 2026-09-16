@@ -7,11 +7,13 @@ use oplab_core::{
     target::Target,
 };
 use oplab_engine::{
+    assembly,
     load::{Image, MachineSetup},
     machine::{Machine, MachineError},
     session::Session,
 };
 use proptest::prelude::*;
+use std::fmt::Write;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -166,19 +168,34 @@ fn rejected_writes_preserve_state_and_host_patches_do_not_grant_guest_write_acce
             Target::X86_64,
             vec![0x48, 0x89, 0x04, 0x25, 0x00, 0x10, 0x00, 0x00],
             "rax",
-            ["eax", "rip", "x0", "rflags"],
+            [
+                ("x0", 42),
+                ("rflags", 42),
+                ("al", 256),
+                ("eax", 1 << 32),
+                ("zf", 2),
+            ],
         ),
         (
             Target::Aarch64,
             vec![0x20, 0x00, 0x00, 0xf9],
             "x0",
-            ["w0", "pc", "rax", "nzcv"],
+            [
+                ("x31", 42),
+                ("nzcv", 42),
+                ("w0", 1 << 32),
+                ("pc", 0x1001),
+                ("z", 2),
+            ],
         ),
     ] {
         let mut machine = session(target, &code)?;
         let initial = machine.read_registers()?;
-        for name in invalid_names {
-            assert!(machine.write_register(name, 42).is_err());
+        for (name, value) in invalid_names {
+            assert!(machine.write_register(name, value).is_err());
+            assert_eq!(machine.read_registers()?, initial, "{name}={value}");
+            assert_eq!(machine.state(), ExecutionState::Ready);
+            assert_eq!(machine.instructions(), 0);
         }
         for (address, bytes) in [
             (0x1000, vec![]),
@@ -189,7 +206,6 @@ fn rejected_writes_preserve_state_and_host_patches_do_not_grant_guest_write_acce
         ] {
             assert!(machine.write_memory(Address::new(address), &bytes).is_err());
         }
-        assert_eq!(machine.read_registers()?, initial);
         assert_eq!(
             machine.read_memory(Address::new(0x1000), u64::try_from(code.len())?)?,
             code
@@ -220,54 +236,60 @@ fn rejected_writes_preserve_state_and_host_patches_do_not_grant_guest_write_acce
 fn editing_a_paused_rep_continuation_preserves_instruction_accounting() -> TestResult {
     use oplab_core::{address::AddressRange, memory::Permissions, registers::InitialRegisters};
     use oplab_engine::load::InitialMapping;
-    let machine = Machine::load(
-        Image::Raw {
-            bytes: &[0xf3, 0xaa, 0x90],
-            base: Address::new(0x1000),
-            entry: Address::new(0x1000),
-        },
-        Target::X86_64,
-        MachineSetup {
-            registers: Some(InitialRegisters::from_assignments(
-                Target::X86_64,
-                [("rax", 1), ("rcx", 5000), ("rdi", 0x8000)],
-            )?),
-            mappings: vec![InitialMapping {
-                range: AddressRange::new(Address::new(0x8000), 8192, 8192)?,
-                permissions: Permissions {
-                    read: true,
-                    write: true,
-                    execute: false,
-                },
-                bytes: vec![],
-            }],
-        },
-    )?;
-    let mut machine = Session::new(machine, Address::new(0x1002), 100)?;
-    machine.start()?;
-    for _ in 0..1024 {
-        machine.advance()?;
-        if machine.instructions() != 0 {
-            break;
+    for (restart, reverse) in [(false, false), (false, true), (true, false), (true, true)] {
+        let machine = Machine::load(
+            Image::Raw {
+                bytes: &[0xf3, 0xaa, 0x90],
+                base: Address::new(0x1000),
+                entry: Address::new(0x1000),
+            },
+            Target::X86_64,
+            MachineSetup {
+                registers: Some(InitialRegisters::from_assignments(
+                    Target::X86_64,
+                    [("rax", 1), ("rcx", 5000), ("rdi", 0x8000)],
+                )?),
+                mappings: vec![InitialMapping {
+                    range: AddressRange::new(Address::new(0x8000), 8192, 8192)?,
+                    permissions: Permissions {
+                        read: true,
+                        write: true,
+                        execute: false,
+                    },
+                    bytes: vec![],
+                }],
+            },
+        )?;
+        let mut machine = Session::new(machine, Address::new(0x1002), 100)?;
+        machine.start()?;
+        for _ in 0..1024 {
+            machine.advance()?;
+            if machine.instructions() != 0 {
+                break;
+            }
         }
+        machine.pause()?;
+        assert_eq!(machine.instructions(), 1);
+        let IntegerRegisters::X86_64 { gpr, rip, .. } = machine.read_registers()? else {
+            return Err("wrong target".into());
+        };
+        assert_eq!(rip, Address::new(0x1000));
+        assert!(gpr[1] > 0);
+        let next = Address::new(gpr[7] - u64::from(reverse));
+        machine.write_register("rcx", 2)?;
+        machine.write_register("rax", 42)?;
+        machine.write_register("df", u64::from(reverse))?;
+        if restart {
+            machine.write_register("rip", 0x1000)?;
+        }
+        step(&mut machine)?;
+        assert_eq!(machine.instructions(), if restart { 2 } else { 1 });
+        assert_eq!(machine.read_memory(next, 2)?, [42, 42]);
+        assert_eq!(
+            machine.state(),
+            ExecutionState::Terminated(Termination::Completed)
+        );
     }
-    machine.pause()?;
-    assert_eq!(machine.instructions(), 1);
-    let IntegerRegisters::X86_64 { gpr, rip, .. } = machine.read_registers()? else {
-        return Err("wrong target".into());
-    };
-    assert_eq!(rip, Address::new(0x1000));
-    assert!(gpr[1] > 0);
-    let next = Address::new(gpr[7]);
-    machine.write_register("rcx", 2)?;
-    machine.write_register("rax", 42)?;
-    step(&mut machine)?;
-    assert_eq!(machine.instructions(), 1);
-    assert_eq!(machine.read_memory(next, 2)?, [42, 42]);
-    assert_eq!(
-        machine.state(),
-        ExecutionState::Terminated(Termination::Completed)
-    );
     Ok(())
 }
 
@@ -335,6 +357,198 @@ fn maximum_patches_fit_one_mapping_and_cannot_span_adjacent_mappings() -> TestRe
         );
         machine.reset()?;
         assert_eq!(machine.read_memory(Address::new(0x1000), 65_536)?, original);
+    }
+    Ok(())
+}
+
+#[test]
+fn debugger_alias_writes_match_real_mov_instructions() -> TestResult {
+    let x86 = [
+        "al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil", "ah", "ch", "dh", "bh", "r8b", "r9b",
+        "r10b", "r11b", "r12b", "r13b", "r14b", "r15b", "ax", "cx", "dx", "bx", "sp", "bp", "si",
+        "di", "r8w", "r9w", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w", "eax", "ecx", "edx",
+        "ebx", "esp", "ebp", "esi", "edi", "r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d",
+        "r15d",
+    ]
+    .map(String::from);
+    let arm: Vec<_> = (0..31)
+        .map(|index| format!("w{index}"))
+        .chain(["fp".into(), "lr".into(), "wsp".into()])
+        .collect();
+    for (target, names) in [
+        (Target::X86_64, x86.as_slice()),
+        (Target::Aarch64, arm.as_slice()),
+    ] {
+        let mut instructions = String::new();
+        for name in names {
+            if name == "wsp" {
+                writeln!(instructions, "mov wsp, w0")?;
+            } else {
+                writeln!(instructions, "mov {name}, 42")?;
+            }
+        }
+        let source = if target == Target::X86_64 {
+            format!(".intel_syntax noprefix\n.text\n.global _start\n_start:\n{instructions}")
+        } else {
+            format!(".text\n.global _start\n_start:\n{instructions}")
+        };
+        let object = assembly::compile(target, &source).map_err(|error| format!("{error:?}"))?;
+        let image =
+            assembly::link(&object, Address::new(0x1000)).map_err(|error| format!("{error:?}"))?;
+        let mut edited = Session::from_elf(&image, target, Address::new(0x1800), 100)?;
+        let mut executed = Session::from_elf(&image, target, Address::new(0x1800), 100)?;
+        let canonical: Vec<_> = if target == Target::X86_64 {
+            [
+                "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11",
+                "r12", "r13", "r14", "r15",
+            ]
+            .map(String::from)
+            .to_vec()
+        } else {
+            (0..31)
+                .map(|index| format!("x{index}"))
+                .chain(["sp".into()])
+                .collect()
+        };
+        for name in names {
+            // Distinct fresh values expose wrong-bank writes and aliases that do nothing.
+            for (index, register) in canonical.iter().enumerate() {
+                let value = u64::MAX - u64::try_from(index)?;
+                edited.write_register(register, value)?;
+                executed.write_register(register, value)?;
+            }
+            if name == "wsp" {
+                edited.write_register("x0", 42)?;
+                executed.write_register("x0", 42)?;
+            }
+            let pc = edited.read_registers()?.instruction_pointer();
+            edited.write_register(name, 42)?;
+            step(&mut executed)?;
+            let actual = edited.read_registers()?;
+            assert_eq!(actual.instruction_pointer(), pc, "{name}");
+            assert_eq!(edited.instructions(), 0);
+            assert_eq!(edited.state(), ExecutionState::Ready);
+            let mut expected = executed.read_registers()?;
+            match &mut expected {
+                IntegerRegisters::X86_64 { rip, .. } => *rip = pc,
+                IntegerRegisters::Aarch64 { pc: address, .. } => *address = pc,
+            }
+            assert_eq!(actual, expected, "{name}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn flag_writes_drive_guest_conditions_and_preserve_other_bits() -> TestResult {
+    for (target, code, flags) in [
+        // SETZ AL / CSET W0,EQ: no preceding instruction overwrites the edited flags.
+        (
+            Target::X86_64,
+            &[0x0f, 0x94, 0xc0][..],
+            &[
+                ("cf", 0),
+                ("pf", 2),
+                ("af", 4),
+                ("zf", 6),
+                ("sf", 7),
+                ("df", 10),
+                ("of", 11),
+            ][..],
+        ),
+        (
+            Target::Aarch64,
+            &[0xe0, 0x17, 0x9f, 0x1a][..],
+            &[("n", 31), ("z", 30), ("c", 29), ("v", 28)][..],
+        ),
+    ] {
+        let mut machine = session(target, code)?;
+        let initial = machine.read_registers()?;
+        for set in [1, 0] {
+            // Every checked write must change its bit, including the clearing pass.
+            for &(name, _) in flags {
+                machine.write_register(name, 1 - set)?;
+            }
+            for &(name, bit) in flags {
+                let mut expected = machine.read_registers()?;
+                match &mut expected {
+                    IntegerRegisters::X86_64 { rflags, .. } => {
+                        *rflags = (*rflags & !(1 << bit)) | (set << bit);
+                    }
+                    IntegerRegisters::Aarch64 { nzcv, .. } => {
+                        *nzcv = (*nzcv & !(1 << bit)) | (u32::try_from(set)? << bit);
+                    }
+                }
+                machine.write_register(name, set)?;
+                assert_eq!(machine.read_registers()?, expected, "{name}={set}");
+            }
+            step(&mut machine)?;
+            assert_eq!(integer(&machine.read_registers()?), set);
+            machine.reset()?;
+            assert_eq!(machine.read_registers()?, initial);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn pc_edits_rearm_breakpoints_and_defer_completion_or_fetch_faults_until_run() -> TestResult {
+    for (target, code, pc) in [
+        (Target::X86_64, &[0x90; 8][..], "rip"),
+        (
+            Target::Aarch64,
+            &[0x1f, 0x20, 0x03, 0xd5, 0x1f, 0x20, 0x03, 0xd5][..],
+            "pc",
+        ),
+    ] {
+        let mut machine = session(target, code)?;
+        let initial = machine.read_registers()?;
+        machine.set_breakpoint(Address::new(0x1000), true)?;
+        machine.start()?;
+        settle(&mut machine)?;
+        for destination in [0x1004, 0x1000] {
+            machine.set_breakpoint(Address::new(destination), true)?;
+            machine.write_register(pc, destination)?;
+            assert_eq!(
+                machine.state(),
+                ExecutionState::Paused(PauseReason::Requested)
+            );
+            assert_eq!(machine.instructions(), 0);
+            machine.start()?;
+            settle(&mut machine)?;
+            assert_eq!(
+                machine.state(),
+                ExecutionState::Paused(PauseReason::Breakpoint(Address::new(destination)))
+            );
+            assert_eq!(machine.instructions(), 0);
+        }
+        // Writing the same PC is also an explicit restart, not breakpoint resume.
+        machine.write_register(pc, 0x1000)?;
+        machine.start()?;
+        settle(&mut machine)?;
+        assert_eq!(machine.instructions(), 0);
+        step(&mut machine)?;
+        assert_eq!(machine.instructions(), 1);
+        machine.write_register(pc, 0x1800)?;
+        assert!(matches!(machine.state(), ExecutionState::Paused(_)));
+        machine.start()?;
+        settle(&mut machine)?;
+        assert_eq!(
+            machine.state(),
+            ExecutionState::Terminated(Termination::Completed)
+        );
+        assert_eq!(machine.instructions(), 1);
+        machine.reset()?;
+        assert_eq!(machine.read_registers()?, initial);
+        machine.write_register(pc, 0x3000)?;
+        assert_eq!(machine.state(), ExecutionState::Ready);
+        machine.start()?;
+        settle(&mut machine)?;
+        assert_eq!(
+            machine.fault().map(|fault| fault.kind),
+            Some(FaultKind::Unmapped(Access::Fetch))
+        );
+        assert_eq!(machine.instructions(), 0);
     }
     Ok(())
 }

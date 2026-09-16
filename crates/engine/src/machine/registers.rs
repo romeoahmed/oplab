@@ -5,28 +5,43 @@ use super::{Machine, MachineError};
 use oplab_core::{
     address::Address,
     diagnostic::ValidationError,
-    registers::{AARCH64_GPR_NAMES, InitialRegisters, IntegerRegisters, X86_GPR_NAMES},
+    registers::{InitialRegisters, IntegerRegisters, RegisterEdit, RegisterStorage},
     target::Target,
 };
 use unicorn_engine::{RegisterARM64, RegisterX86, Unicorn};
 
 impl Machine {
-    pub(crate) fn write_register(&mut self, name: &str, value: u64) -> Result<(), MachineError> {
-        let register: i32 = match self.initial.target() {
-            Target::X86_64 => X86_GPR_NAMES
-                .into_iter()
-                .zip(X86_GPR)
-                .find(|(candidate, _)| *candidate == name)
-                .map(|(_, register)| register.into()),
-            Target::Aarch64 => AARCH64_GPR_NAMES
-                .into_iter()
-                .zip(AARCH64_GPR.into_iter().chain([RegisterARM64::SP]))
-                .find(|(candidate, _)| *candidate == name)
-                .map(|(_, register)| register.into()),
+    pub(crate) fn write_register(&mut self, edit: RegisterEdit) -> Result<(), MachineError> {
+        if edit.storage() == RegisterStorage::InstructionPointer {
+            self.native
+                .set_pc(edit.apply(0))
+                .map_err(|_| MachineError::Backend)?;
+            let monitor = self.native.get_data_mut();
+            monitor.pending_repeat = None;
+            monitor.bypass = None;
+            return Ok(());
+        }
+        let register: i32 = match (self.initial.target(), edit.storage()) {
+            (Target::X86_64, RegisterStorage::Gpr(index)) => {
+                X86_GPR.get(index).copied().map(Into::into)
+            }
+            (Target::Aarch64, RegisterStorage::Gpr(31)) => Some(RegisterARM64::SP.into()),
+            (Target::Aarch64, RegisterStorage::Gpr(index)) => {
+                AARCH64_GPR.get(index).copied().map(Into::into)
+            }
+            (Target::X86_64, RegisterStorage::Flags) => Some(RegisterX86::RFLAGS.into()),
+            (Target::Aarch64, RegisterStorage::Flags) => Some(RegisterARM64::NZCV.into()),
+            (_, RegisterStorage::InstructionPointer) => None,
         }
         .ok_or(ValidationError::Target)?;
+        // Debugger APIs need not implement instruction operand-width semantics.
+        // Merge into canonical storage so every backend observes the same policy.
+        let previous = self
+            .native
+            .reg_read(register)
+            .map_err(|_| MachineError::Backend)?;
         self.native
-            .reg_write(register, value)
+            .reg_write(register, edit.apply(previous))
             .map_err(|_| MachineError::Backend)
     }
 
