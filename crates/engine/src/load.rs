@@ -12,7 +12,7 @@ use oplab_core::{
     memory::{MAX_MAPPED_BYTES, MAX_REGIONS, MemoryLayout, MemoryRegion, Permissions},
     protocol::MAX_OBJECT_BYTES,
     registers::InitialRegisters,
-    target::{CpuModel, Target},
+    target::Target,
 };
 use segment::Segment;
 
@@ -46,7 +46,6 @@ pub enum LoadError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadPlan {
     target: Target,
-    cpu: CpuModel,
     entry: Address,
     page_size: u64,
     memory: MemoryLayout,
@@ -82,7 +81,6 @@ impl LoadPlan {
             .collect::<Result<_, _>>()?;
         Ok(Self {
             target,
-            cpu: CpuModel::default_for(target),
             entry,
             page_size,
             memory: MemoryLayout::new(regions)?,
@@ -94,12 +92,6 @@ impl LoadPlan {
     #[must_use]
     pub const fn target(&self) -> Target {
         self.target
-    }
-
-    /// Resolved processor profile reapplied on reset.
-    #[must_use]
-    pub const fn cpu(&self) -> CpuModel {
-        self.cpu
     }
 
     /// Initial fetch address from ELF or the explicit raw-code input.

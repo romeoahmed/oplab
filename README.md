@@ -6,85 +6,86 @@
 
 **Write assembly. Run it. Inspect the machine.**
 
-A desktop assembly workbench for **x86_64** and **AArch64**, available in English
-and Simplified Chinese. Build standard ELF with LLVM, execute it in Unicorn, and
-explore registers, memory and instruction effects.
+Oplab is a desktop assembly workbench for **x86_64** and **AArch64**, in English
+and Simplified Chinese. Assemble standard ELF, run it in an isolated worker, and
+inspect or edit registers, memory and instruction state.
 
-**In development; not production-ready.** Native workflows have been verified on
-Apple Silicon macOS. Windows/Linux and independently installed distributions
-remain [release gates](docs/roadmap.md#release-gates).
+**In development; not production-ready.** Native workflows are verified on Apple
+Silicon macOS. Windows, Linux and independently installed packages remain
+[release gates](docs/roadmap.md#release-gates).
 
 [Build and develop](docs/development.md) · [Engine guide](docs/engine.md) · [Roadmap](docs/roadmap.md)
 
-## Run an example
+## Try a program
+
+The editor starts blank and restores your last draft on reopening.
 
 1. Choose an architecture and **Load example**.
-2. **Assemble**, then **Load artifact**.
-3. **Step** (`F10`) or **Run** (`F5`). The example sorts eight signed integers and sums them to 42.
-4. Inspect the sorted array in **Memory** and the sum in RAX or X0.
-   **Reset** restores the program and initial state, keeping address breakpoints.
+2. **Assemble** (`Ctrl+Enter` / `⌘+Enter`), then **Load artifact**.
+3. **Step** (`F10`) or **Run** (`F5`). Both examples brighten eight RGBA pixels,
+   preserving alpha, using AVX2 or a vector-length-agnostic SVE2 loop.
+4. Inspect `output` in **Memory** and checksum **4814** (`0x12ce`) in RAX or X0.
+5. **Reset** restores the loaded program and initial state, retaining breakpoints.
 
-Use `Ctrl+Enter` / `⌘+Enter` to assemble. Configure the link address, completion
-address or symbol, instruction limit, CPU model, initial registers and additional memory.
-Assembly, loading and execution are explicit actions; editing source leaves the
-loaded machine intact.
+Assembly, loading and execution are explicit actions. Editing source leaves the
+loaded machine intact. Programs have an explicit completion address or symbol
+and instruction budget; stacks and operating-system services are not implicit.
 
-## Capabilities
+## What you can do
 
-- **Edit and build:** CodeMirror highlighting, completion, search, history and
-  source diagnostics; unchanged GNU-style source assembled and linked by LLVM MC/LLD.
-- **Execute and inspect:** ELF or raw-code sessions; step, run, pause, stop, reset
-  and address breakpoints; integer/SIMD registers, flags, memory and bounded disassembly.
-  Choose a CPU profile and inspect read-only 128-bit SIMD registers as exact bits
-  or integer/floating-point lanes.
-- **Modify machine state:** edit integer registers and their aliases, set the next
-  instruction address, change application flags and patch up to 4 KiB of data or
-  code while ready or paused; reset restores the loaded state.
-- **Work with files:** import/export UTF-8 assembly and exact machine bytes;
-  export complete ELF objects and images through native dialogs.
-- **Automate:** run source, static ELF or raw code from stdin with explicit
-  completion and execution limits; receive final state as JSON.
-- **Make it comfortable:** self-hosted JetBrains Mono or system monospace,
-  font size, wrapping, panel proportions, focus mode and local draft recovery.
+- **Edit GNU-style assembly:** CodeMirror highlighting, completion, folding,
+  label navigation, search/replacement, history and source diagnostics.
+- **Run ELF or raw code:** step, run, pause, stop, reset and set address breakpoints.
+  Configure initial GPRs and additional memory before loading.
+- **Inspect effects:** integer registers, flags, memory, disassembly and on-demand
+  instruction analysis. SIMD views include YMM/Z, low XMM/V aliases and SVE P/FFR,
+  with exact bits, integer lanes and f16/f32/f64 interpretation.
+- **Change live state:** edit registers, aliases, PC, flags, SIMD values/lanes and
+  floating-point rounding while ready or paused; patch up to 4 KiB of data or code.
+- **Use standard files:** import/export UTF-8 assembly and raw machine bytes;
+  export complete ELF objects and executables through native dialogs.
+- **Work comfortably:** local draft recovery, offline JetBrains Mono or system
+  monospace, adjustable font size, wrapping, panel proportions and focus mode.
+- **Automate experiments:** run source, ELF or raw code from stdin and receive
+  final state as JSON through the [CLI](docs/protocol.md#cli).
 
-Import machine code from **Files**, then use **Raw code** to set its architecture,
-load address, entry and stop address. Loading is explicit and replaces the machine.
-Select **Captured memory** in **Instructions** to disassemble observed bytes and
-toggle address breakpoints or set the next instruction without running it.
-Source-to-instruction mapping and multiple documents are [planned](docs/roadmap.md#next-product-work).
-Instruction recognition does not guarantee emulator support for every extension.
-SIMD inspection excludes x87, AVX upper halves, AVX-512 and SVE; see the
-[execution limits](docs/engine.md#cpu-profiles-and-simd).
+For raw execution, import bytes from **Files**, set placement in **Raw code**, then
+load explicitly. For live disassembly, inspect memory and choose **Captured memory**
+in **Instructions**.
+
+Both guests use a fixed QEMU MAX runtime. AVX2 and SVE/SVE2 samples execute;
+recognizing an instruction does not guarantee execution support. AVX-512 execution
+is unavailable; x87 and SME matrix state are not exposed. Complete extension
+coverage, source mapping and multiple documents remain [planned](docs/roadmap.md#next-product-work).
 
 ## Build from source
 
 Install Node satisfying [package.json](package.json), pnpm and the
-[native toolchain](docs/development.md#native-toolchain): stable Rust, C++23,
-LLVM 23 with matching LLD development files, libclang, build tools and Tauri's
-platform prerequisites. Then run:
+[native toolchain](docs/development.md#native-toolchain): stable Rust, GNU C23,
+C++23, LLVM 23 with matching LLD development files, build tools and Tauri's platform
+prerequisites. Follow the guide to build the QEMU/XED SDK and configure discovery,
+then run from the repository root:
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm tauri dev
 ```
 
-Tauri builds and stages the worker and starts Vite automatically. Engine changes
-require rebuilding the worker and restarting the app; see the
-[development workflow](docs/development.md#commands-and-ownership).
+Tauri stages the worker and starts Vite. Native changes require rebuilding the
+worker and restarting the app. For frontend-only HMR, use `pnpm dev`; browser
+preview cannot assemble or execute.
 
-For frontend-only work, use `pnpm dev`. Browser preview cannot assemble or execute.
-
-Run the bundled [x86_64 example](examples/x86_64.s) from the terminal:
+With the same native environment, run the bundled example from the terminal:
 
 ```sh
-cargo run --locked -p oplab-engine --bin oplab-cli -- run source x86_64 0x1000 --until-symbol done --budget 10000 < examples/x86_64.s
+cargo run --locked -p oplab-runner --bin oplab-cli -- run source x86_64 0x1000 --until-symbol done --budget 10000 < examples/x86_64.s
 ```
 
-The [CLI reference](docs/protocol.md#cli) covers ELF/raw inputs, initial state,
-memory output and exit codes. No stack or operating-system services are supplied
-implicitly.
+## Contributing
 
-## Development
+Start with the [roadmap](docs/roadmap.md) and [development guide](docs/development.md).
+Keep tests focused on observable behavior and invariants, update both language
+catalogs, and document changes to contracts. With the native toolchain configured:
 
 ```sh
 pnpm exec playwright install --with-deps --no-shell chromium
@@ -92,28 +93,27 @@ cargo xtask check
 cargo xtask test
 ```
 
-Use `cargo xtask fmt` for formatting. Keep tests focused on behavior and invariants,
-update both language catalogs, and document changes to public behavior.
+Use `cargo xtask fmt` for formatting. When reporting a failure, include the host,
+tool versions, a minimal program and expected versus actual behavior.
 
-| Guide                                | Contents                                                       |
-| ------------------------------------ | -------------------------------------------------------------- |
-| [Development](docs/development.md)   | Requirements, toolchain discovery, commands, builds and icons  |
-| [Architecture](docs/architecture.md) | Repository layout, ownership and technology decisions          |
-| [Engine](docs/engine.md)             | Assembly syntax, ELF loading, analysis and execution semantics |
-| [Protocol and CLI](docs/protocol.md) | Framing, sessions, supervision, files and batch execution      |
-| [Testing](docs/testing.md)           | Test design and browser/native acceptance                      |
-| [Roadmap](docs/roadmap.md)           | Implemented scope, next work and verification limits           |
+| Guide                                | Purpose                                                   |
+| ------------------------------------ | --------------------------------------------------------- |
+| [Development](docs/development.md)   | Prerequisites, commands, tool discovery, builds and icons |
+| [Architecture](docs/architecture.md) | Repository layout, ownership and interface design         |
+| [Runtime](docs/runtime.md)           | QEMU/LLVM integration and distribution design             |
+| [Engine](docs/engine.md)             | Assembly, loading, analysis and execution contracts       |
+| [Protocol and CLI](docs/protocol.md) | Worker transport, desktop boundary and batch execution    |
+| [Testing](docs/testing.md)           | Test design and browser/native acceptance                 |
+| [Roadmap](docs/roadmap.md)           | Implemented scope, priorities and verification limits     |
 
-Built with Tauri, Svelte, LLVM/LLD, Unicorn, CodeMirror/Lezer and Bits UI.
+Built with Tauri, Svelte, LLVM/LLD, QEMU, Intel XED, CodeMirror/Lezer and Bits UI.
 Inspired by [cemu](https://github.com/hugsy/cemu).
 
 ## Author and license
 
 Created by [Romeo Ahmed](https://github.com/romeoahmed). Copyright © 2026 Romeo Ahmed.
 
-Licensed under the [Mozilla Public License 2.0 (MPL-2.0)](LICENSE).
-Unless explicitly stated otherwise, contributions use the same terms. Dependencies
-and bundled fonts retain their own licenses and notices.
-
-Unicorn is GPLv2-licensed. Distributing linked engine binaries also requires GPL
-compliance through MPL §3.3; see [distribution licensing](docs/development.md#distribution-licensing).
+Licensed under [MPL-2.0](LICENSE). Unless stated otherwise, contributions use the
+same terms. Dependencies and fonts retain their own licenses and notices;
+[native distribution licensing](docs/development.md#distribution-licensing) remains
+under review.

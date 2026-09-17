@@ -30,3 +30,6 @@ Checks:
 WarningsAsErrors: '*'
 HeaderFilterRegex: '(^|/)native/'
 FormatStyle: file
+CheckOptions:
+  # XED's documented public entry point is its umbrella header.
+  misc-include-cleaner.IgnoreHeaders: 'xed/.*'

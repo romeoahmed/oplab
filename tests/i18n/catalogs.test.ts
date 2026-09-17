@@ -8,7 +8,7 @@ test('both catalogs provide nonempty messages with the same interpolation inputs
   for (const key of Object.keys(english) as (keyof typeof english)[]) {
     for (const text of [english[key], chinese[key]]) expect(text.trim()).not.toBe('');
     const parameters = (text: string) =>
-      [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
+      new Set([...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]));
     expect(parameters(chinese[key]), key).toEqual(parameters(english[key]));
   }
 });

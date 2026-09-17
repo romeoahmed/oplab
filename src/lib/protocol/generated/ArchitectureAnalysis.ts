@@ -14,15 +14,15 @@ export type ArchitectureAnalysis =
          */
         flow: FlowControl;
         /**
-         * Required CPUID feature identifiers reported by iced-x86.
+         * Intel XED ISA-set identifier; not a complete CPUID predicate.
          */
-        cpuid: Array<string>;
+        isa: string;
         /**
          * RFLAGS and x87 condition-code effects, retaining undefined and constant results.
          */
         flags: FlagEffects;
         /**
-         * Register lists omit some state for save/restore instructions.
+         * The decoder reports incomplete register effects, such as save/restore state.
          */
         registers_incomplete: boolean;
         /**
@@ -35,7 +35,7 @@ export type ArchitectureAnalysis =
       type: 'aarch64';
       data: {
         /**
-         * Decoder group names, including control-flow and extension classifications.
+         * Control-flow groups; no architectural extension requirements are inferred.
          */
         groups: Array<string>;
         /**

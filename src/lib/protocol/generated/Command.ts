@@ -48,7 +48,7 @@ export type Command =
       type: 'decode';
       data: {
         /**
-         * Guest profile.
+         * Guest architecture; static decoding is independent of runtime support.
          */
         target: Target;
         /**

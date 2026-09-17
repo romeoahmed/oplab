@@ -5,7 +5,7 @@
   min-block-size: 0;
   block-size: 100%;
   gap: 8px;
-  padding: 12px 18px;
+  padding: 12px var(--pane-inset, 16px);
 }
 
 .instruction-controls {
@@ -138,9 +138,10 @@
   background: var(--surface-deep);
 
   button {
-    inline-size: 24px;
-    min-block-size: 24px;
-    padding: 3px;
+    inline-size: 28px;
+    min-block-size: 28px;
+    min-inline-size: 28px;
+    padding: 4px;
   }
 }
 

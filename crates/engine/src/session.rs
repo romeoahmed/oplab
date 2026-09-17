@@ -6,8 +6,8 @@ use oplab_core::{
     diagnostic::ValidationError,
     execution::{ControlEvent, ExecutionState, Generation, GuestFault, PauseReason, Termination},
     policy::ExecutionPolicy,
-    registers::{MachineRegisters, RegisterEdit, RegisterStorage},
-    target::{CpuModel, Target},
+    registers::{MachineRegisters, RegisterEdit, RegisterStorage, RoundingMode, VectorBits},
+    target::Target,
 };
 
 /// A loaded image, execution policy and machine owned by one thread.
@@ -69,12 +69,6 @@ impl Session {
             stepping: false,
             bypass: None,
         })
-    }
-
-    /// Processor profile selected when the session was loaded.
-    #[must_use]
-    pub const fn cpu(&self) -> CpuModel {
-        self.machine.initial().cpu()
     }
 
     /// Current control state at the last ownership boundary.
@@ -300,9 +294,41 @@ impl Session {
         Ok(())
     }
 
+    /// Replace a SIMD register or lane, preserving unselected and inactive storage.
+    ///
+    /// Low XMM/V writes retain upper YMM/Z bits. The current native bank supplies
+    /// merge inputs; writes leave execution counters and reset inputs unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Rejects non-ready/paused states and invalid names, widths, lanes or values
+    /// before mutation. A native failure invalidates the session; writes are not retried.
+    pub fn write_vector(
+        &mut self,
+        name: &str,
+        width: u16,
+        lane: u16,
+        value: VectorBits,
+    ) -> Result<(), MachineError> {
+        self.state.require_patchable()?;
+        let result = self.machine.write_vector(name, width, lane, value);
+        self.accept_write(result)
+    }
+
+    /// Set SIMD rounding direction without changing other floating-point controls or status.
+    ///
+    /// # Errors
+    ///
+    /// Rejects states other than ready/paused. Native failures invalidate the session.
+    pub fn set_rounding(&mut self, mode: RoundingMode) -> Result<(), MachineError> {
+        self.state.require_patchable()?;
+        let result = self.machine.set_rounding(mode);
+        self.accept_write(result)
+    }
+
     /// Patch 1–65,536 bytes in one mapped region without widening guest permissions.
     ///
-    /// Success invalidates overlapping executable translations. Reset restores
+    /// Success clears the compiled-code cache. Reset restores
     /// original bytes; patching does not modify the source or assembled artifact.
     ///
     /// # Errors
@@ -322,7 +348,7 @@ impl Session {
         result
     }
 
-    /// Observe coherent integer and 128-bit SIMD registers between native slices.
+    /// Observe coherent integer, vector and predicate registers between native slices.
     ///
     /// # Errors
     ///

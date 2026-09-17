@@ -2,11 +2,12 @@
 import type { Access } from './Access.js';
 
 /**
- * Architectural fault category, without native error codes in the domain contract.
+ * Execution fault category, independent of native error representations.
  */
 export type FaultKind =
   | { type: 'unmapped'; data: Access }
   | { type: 'protection'; data: Access }
   | { type: 'unaligned'; data: Access }
   | { type: 'invalid_instruction' }
+  | { type: 'unsupported_instruction' }
   | { type: 'exception'; data: number | null };

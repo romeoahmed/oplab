@@ -40,6 +40,7 @@
     conditional_write: m.analysis_conditional_write,
     read_write: m.analysis_read_write,
     read_conditional_write: m.analysis_read_conditional_write,
+    conditional_read_write: m.analysis_conditional_read_write,
   } satisfies Record<DataAccess, typeof m.analysis_read>;
   const flagMessages = [
     ['read', m.analysis_flags_read],
@@ -109,8 +110,8 @@
           <dd>{flowMessages[detail.flow]({}, options)}</dd>
         </div>
         <div>
-          <dt>CPUID</dt>
-          <dd><code>{detail.cpuid.join(' · ') || '—'}</code></dd>
+          <dt>ISA</dt>
+          <dd><code>{detail.isa || '—'}</code></dd>
         </div>
         {#each flagMessages as [kind, message] (kind)}
           {@const flags = detail.flags[kind]}

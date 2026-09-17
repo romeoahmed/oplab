@@ -1,4 +1,3 @@
-import type { BuildIdentity } from './generated/BuildIdentity';
 import type { Counter } from './generated/Counter';
 import type { HexAddress } from './generated/HexAddress';
 
@@ -57,14 +56,16 @@ export function formatCounter(value: bigint): Counter {
   return value.toString();
 }
 
-/** Compare document, revision and all assembly settings before accepting a build. */
-export function sameBuildIdentity(left: BuildIdentity, right: BuildIdentity): boolean {
-  return (
-    left.document === right.document &&
-    left.revision === right.revision &&
-    left.target === right.target &&
-    left.base === right.base &&
-    left.assembler.name === right.assembler.name &&
-    left.assembler.version === right.assembler.version
-  );
+/**
+ * Parse unsigned decimal or 0x-prefixed input, allowing surrounding whitespace.
+ *
+ * @remarks
+ * The result is exact but not width-limited; callers enforce their own numeric bounds.
+ *
+ * @throws RangeError - The trimmed input is empty or contains invalid digits.
+ */
+export function parseUnsigned(value: string): bigint {
+  const text = value.trim();
+  if (!/^(?:[0-9]+|0x[\da-f]+)$/i.test(text)) throw new RangeError('Invalid unsigned integer');
+  return BigInt(text);
 }

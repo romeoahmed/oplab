@@ -91,7 +91,7 @@ pub enum Command {
     },
     /// Decode exact bytes from a known starting boundary.
     Decode {
-        /// Guest profile.
+        /// Guest architecture; static decoding is independent of runtime support.
         target: Target,
         /// First instruction address.
         base: HexAddress,

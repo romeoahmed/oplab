@@ -1,9 +1,15 @@
-//! Register initialization, integer edits and machine observations.
+//! Register initialization, live edits and machine observations.
 
 use crate::{address::Address, diagnostic::ValidationError, target::Target};
 
+mod bits;
 mod edit;
+mod rounding;
+mod vector;
+pub use bits::VectorBits;
 pub use edit::{RegisterEdit, RegisterStorage};
+pub use rounding::RoundingMode;
+pub use vector::{VectorEdit, VectorStorage};
 
 /// Canonical x86 general-purpose names in ISA encoding order.
 pub const X86_GPR_NAMES: [&str; 16] = [
@@ -71,12 +77,12 @@ impl InitialRegisters {
     }
 }
 
-/// Canonical integer and 128-bit SIMD registers captured between native execution slices.
+/// Canonical integer, vector and predicate registers captured between native execution slices.
 ///
 /// Flag values do not imply that every bit is architecturally defined by prior code.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MachineRegisters {
-    /// x86 long-mode registers, including the SSE bank (not AVX upper halves).
+    /// x86 long-mode registers, including the full AVX2 bank.
     X86_64 {
         /// ISA encoding order: RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI, R8 through R15.
         gpr: [u64; 16],
@@ -84,9 +90,9 @@ pub enum MachineRegisters {
         rip: Address,
         /// Raw RFLAGS, including reserved bits supplied by the processor model.
         rflags: u64,
-        /// XMM0–XMM15 as raw 128-bit values; lane zero occupies the low bits.
-        xmm: Box<[u128; 16]>,
-        /// Raw backend MXCSR; accrued floating-point exception flags may be incomplete.
+        /// YMM0–YMM15, 32 little-endian bytes each; XMM aliases their low half.
+        ymm: Box<[VectorBits; 16]>,
+        /// MXCSR control and accrued SIMD floating-point exception flags.
         mxcsr: u32,
     },
     /// A64 integer and SIMD registers; SP is distinct from the zero register.
@@ -99,8 +105,16 @@ pub enum MachineRegisters {
         pc: Address,
         /// Raw NZCV representation, with flags in bits 31 through 28.
         nzcv: u32,
-        /// V0–V31 as raw 128-bit values; scalar FP views alias this bank.
-        v: Box<[u128; 32]>,
+        /// Z0–Z31 at the maximum supported width; V aliases the low 128 bits.
+        z: Box<[VectorBits; 32]>,
+        /// P0–P15, one bit per vector byte at maximum width.
+        p: Box<[VectorBits; 16]>,
+        /// First-fault register, with the same layout as a predicate.
+        ffr: VectorBits,
+        /// Currently effective vector length in bytes.
+        vl: u16,
+        /// Maximum supported vector length in bytes.
+        max_vl: u16,
         /// Raw floating-point control.
         fpcr: u32,
         /// Raw floating-point exception status.

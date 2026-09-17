@@ -1,7 +1,7 @@
 # Engine contract
 
 This reference defines assembly syntax, static analysis, loading and execution.
-LLVM acceptance, decoder recognition and Unicorn execution support are separate
+LLVM acceptance, decoder recognition and QEMU/LLVM execution support are separate
 capabilities. See [development](development.md#native-toolchain) for build setup and
 [protocol](protocol.md) for wire and CLI interfaces.
 
@@ -17,24 +17,21 @@ The artifact retains both complete files and a bounded ELF-derived image view.
 Use LLVM's GNU-style assembly: Intel operands by default on x86_64 and LLVM/GNU
 syntax on little-endian AArch64. Source reaches LLVM unchanged. There is
 no NASM/MASM translation, custom preprocessor or per-instruction fallback.
-The built-in [x86_64](../examples/x86_64.s) and [AArch64](../examples/aarch64.s)
-programs copy eight signed integers from `.rodata` to `.bss`, insertion-sort them
-and compute their sum. Link at `0x1000` and stop at `done`: RAX or X0 and `total`
-contain 42; `output` contains `[-19, -7, 0, 2, 3, 8, 13, 42]` as little-endian
-64-bit integers. The first writable segment shows this array in the desktop.
+The bundled [x86_64](../examples/x86_64.s) and [AArch64](../examples/aarch64.s)
+programs brighten eight straight-alpha RGBA8 pixels: saturating RGB + 32, unchanged
+alpha. AVX2 handles eight pixels together; SVE2 uses a vector-length-agnostic loop
+with a predicated tail. Both use read-only input, BSS output and PC-relative
+relocations, with no stack or OS services.
 
-Both programs declare `_start`, function symbols and their own 16-byte-aligned
-stack storage. The sort is a leaf function using caller-saved registers and the
-integer argument registers of [System V AMD64](https://gitlab.com/x86-psABIs/x86-64-ABI)
-or [AAPCS64](https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst).
-These are self-contained guest programs; Oplab does not supply an OS process stack
-or an implicit return address. Execution stops before the `done` loop.
+Link at `0x1000` and stop before `done`. `output` contains 32 bytes, followed by a
+64-bit little-endian `checksum`; RAX/X0 also contains **4814** (`0x12ce`). The first
+pixel becomes `[32, 64, 96, 255]`; the third clips to `[255, 255, 255, 64]`. The
+initial memory view selects the writable segment. This is a byte transform, not
+linear-light exposure or premultiplied-alpha processing.
 
-x86 explicitly selects `.intel_syntax noprefix`, uses RIP-relative addresses and
-copies with `rep movsq`. `offset count` selects a symbolic immediate rather than
-a memory operand. AArch64 uses [page-relative relocations](https://sourceware.org/binutils/docs/as/AArch64_002dRelocations.html),
-post-indexed loads/stores and scaled register offsets. Array lengths derive from
-assembler expressions rather than duplicated numeric constants.
+x86 declares `.intel_syntax noprefix`; AArch64 declares `.arch armv9-a` and needs
+SVE2, not SVE2.1. Array lengths use assembler expressions. There is no scalar tail
+or intermediate sum buffer.
 
 GNU directives, labels, expressions, macros and pseudo-instructions remain toolchain
 owned. Use `.byte`, `.quad`, `.macro`/`.endm` and `.rept`/`.endr`.
@@ -60,11 +57,11 @@ can still require unsupported runtime behavior.
 Oplab validates ELF kind, architecture, byte order, section geometry, the `.text`
 anchor and load-segment ranges. Undefined symbols and unrepresentable relocations
 fail. An exclusive range end may equal `2^64`; emitted bytes may not wrap. ELF is
-portable guest data regardless of host OS. Guest instructions run in Unicorn.
+portable guest data regardless of host OS.
 
 ### Encodings and diagnostics
 
-There are no optimization passes. LLVM still selects legal encodings, expands
+Assembly does not run LLVM IR optimization passes. MC selects legal encodings, expands
 aliases/pseudo-instructions and relaxes assembler branches for final layout.
 Optional LLD relaxation is disabled. `mov rax, 42` retains a 64-bit operand;
 `movabs rax, 42` explicitly requests the 64-bit immediate form. Textual round trips
@@ -148,57 +145,24 @@ input ranges fail. Relative destinations retain the architecture's 64-bit wrappi
 arithmetic; they need not lie inside the input range or mapped memory. Analysis
 reads no machine state and changes no session.
 
-- x86 uses [iced-x86 instruction information](https://docs.rs/iced-x86/latest/iced_x86/struct.InstructionInfoFactory.html):
-  explicit/implicit register accesses, conditional accesses, memory widths,
-  control flow, direct destinations, CPUID identifiers and privileged classification.
-  Computed, cleared, set and undefined flags remain distinct. Save/restore
-  instructions explicitly mark their register list incomplete.
-- AArch64 uses [Capstone detail](https://docs.rs/capstone/latest/capstone/struct.InsnDetail.html):
-  reported register reads/writes, relative destinations, groups, NZCV updates and
-  base writeback. Register names retain backend aliases such as `lr`.
-- AArch64 memory operands have **unknown access direction and width**. The current
-  operand API has no width, and its access flags can conflate memory effects and
-  base writeback: `STR X0,[X1,#8]!` reports ReadWrite. Oplab does not expose that as
-  a data read or repair metadata with a handwritten opcode table. Literal loads
-  may have no memory operand in this API. An empty list is not proof of no access.
+- x86 uses [Intel XED](https://intelxed.github.io/ref-manual/): explicit/implicit
+  registers, conditional access, memory width, flags, control flow and an ISA-set
+  identifier. Save/restore operations can report incomplete register effects.
+- AArch64 uses LLVM MC instruction descriptors and `MCInstrAnalysis`: register
+  operands, implicit uses/defs, branch destinations, NZCV and tied-register
+  writeback. Memory direction comes from `mayLoad`/`mayStore`; width remains unknown.
+  Control-flow groups are not inferred extension requirements.
 
-Access lists contain reported data reads/writes, including conditional accesses.
-Unknown access is distinct from an absent entry. iced-x86 omits operands classified
-as `None` or [`NoMemAccess`](https://docs.rs/iced-x86/latest/iced_x86/enum.OpAccess.html#variant.NoMemAccess)
-from its used-access lists; Oplab does not turn them into unknown data accesses.
-This classification is backend-specific, not a complete inventory of cache or
-translation effects. Memory sizes describe operands, not measured traffic, total
-REP traffic or cache-line extents. Address expressions, branch conditions and
-effective addresses are not evaluated. A null branch target may mean indirect
-control or an unreported destination, not fallthrough.
-Unreported effects and partial state prevent treating this metadata as a complete
-ISA model, source provenance or evidence of retired instructions.
-
-### Verified capability samples
-
-The analysis suite compares LLVM output with fixed architectural encodings and
-checks the available decoder metadata. These are representative instructions,
-not blanket extension-support claims. Exact dependency releases remain in lockfiles.
-
-| Guest / sample                                           | Assembly and recognition             | Static metadata                                                              | Execution evidence                                       |
-| -------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------- |
-| x86_64 integer arithmetic, branches and stack operations | Verified                             | Registers, memory, flags and control flow                                    | Existing integer/session tests; stack policy is explicit |
-| x86_64 SSE2 `PXOR`                                       | Verified                             | SSE2 tag and register effects                                                | SIMD initialization/FP-status tests                      |
-| x86_64 AVX `VADDPS`                                      | Verified                             | AVX tag and register effects                                                 | Not verified by this matrix                              |
-| AArch64 integer arithmetic, branches and writeback       | Verified                             | Registers, flags, destinations and writeback; memory direction/width unknown | Existing integer/session tests                           |
-| AArch64 Advanced SIMD `ADD`                              | Verified                             | NEON group                                                                   | Packed lane arithmetic on Cortex-A53/A72                 |
-| AArch64 crypto `AESE`                                    | Verified with `.arch armv8-a+crypto` | Crypto group                                                                 | Not verified by this matrix                              |
-| AArch64 SVE `PTRUE`                                      | Verified with `.arch armv8-a+sve`    | No SVE group returned by the current backend                                 | Not verified by this matrix                              |
-
-CPUID identifiers describe x86 decoder requirements. Capstone groups are a different,
-incomplete taxonomy; no groups does not mean no extension is required. Neither
-selects an emulator CPU or guarantees execution. CPU profiles affect execution only;
-they do not change LLVM assembly or decoder recognition. Broader ISA coverage remains planned.
+Metadata is conservative and static. Missing facts do not prove absence of effects;
+operand widths do not measure traffic, REP totals or cache-line extents. Effective
+addresses and branch conditions are not evaluated. Recognition does not establish
+execution support. MAX is bounded by QEMU's implemented TCG features and Oplab's
+validated lowering; in particular QEMU 11.1.1 TCG does not provide AVX-512 execution.
 
 ## Loading
 
 `LoadPlan::from_elf` validates an image before guest allocation.
-`Machine::from_elf` queries Unicorn's page size, applies the plan's permissions,
+`Machine::load` uses 4-KiB guest pages, applies the plan's permissions,
 initializes memory and sets the program counter. A successful assembly and a
 successful load are distinct outcomes.
 
@@ -246,7 +210,7 @@ experiment loader, not a general operating-system executable loader.
 | Debugger read/write  | 64 KiB, within one mapping |
 
 These are separate from assembly's tighter emission limits. Host initialization
-through `mem_write` does not grant guest write access to RX pages. Debugger reads
+through native mapped RAM does not grant guest write access to RX pages. Debugger reads
 can inspect mapped execute-only/guard pages without altering guest permissions.
 Unmapped reads fail; they never synthesize zero bytes.
 
@@ -266,7 +230,7 @@ fetch geometry, not decoding or instruction boundaries. Completion remains expli
 Desktop, worker and CLI expose raw execution through this same loader. Importing
 bytes alone never starts or replaces a session.
 
-`MachineSetup` optionally selects a CPU profile and supplies an architecture-shaped
+`MachineSetup` supplies an optional architecture-shaped
 `InitialRegisters` bank and additional `InitialMapping` regions. Canonical names are
 lowercase: the 16 x86 GPRs (including `rsp`), or `x0`–`x30` and separate `sp`.
 Unspecified GPRs in an explicit bank are zero. Aliases, duplicate names, PC, flags and wrong-target banks
@@ -289,10 +253,10 @@ the active machine; they do not alter this retained setup.
 
 ## Execution
 
-A `Session` binds a loaded Unicorn machine to explicit execution policy.
+A `Session` binds a loaded QEMU machine to explicit execution policy.
 The native owner is neither `Send` nor `Sync` and cannot be cloned. Construct it on
-its execution thread. Drops clean up successful and partially initialized native state. Desktop
-code accesses it only through the worker.
+its execution thread; dropping it releases its native state. Desktop code accesses
+it only through the worker.
 
 ### Control, completion and accounting
 
@@ -313,56 +277,37 @@ failure cannot imply completion.
 
 Instruction count means **observed starts**, not retired instructions. A started
 instruction may fault. Fetch/decode failures can happen before a start is observed.
-A separate checked dispatch counter measures native work. An asynchronous native
-timer can stop between a pre-execution hook and effects, so it is not used to infer
-exact step/count semantics. Tests verify actual Unicorn effects independently.
+A separate checked dispatch counter measures native work. Each translated block
+contains one instruction. QEMU's single-step translation limits REP to one iteration;
+its resume state distinguishes repeated work from ordinary self-loops. REP consumes
+one instruction budget and does not retrigger its breakpoint on each iteration.
 
-REP iterations at the same address with the same bytes belong to one instruction.
-They do not consume another instruction budget or retrigger its breakpoint. An
-ordinary self-loop is a new start each visit; address alone cannot identify REP.
-The decoder classifies control behavior; Unicorn implements instruction effects.
+Completion and breakpoint policy run before translation. A branch step can pause at
+an unmapped destination; the next step reports the fetch fault. Admitted-instruction
+data faults remain immediate. Native exceptions stay within C execution frames,
+with QEMU's instruction-boundary metadata restoring precise guest state.
 
-Native exits at completion and executable mapping ends prevent translation
-read-ahead from faulting before a valid final instruction executes. At a mapping
-end the next slice removes that auxiliary exit and attempts the requested fetch.
-Changing exit sets flushes translated blocks. Only a post-dispatch-limit fetch
-fault is deferred to the next slice; admitted-instruction data faults remain immediate.
-A step can therefore pause at an unmapped destination and fault on the next step
-without starting another instruction.
+### Runtime and SIMD
 
-### CPU profiles and SIMD
+Each architecture uses its QEMU MAX runtime; there is no separate CPU selection.
+MAX is a functional virtual CPU, not a cycle-accurate model or a promise to execute
+every published extension.
+Guests run at x86 CPL3 or AArch64 EL0 without APIC devices, SMP, an OS or firmware.
+The adapter uses QEMU system translators; it does not launch QEMU user-mode executables.
 
-The loader explicitly selects Haswell (default) or Nehalem for x86_64, and
-Cortex-A72 (default) or Cortex-A53 for AArch64. A wrong-target profile is rejected
-before replacing a session. Reset preserves the resolved profile. These are
-Unicorn models, not cycle-accurate processors or promises of complete ISA support.
+Load and reset initialize x86 long mode at CPL3, enable native SSE/AVX controls and
+available XCR0 state, and set MXCSR to `0x1f80`. AArch64 starts at EL0 with native
+FP/Advanced SIMD and SVE access enabled; FPCR/FPSR start at zero. Vector storage
+starts at zero. No host floating-point environment is copied into the guest.
 
-The application floating-point environment is initialized on load and reset:
-
-- x86 enables CR4.OSFXSR and CR4.OSXMMEXCPT, preserving other CR4 bits, and sets
-  MXCSR to `0x1f80`: nearest-even rounding, masked exceptions, no flush-to-zero or
-  denormals-are-zero, cleared status. In Unicorn 2.1.5, Nehalem's default CR4 does
-  not enable SSE, so relying on native reset defaults is insufficient.
-- AArch64 sets CPACR_EL1.FPEN to `0b11` and initializes FPCR/FPSR to zero.
-  This enables FP/Advanced SIMD with nearest-even rounding and cleared status.
-- Vector storage starts at zero. Guest instructions may alter these controls;
-  observations report the resulting raw bits. No host floating-point environment
-  is copied into the guest.
-
-The adapter follows [Unicorn's register/control API](https://docs.rs/unicorn-engine/latest/unicorn_engine/struct.Unicorn.html)
-and its resolved native implementation. Architectural controls follow the
-[Intel SDM](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html)
-and Arm's AArch64 system-register definitions.
-
-The [verification record](roadmap.md#verification) covers profile identity, register
-banks, arithmetic, rounding, guest stores and reset. AArch64 reports inexact and
-divide-by-zero status in the tested cases.
-Unicorn 2.1.5 does not merge accrued SSE exception flags into MXCSR: both register
-reads and guest `stmxcsr` omit them. Rounding controls work, but the displayed
-status is not reliable floating-point exception history.
-Oplab reports the public register API unchanged; it does not inspect private
-backend layouts or execute hidden guest instructions to manufacture flags. These
-samples do not establish complete SSE/NEON, AVX or SVE support.
+QEMU owns floating-point helpers, rounding and exception status. The x86 adapter
+synchronizes native SoftFloat status into MXCSR before observation. Scalar/packed
+arithmetic, all rounding directions, guest stores and reset have independent tests.
+AVX2 and predicated SVE lane arithmetic are tested through independent guest
+memory results. Observations include full YMM and Z/P/FFR storage. SVE length
+comes from QEMU: the current effective length and maximum storage length are
+reported separately. These samples do not establish full extension, NaN, denormal
+or exception coverage.
 
 ### Breakpoints, observations and reset
 
@@ -376,22 +321,28 @@ observations carry the authoritative sorted set; repeated adds/removals are
 idempotent, and rejected changes leave it intact. Source breakpoints and watchpoints
 remain planned.
 
-Observations capture the resolved CPU, canonical x86_64 GPRs/RIP/RFLAGS and
-XMM0–XMM15/MXCSR, or AArch64 X0–X30/SP/PC/NZCV and V0–V31/FPCR/FPSR, together
+Observations capture canonical x86_64 GPRs/RIP/RFLAGS and
+YMM0–YMM15/MXCSR, or AArch64 X0–X30/SP/PC/NZCV, Z0–Z31, P0–P15, FFR,
+current/max vector lengths and FPCR/FPSR, together
 with status, counters, faults and optional memory at one owner boundary.
 Array order is defined in `oplab-core::registers`. Subregister effects appear in
 canonical storage, including effects of live alias writes. Raw flags make no
-architectural-definedness claim. SIMD values preserve all 128 raw bits; lane zero
-occupies the least-significant bits. x87, AVX upper halves, AVX-512, SVE and other
-system state are not captured, so observations are not full CPU snapshots.
+architectural-definedness claim. SIMD values preserve all 256 YMM bits or all
+maximum-length SVE storage (up to 2048 bits per Z register). Lane zero occupies
+the least-significant bits. XMM/V views are low 128-bit aliases. P/FFR use one
+predicate bit per vector byte; `.h`, `.s` and `.d` views select bits at strides
+2, 4 and 8. x87, SME matrix and other system state are not captured, so
+observations are not full CPU snapshots.
 
-Faults distinguish unmapped, prohibited and unaligned access, invalid instructions
-and processor exceptions, retaining access address/width where available. PC is an
-observation, not inferred source provenance. Partial guest effects remain visible.
+Faults distinguish unmapped, prohibited and unaligned access, invalid instructions,
+unsupported lowering and processor exceptions. Fault PC identifies the instruction
+whose translation or execution failed; access address/width are retained when
+available. Neither supplies source provenance. Partial effects remain visible.
 An unusable native machine produces Crashed and null registers. Process loss is
 reported separately by the supervisor. Syscall/sysenter,
-software environment requests, port I/O and wait/halt terminate as
-UnsupportedEnvironment without acquiring host services. This is not an OS ABI or
+software environment requests and architectural wait exits terminate as
+UnsupportedEnvironment without acquiring host services. Privileged x86 port I/O
+and HLT at CPL3 retain QEMU's processor exception. This is not an OS ABI or
 a promise of arbitrary privileged-instruction support.
 
 Reset constructs a fresh machine from the initial image, restores processor/memory
@@ -406,7 +357,7 @@ tracks containment and distribution work.
 
 ### Live editing
 
-`Session::write_register` and `Session::write_memory` accept Ready and Paused
+`Session::write_register`, `write_vector`, `set_rounding` and `write_memory` accept Ready and Paused
 sessions, including breakpoint/step pauses. Running, terminated and crashed
 sessions reject writes. Inputs are validated before native mutation. These are
 explicit debugger operations, independent of source, artifacts and initial setup.
@@ -430,9 +381,34 @@ The pure register policy implements architectural operand widths; the native ada
 merges into canonical storage rather than depending on debugger API alias behavior.
 See [Intel's architecture manuals](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html)
 and [Arm's NZCV definition](https://developer.arm.com/documentation/ddi0601/latest/AArch64-Registers/NZCV--Condition-Flags).
-Whole RFLAGS/NZCV, system registers, EIP/IP and zero-register writes are rejected;
-SIMD is not yet editable. Initial setup remains canonical-only to prevent overlapping
-assignments from depending on order.
+Whole RFLAGS/NZCV, unrestricted system-register, EIP/IP and zero-register writes are rejected;
+initial setup remains canonical-only to prevent overlapping assignments from depending
+on order.
+
+`write_vector` edits YMM0–15 or Z0–31, with XMM0–15 and V0–31 as low
+128-bit aliases. Vector writes replace the selected register or one
+8/16/32/64/128-bit lane. P0–15 and FFR accept full active predicates or single
+bits. Full-width writes require lane zero; other indices must fit the selected
+register at the current vector length. Values have the exact byte width of the
+write, with unused bits zero for one-bit writes.
+
+The owner reads current native storage and merges before writing. Unselected
+lanes, upper alias bits and inactive SVE storage survive. These are raw debugger
+edits, not scalar guest instructions that may clear neighboring bits. AArch64
+scalar aliases are not write targets. Native storage is little-endian; wire hex
+is most-significant first. The desktop offers integer lanes and native IEEE-754
+f16/f32/f64 conversion; predicates offer byte/halfword/word/doubleword views.
+
+`set_rounding` changes only MXCSR bits 14:13 or FPCR bits 23:22. Nearest-even,
+toward negative infinity, toward positive infinity and toward zero map to their
+architectural encodings; x86 and AArch64 swap the two directed encodings.
+Other controls and status survive. Instructions with explicit rounding and x87
+state are unaffected. Reset restores nearest-even and the zeroed SIMD bank.
+The desktop uses JavaScript's standard IEEE-754 conversion for typed float inputs,
+independent of guest rounding. Signed zero is preserved; raw hex is required for
+exact NaN payloads. Encoding overflow is rejected instead of silently becoming
+infinity; explicit Infinity is accepted. Subnormal rounding/underflow follows
+`DataView`, with the encoded bits shown before submission.
 
 GPR and flag edits preserve interrupted REP continuation and instruction accounting.
 Writing PC, **even to its current value**, abandons continuation and rearms address
@@ -444,12 +420,11 @@ and initial flags.
 
 Memory writes accept 1–65,536 bytes in one mapped region, including RX and guard
 pages. They do not change mapping permissions or require guest write access.
-Executable writes invalidate overlapping translations through Unicorn's
-[`ctl_remove_cache`](https://docs.rs/unicorn-engine/latest/unicorn_engine/struct.Unicorn.html#method.ctl_remove_cache).
-The API takes an exclusive `u64` end; a patch ending at `2^64` uses a full cache flush.
-Writes occur outside native execution, so no in-hook PC rewrite is needed; see
-[Unicorn's cache guidance](https://github.com/unicorn-engine/unicorn/wiki/FAQ#editing-an-instruction-doesnt-take-effecthooks-added-during-emulation-are-not-called).
-This is debugger patching, not a general self-modifying-code guarantee.
+Debugger writes clear the bounded ORC cache; writes to executable mappings also
+clear pending REP continuation. Each dispatch re-translates using
+current CPU state and bytes before reusing compiled code, so guest-written code
+cannot reuse a block solely by PC. Broader self-modifying-code patterns still
+require explicit acceptance.
 
 Writes preserve counters, completion policy, generation and breakpoints. Reset
 restores original bytes and initial registers. Validation failures leave the

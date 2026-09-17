@@ -1,12 +1,12 @@
 .breakpoints {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   margin-block: 16px;
 
   h3 {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     font-size: 12px;
   }
 
@@ -18,7 +18,7 @@
 
   form {
     display: flex;
-    gap: 6px;
+    gap: 8px;
   }
 
   input {

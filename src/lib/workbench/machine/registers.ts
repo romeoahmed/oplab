@@ -1,6 +1,29 @@
 import type { Target } from '$lib/protocol/generated/Target';
 
-import { registerNames } from './setup';
+const x86Names = [
+  'rax',
+  'rcx',
+  'rdx',
+  'rbx',
+  'rsp',
+  'rbp',
+  'rsi',
+  'rdi',
+  'r8',
+  'r9',
+  'r10',
+  'r11',
+  'r12',
+  'r13',
+  'r14',
+  'r15',
+];
+const aarch64Names = [...Array.from({ length: 31 }, (_, index) => `x${String(index)}`), 'sp'];
+
+/** Canonical GPR names in display order; AArch64 appends SP after X0–X30. */
+export function registerNames(target: Target): readonly string[] {
+  return target === 'x86_64' ? x86Names : aarch64Names;
+}
 
 type RegisterGroup = { kind: '64' | '32' | '16' | '8' | 'pc' | 'flags'; names: readonly string[] };
 

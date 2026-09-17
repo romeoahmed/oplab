@@ -36,8 +36,10 @@
     <label class="sr-only" for={id}>{m.breakpoint_address({}, options)}</label>
     <input {id} required bind:value={address} spellcheck="false" placeholder="0x1000" />
     <button
+      class="icon-button"
       disabled={disabled || addresses.length >= 256}
-      aria-label={m.add_breakpoint({}, options)}><Plus size={15} aria-hidden="true" /></button
+      aria-label={m.add_breakpoint({}, options)}
+      title={m.add_breakpoint({}, options)}><Plus size={15} aria-hidden="true" /></button
     >
   </form>
   {#if addresses.length === 0}<p class="muted-note">{m.breakpoints_hint({}, options)}</p>{:else}
@@ -50,6 +52,7 @@
               onchange(item, false);
             }}
             aria-label={m.remove_breakpoint({ address: item }, options)}
+            title={m.remove_breakpoint({ address: item }, options)}
             ><Trash size={14} aria-hidden="true" /></button
           >
         </li>{/each}

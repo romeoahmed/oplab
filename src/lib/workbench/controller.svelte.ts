@@ -11,21 +11,24 @@ import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAna
 import type { LoadImage } from '$lib/protocol/generated/LoadImage';
 import type { MemoryWindow } from '$lib/protocol/generated/MemoryWindow';
 import type { Observation } from '$lib/protocol/generated/Observation';
+import type { RoundingMode } from '$lib/protocol/generated/RoundingMode';
 import type { SessionAction } from '$lib/protocol/generated/SessionAction';
 import type { StreamEvent } from '$lib/protocol/generated/StreamEvent';
 import type { Target } from '$lib/protocol/generated/Target';
+import type { VectorWrite } from '$lib/protocol/generated/VectorWrite';
+import { sameBuildIdentity } from '$lib/protocol/identity';
 import { applyObservation } from '$lib/protocol/observations';
 import {
   normalizeAddress,
   formatCounter,
   parseCounter,
-  sameBuildIdentity,
+  parseUnsigned,
 } from '$lib/protocol/scalars';
 
 import aarch64 from '../../../examples/aarch64.s?raw';
 import x86_64 from '../../../examples/x86_64.s?raw';
+import { initialState, type InitialInput } from './load/initial-state';
 import { initialMemory, patchBytes } from './machine/memory';
-import { initialState, unsigned, type SetupInput } from './machine/setup';
 import { readScratch } from './scratch';
 
 type Stream = { event: StreamEvent; memory: Uint8Array | null };
@@ -59,14 +62,14 @@ export const examples: Record<Target, string> = {
  * artifacts and snapshots are read-only by convention, including their byte buffers.
  */
 export function createWorkbench(factory: Factory = desktopWorker) {
-  let source = $state(examples.x86_64);
+  let source = $state('');
   let target = $state<Target>('x86_64');
   let base = $state('0x1000');
   let completion = $state('done');
   let budget = $state('1000000');
-  const setups = $state<Record<Target, SetupInput>>({
-    x86_64: { cpu: null, registers: [], mappings: [] },
-    aarch64: { cpu: null, registers: [], mappings: [] },
+  const setups = $state<Record<Target, InitialInput>>({
+    x86_64: { registers: [], mappings: [] },
+    aarch64: { registers: [], mappings: [] },
   });
   let memoryAddress = $state('0x2000');
   let memoryLength = $state(64);
@@ -498,15 +501,17 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     try {
       localStorage.setItem(
         'oplab.scratch.v1',
-        JSON.stringify({
-          documentId,
-          source,
-          target,
-          base,
-          completion,
-          budget,
-          revision: formatCounter(revision),
-        }),
+        JSON.stringify(
+          readScratch({
+            documentId,
+            source,
+            target,
+            base,
+            completion,
+            budget,
+            revision: formatCounter(revision),
+          }),
+        ),
       );
       storageFailed = false;
     } catch {
@@ -576,7 +581,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     get setup() {
       return setups[target];
     },
-    set setup(value: SetupInput) {
+    set setup(value: InitialInput) {
       setups[target] = value;
     },
     get budget() {
@@ -660,7 +665,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     get rawSetup() {
       return setups[raw.target];
     },
-    set rawSetup(value: SetupInput) {
+    set rawSetup(value: InitialInput) {
       setups[raw.target] = value;
     },
     importBinary(bytes: Uint8Array) {
@@ -672,11 +677,17 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       try {
         await execute({
           type: 'write_register',
-          data: { name, value: formatCounter(unsigned(value)) },
+          data: { name, value: formatCounter(parseUnsigned(value)) },
         });
       } catch (error) {
         report(error);
       }
+    },
+    async setRounding(mode: RoundingMode) {
+      await execute({ type: 'set_rounding', data: mode });
+    },
+    async writeVector(write: VectorWrite) {
+      await execute({ type: 'write_vector', data: write });
     },
     async writeMemory(address: string, text: string) {
       try {

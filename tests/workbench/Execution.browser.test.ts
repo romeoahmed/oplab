@@ -112,7 +112,7 @@ test.each([
         target,
         completion: `0x${completion.slice(2).padStart(16, '0')}`,
         image_bytes: bytes.length,
-        initial: { cpu: null, registers: [], mappings: [] },
+        initial: { registers: [], mappings: [] },
         replace: initial.key,
       },
     });
@@ -202,6 +202,7 @@ test('controls preserve captures; changed bytes and reset invalidate decoded ins
   const add = page.getByRole('button', { name: en.add_breakpoint });
   await expect.element(add).toBeEnabled();
   await expect.poll(() => subscriptions.length).toBe(1);
+  await page.getByRole('button', { name: en.toggle_panel }).click();
   await page.getByRole('textbox', { name: en.address, exact: true }).fill('invalid');
   await page.getByRole('button', { name: en.inspect_memory }).click();
   await expect.element(page.getByRole('alert')).toBeVisible();
@@ -419,6 +420,7 @@ test.each([
     await expect.element(register).toHaveValue(name);
     await page.getByRole('button', { name: copy.close, exact: true }).click();
     await expect.element(page.getByText('ffffffffffffffff', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: copy.toggle_panel }).click();
     await page.getByRole('button', { name: copy.write_memory, exact: true }).click();
     await page.getByRole('textbox', { name: copy.patch_address }).fill('1000');
     const hex = page.getByRole('textbox', { name: copy.patch_bytes });
@@ -526,6 +528,7 @@ test.each([
         detach: () => {},
       }),
     });
+    await page.getByRole('button', { name: copy.toggle_panel }).click();
     await page.getByRole('tab', { name: copy.instructions, exact: true }).click();
     await page.getByRole('button', { name: copy.disassemble, exact: true }).click();
     const move = page.getByRole('button', {

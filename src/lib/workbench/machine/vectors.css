@@ -1,28 +1,24 @@
-.vector-format {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.vector-scope {
+  margin-block-end: 16px;
   font-size: 12px;
+}
+
+.vector-toolbar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  label {
+    display: grid;
+    flex: 1;
+    gap: 6px;
+    font-size: 12px;
+    min-inline-size: 100px;
+  }
 }
 
 .vector-bank {
   margin-block: 12px;
-
-  > div {
-    padding-block: 8px;
-    border-block-end: 1px solid var(--border);
-  }
-
-  dt {
-    margin-block-end: 4px;
-    color: var(--muted);
-    font: 11px var(--mono);
-  }
-
-  dd {
-    margin: 0;
-  }
 }
 
 .vector-bits {
@@ -52,5 +48,70 @@
   code {
     overflow-wrap: anywhere;
     font-size: 12px;
+  }
+}
+
+.vector-preview {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--surface-raised);
+  font-size: 12px;
+
+  span {
+    color: var(--muted);
+  }
+
+  code {
+    max-block-size: 6lh;
+    overflow: auto;
+    overflow-wrap: anywhere;
+  }
+}
+
+.vector-rounding {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin-block-start: 12px;
+
+  label {
+    display: grid;
+    flex: 1;
+    gap: 6px;
+    min-inline-size: 0;
+    font-size: 12px;
+  }
+
+  select {
+    min-inline-size: 0;
+    inline-size: 100%;
+  }
+}
+
+.vector-register {
+  padding-block: 8px;
+  border-block-end: 1px solid var(--border);
+
+  summary {
+    cursor: pointer;
+    font: 11px var(--mono);
+    color: var(--muted);
+
+    span {
+      display: inline-block;
+      min-inline-size: 4ch;
+      margin-inline-end: 8px;
+    }
+
+    code {
+      color: var(--text);
+      overflow-wrap: anywhere;
+    }
+  }
+
+  &[open] summary {
+    margin-block-end: 8px;
   }
 }

@@ -196,6 +196,7 @@ impl Service {
     pub(crate) fn connect(
         &self,
         executable: &Path,
+        runtime: &Path,
         channel: Channel,
         restart: bool,
     ) -> Result<ConnectionInfo> {
@@ -212,7 +213,7 @@ impl Service {
                 .checked_add(1)
                 .ok_or_else(|| DesktopFailure::new(FailureCode::Protocol))?;
             service.incarnation = id;
-            let connection = process::spawn(executable, Counter::new(id))?;
+            let connection = process::spawn(executable, runtime, Counter::new(id))?;
             let message = connection
                 .request(Counter::new(0), Command::Hello { version: VERSION }, None)?
                 .wait()?;

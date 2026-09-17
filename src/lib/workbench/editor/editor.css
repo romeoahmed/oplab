@@ -1,5 +1,6 @@
 .editor {
-  block-size: 100%;
+  position: relative;
+  flex: 1;
   min-block-size: 0;
 
   .cm-editor {
@@ -10,7 +11,8 @@
 
   .cm-scroller {
     overflow: auto;
-    font: var(--editor-size, 14px)/1.8 var(--mono);
+    overscroll-behavior: contain;
+    font: var(--editor-size, 14px)/1.65 var(--mono);
     font-variant-ligatures: none;
   }
 
@@ -18,15 +20,22 @@
     padding-block: 12px 32px;
   }
 
+  .cm-placeholder {
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 13px;
+    white-space: pre-wrap;
+  }
+
   .cm-line {
-    padding-inline: 18px;
+    padding-inline: 12px;
   }
 
   .cm-gutters {
     background: transparent;
     color: var(--muted);
     border: 0;
-    padding-inline: 12px 6px;
+    padding-inline: 6px 4px;
     font-size: 11px;
   }
 
@@ -51,7 +60,8 @@
   .cm-selectionMatch,
   .cm-matchingBracket {
     background: var(--selection);
-    outline: 1px solid var(--accent);
+    border-radius: 2px;
+    outline: 1px solid color-mix(in oklch, var(--accent), transparent 55%);
   }
 
   .cm-tooltip,
@@ -60,17 +70,6 @@
     color: var(--text);
     border-color: var(--border);
     font: 12px/1.6 var(--system-mono);
-  }
-
-  .cm-panels {
-    padding: 6px;
-  }
-
-  .cm-search label {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    margin-inline-end: 8px;
   }
 
   .cm-textfield {
@@ -84,8 +83,254 @@
     font-size: 11px;
   }
 
-  .cm-tooltip-autocomplete ul li[aria-selected] {
+  .cm-tooltip-autocomplete ul li[aria-selected='true'] {
     background: var(--selection);
     color: var(--text);
   }
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  gap: 8px;
+  padding: 4px var(--pane-inset, 16px);
+  color: var(--muted);
+  font-size: 11px;
+  border-block-end: 1px solid color-mix(in oklch, var(--border), transparent 55%);
+
+  > div {
+    display: flex;
+    gap: 4px;
+  }
+
+  .icon-button {
+    min-block-size: 28px;
+    min-inline-size: 28px;
+    padding: 4px;
+  }
+}
+
+.editor .cm-foldPlaceholder {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--syntax-directive);
+  border-radius: 4px;
+  padding-inline: 6px;
+}
+
+.editor .cm-tooltip-autocomplete {
+  border-radius: 6px;
+  box-shadow: 0 8px 24px #0005;
+  overflow: hidden;
+}
+
+.editor .cm-completionLabel {
+  font-family: var(--mono);
+}
+
+.editor .cm-completionMatchedText {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.editor-search-panel {
+  padding: 6px;
+}
+
+.editor .editor-panels {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 12px;
+  z-index: 5;
+  inline-size: min(460px, calc(100% - 24px));
+  pointer-events: none;
+}
+
+.editor-panel-host {
+  align-items: end;
+  gap: 6px;
+}
+
+.editor .editor-panels .cm-panels {
+  position: static;
+  inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.editor-panels .cm-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px #0004;
+}
+
+.editor .editor-panels .cm-panels-bottom:has(> .cm-goto-line) {
+  inline-size: min(300px, 100%);
+}
+
+.editor-panels .cm-dialog {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  font: 12px/1.5 var(--sans);
+
+  form,
+  label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  label {
+    font-size: inherit;
+    white-space: nowrap;
+    padding-inline-start: 4px;
+  }
+
+  .cm-textfield {
+    inline-size: 0;
+    flex: 1;
+    min-block-size: 32px;
+    padding: 4px 6px;
+    border-radius: 5px;
+    color: var(--text);
+    font: 12px var(--mono);
+  }
+
+  .cm-textfield:focus-visible {
+    outline: 0;
+    border-color: var(--accent);
+  }
+
+  .cm-button,
+  .cm-dialog-close {
+    position: static;
+    min-block-size: 28px;
+    min-inline-size: 28px;
+    padding: 4px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+  }
+
+  .cm-dialog-close {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  button:hover {
+    color: var(--accent);
+    background: var(--selection);
+  }
+}
+
+.editor-search .search-feedback {
+  margin: 0 32px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.editor-search .search-feedback.invalid {
+  color: var(--error);
+}
+
+.editor-search {
+  display: grid;
+  gap: 4px;
+  font: 12px/1.5 var(--sans);
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-inline-size: 0;
+  padding-inline: 3px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-deep);
+}
+
+.search-field:focus-within {
+  border-color: var(--accent);
+}
+
+.search-field.invalid {
+  border-color: var(--error);
+}
+
+.editor-search input {
+  flex: 1;
+  inline-size: 0;
+  min-inline-size: 40px;
+  min-block-size: 30px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 12px var(--mono);
+  outline: none;
+}
+
+.editor-search .icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-inline-size: 28px;
+  min-block-size: 28px;
+  padding: 4px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.editor-search .search-field .icon-button {
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  padding: 3px;
+}
+
+.editor-search .icon-button:disabled {
+  opacity: 0.4;
+}
+
+.editor-search .icon-button:hover:enabled,
+.editor-search .icon-button[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--selection);
+}
+
+.replace-toggle[data-state='open'] svg {
+  rotate: 90deg;
+}
+
+.replace-row {
+  margin-inline: 32px;
+}
+
+.editor .cm-searchMatch {
+  background: color-mix(in oklch, var(--warning), transparent 82%);
+  outline: 1px solid color-mix(in oklch, var(--warning), transparent 65%);
+}
+
+.editor .cm-searchMatch-selected {
+  background: color-mix(in oklch, var(--warning), transparent 65%);
 }

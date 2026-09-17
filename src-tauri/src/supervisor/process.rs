@@ -24,9 +24,10 @@ use std::{
 };
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
-pub(super) fn spawn(executable: &Path, id: Counter) -> Result<Connection> {
+pub(super) fn spawn(executable: &Path, runtime: &Path, id: Counter) -> Result<Connection> {
     let mut command = ProcessCommand::new(executable);
     command
+        .env("OPLAB_QEMU_DIR", runtime)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

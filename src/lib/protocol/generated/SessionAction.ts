@@ -2,6 +2,8 @@
 import type { HexAddress } from './HexAddress.js';
 import type { MemoryWindow } from './MemoryWindow.js';
 import type { RegisterValue } from './RegisterValue.js';
+import type { RoundingMode } from './RoundingMode.js';
+import type { VectorWrite } from './VectorWrite.js';
 
 /**
  * Session operations applied between native execution slices.
@@ -15,6 +17,8 @@ export type SessionAction =
   | { type: 'cancel' }
   | { type: 'reset' }
   | { type: 'write_register'; data: RegisterValue }
+  | { type: 'write_vector'; data: VectorWrite }
+  | { type: 'set_rounding'; data: RoundingMode }
   | { type: 'write_memory'; data: MemoryWindow }
   | {
       type: 'breakpoint';

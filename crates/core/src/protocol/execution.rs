@@ -1,10 +1,9 @@
 //! Exact session identities and coherent observations at the wire boundary.
 
-use super::scalar::{Counter, HexAddress, VectorBits};
+use super::scalar::{Counter, HexAddress};
 use crate::{
     execution::{FaultKind, GuestFault, Termination},
-    registers::MachineRegisters,
-    target::CpuModel,
+    registers::{MachineRegisters, RoundingMode, VectorBits},
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -33,8 +32,6 @@ pub enum LoadImage {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct InitialState {
-    /// Null selects Haswell for `x86_64` or Cortex-A72 for `AArch64`.
-    pub cpu: Option<CpuModel>,
     /// Distinct canonical GPR names; omitted registers are zero. Maximum 32 entries.
     pub registers: Vec<RegisterValue>,
     /// Additional zero-filled regions, disjoint from image pages and each other.
@@ -50,6 +47,21 @@ pub struct RegisterValue {
     pub name: String,
     /// Exact unsigned value, limited to the selected register's width; flags use 0 or 1.
     pub value: Counter,
+}
+
+/// One SIMD storage edit; integer signedness and floating-point parsing belong to the client.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct VectorWrite {
+    /// Lowercase XMM/YMM0–15, V/Z0–31, P0–15 or FFR name for the loaded target.
+    pub name: String,
+    /// Lane width in bits: vectors use 8/16/32/64/128, predicates use 1.
+    /// Full-register writes use the selected alias width and lane zero.
+    pub width: u16,
+    /// Zero-based lane from the least-significant end, bounded by the current vector length.
+    pub lane: u16,
+    /// Unshifted raw bits: exactly ceil(width / 8) bytes; unused high bits must be zero.
+    pub value: VectorBits,
 }
 
 /// Additional guest memory; no stack or other ABI role is inferred.
@@ -113,6 +125,12 @@ pub enum SessionAction {
     ///
     /// Reset restores initial state. PC writes rearm breakpoints and end REP continuation.
     WriteRegister(RegisterValue),
+    /// Replace a SIMD register or lane while ready/paused, preserving other lanes.
+    ///
+    /// Merging uses current native storage. Reset restores the initial bank.
+    WriteVector(VectorWrite),
+    /// Update only MXCSR.RC or FPCR.RMode while ready/paused; reset restores nearest-even.
+    SetRounding(RoundingMode),
     /// Write 1–65,536 bytes from following binary frames while ready or paused.
     ///
     /// Guest permissions remain unchanged; executable translations are invalidated.
@@ -158,9 +176,9 @@ pub enum Status {
     Crashed,
 }
 
-/// Coherent integer and 128-bit SIMD banks.
+/// Coherent integer, vector and predicate banks.
 ///
-/// 64-bit register values use decimal strings, addresses and vectors use fixed-width
+/// 64-bit register values use decimal strings, addresses and vector bytes use exact
 /// hex, and 32-bit controls use JSON numbers.
 /// Raw bits do not imply flag definedness.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -179,9 +197,9 @@ pub enum Registers {
         rip: HexAddress,
         /// Raw flags and reserved bits from the processor model.
         rflags: Counter,
-        /// XMM0–XMM15; excludes AVX upper halves and x87 state.
-        xmm: Box<[VectorBits; 16]>,
-        /// Raw backend MXCSR; accrued floating-point exception flags may be incomplete.
+        /// YMM0–YMM15, 32 bytes each; XMM aliases their low half.
+        ymm: Box<[VectorBits; 16]>,
+        /// MXCSR control and accrued SIMD floating-point exception flags.
         mxcsr: u32,
     },
     /// A64 integer and SIMD banks, with SP stored independently.
@@ -194,8 +212,16 @@ pub enum Registers {
         pc: HexAddress,
         /// Raw NZCV representation, with flags in bits 31 through 28.
         nzcv: u32,
-        /// V0–V31, including aliased scalar floating-point bits.
-        v: Box<[VectorBits; 32]>,
+        /// Z0–Z31 at `max_vl` bytes each; V aliases their low 128 bits.
+        z: Box<[VectorBits; 32]>,
+        /// P0–P15 at `max_vl` / 8 bytes each, one bit per vector byte.
+        p: Box<[VectorBits; 16]>,
+        /// First-fault predicate at `max_vl` / 8 bytes.
+        ffr: VectorBits,
+        /// Effective vector length in bytes, a multiple of 16 in 16–256.
+        vl: u16,
+        /// Maximum storage length in bytes, a multiple of 16 in 16–256 and at least `vl`.
+        max_vl: u16,
         /// Raw floating-point control.
         fpcr: u32,
         /// Raw floating-point exception status.
@@ -209,7 +235,7 @@ pub enum Registers {
 pub struct Fault {
     /// Architectural access or exception category.
     pub kind: FaultKind,
-    /// Observed processor PC after the fault.
+    /// Address of the instruction whose translation or execution faulted.
     pub pc: HexAddress,
     /// Access address, if reported.
     pub address: Option<HexAddress>,
@@ -223,8 +249,6 @@ pub struct Fault {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct Observation {
-    /// Resolved emulator profile, retained across reset.
-    pub cpu: CpuModel,
     /// Session and reset generation that produced these values.
     pub key: SessionKey,
     /// Strictly increasing within the session, including across reset.
@@ -252,13 +276,13 @@ impl From<MachineRegisters> for Registers {
                 gpr,
                 rip,
                 rflags,
-                xmm,
+                ymm,
                 mxcsr,
             } => Self::X86_64 {
                 gpr: gpr.map(Counter::new),
                 rip: HexAddress::new(rip),
                 rflags: Counter::new(rflags),
-                xmm: Box::new(xmm.map(VectorBits::new)),
+                ymm,
                 mxcsr,
             },
             MachineRegisters::Aarch64 {
@@ -266,7 +290,11 @@ impl From<MachineRegisters> for Registers {
                 sp,
                 pc,
                 nzcv,
-                v,
+                z,
+                p,
+                ffr,
+                vl,
+                max_vl,
                 fpcr,
                 fpsr,
             } => Self::Aarch64 {
@@ -274,7 +302,11 @@ impl From<MachineRegisters> for Registers {
                 sp: Counter::new(sp),
                 pc: HexAddress::new(pc),
                 nzcv,
-                v: Box::new(v.map(VectorBits::new)),
+                z,
+                p,
+                ffr,
+                vl,
+                max_vl,
                 fpcr,
                 fpsr,
             },

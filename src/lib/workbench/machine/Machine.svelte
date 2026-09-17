@@ -2,13 +2,14 @@
   import * as m from '$lib/paraglide/messages.js';
   import type { Locale } from '$lib/paraglide/runtime';
   import type { Observation } from '$lib/protocol/generated/Observation';
+  import type { RoundingMode } from '$lib/protocol/generated/RoundingMode';
+  import type { VectorWrite } from '$lib/protocol/generated/VectorWrite';
   import { Cpu, Keyboard, Binary, Rows3, Circle } from '@lucide/svelte';
   import { Tabs } from 'bits-ui';
 
   import { stateLabel } from '../presentation';
   import Breakpoints from './Breakpoints.svelte';
   import Registers from './Registers.svelte';
-  import { cpuNames } from './setup';
   import Vectors from './Vectors.svelte';
   const {
     observation,
@@ -18,6 +19,8 @@
     editable,
     onbreakpoint,
     onregister,
+    onvector,
+    onrounding,
     locale,
   }: {
     observation: Observation | undefined;
@@ -27,6 +30,8 @@
     editable: boolean;
     onbreakpoint: (address: string, enabled: boolean) => void;
     onregister: (name: string, value: string) => void;
+    onrounding: (mode: RoundingMode) => void;
+    onvector: (write: VectorWrite) => void;
     locale: Locale;
   } = $props();
   const options = $derived({ locale });
@@ -36,14 +41,17 @@
 <aside class="inspector" aria-label={m.machine({}, options)}>
   <header class="pane-header">
     <h2><Cpu size={17} aria-hidden="true" />{m.machine({}, options)}</h2>
-    <span class="machine-status" class:active={running} role="status"
-      >{stateLabel(observation?.status, locale)}</span
+    <span
+      class="machine-status"
+      class:active={running}
+      class:faulted={observation !== undefined && observation.fault !== null}
+      role="status">{stateLabel(observation?.status, locale)}</span
     >
   </header>
   <div class="inspector-body">
     {#if observation === undefined}
       <div class="empty-machine">
-        <span class="empty-icon"><Cpu size={28} strokeWidth={1.4} aria-hidden="true" /></span>
+        <span class="empty-icon"><Cpu size={24} strokeWidth={1.5} aria-hidden="true" /></span>
         <h3>{m.machine_empty_title({}, options)}</h3>
         <p>{m.machine_empty_hint({}, options)}</p>
       </div>
@@ -77,7 +85,7 @@
             ? 'x86_64'
             : observation.registers?.type === 'aarch64'
               ? 'AArch64'
-              : '—'} · {cpuNames[observation.cpu]}</span
+              : '—'}</span
         ><span
           >{loadedKind === 'raw'
             ? m.loaded_raw({}, options)
@@ -118,7 +126,15 @@
             onwrite={onregister}
           /></Tabs.Content
         >
-        <Tabs.Content value="simd"><Vectors bank={observation.registers} {locale} /></Tabs.Content>
+        <Tabs.Content value="simd">
+          {#key observation.registers?.type}<Vectors
+              bank={observation.registers}
+              {locale}
+              {editable}
+              onwrite={onvector}
+              {onrounding}
+            />{/key}
+        </Tabs.Content>
         <Tabs.Content value="breakpoints">
           <Breakpoints
             addresses={observation.breakpoints}

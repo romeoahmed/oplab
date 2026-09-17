@@ -54,7 +54,6 @@ impl Cache {
                     return Err(protocol());
                 }
                 let next = Box::new(Observation {
-                    cpu: observation.cpu,
                     key: delta.key,
                     sequence: delta.sequence,
                     status: delta.status,

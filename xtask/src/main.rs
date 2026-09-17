@@ -1,8 +1,10 @@
 //! Cross-tool repository tasks; Cargo, Vite, and Tauri retain their native build lifecycles.
 
+mod clang;
 mod codegen;
-mod native;
 mod process;
+mod sdk;
+mod sidecar;
 
 use process::{cargo, pnpm, run};
 use std::{env, path::Path};
@@ -19,6 +21,8 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Task {
+    /// Build the versioned QEMU adapter and static XED development SDK.
+    Sdk(sdk::Options),
     /// Check types, strict lints, unused code, generated contracts, and formatting.
     Check,
     /// Run Rust, frontend logic and Chromium component tests.
@@ -27,7 +31,7 @@ enum Task {
         #[arg(long)]
         release: bool,
     },
-    /// Format Rust, web sources, documentation, and C++.
+    /// Format Rust, web sources, documentation, and C/C++.
     Fmt {
         /// Report differences without writing files.
         #[arg(long)]
@@ -56,11 +60,12 @@ fn main() -> Result {
             .ok_or("workspace root missing")?,
     )?;
     match cli.task {
+        Task::Sdk(options) => sdk::build(options),
         Task::Check => check(),
         Task::Test { release } => test(release),
         Task::Fmt { check } => format(check),
         Task::Codegen { check } => codegen::generate(check),
-        Task::Sidecar { release } => native::sidecar(
+        Task::Sidecar { release } => sidecar::stage(
             release
                 || (env::var_os("TAURI_ENV_PLATFORM").is_some()
                     && env::var("TAURI_ENV_DEBUG").as_deref() != Ok("true")),
@@ -69,7 +74,7 @@ fn main() -> Result {
 }
 
 fn check() -> Result {
-    native::sidecar(false)?;
+    sidecar::stage(false)?;
     run(cargo().args([
         "clippy",
         "--workspace",
@@ -79,7 +84,7 @@ fn check() -> Result {
         "-D",
         "warnings",
     ]))?;
-    native::lint()?;
+    clang::lint()?;
     run(pnpm().arg("check"))?;
     run(pnpm().arg("lint"))?;
     codegen::generate(true)?;
@@ -87,7 +92,7 @@ fn check() -> Result {
 }
 
 fn test(release: bool) -> Result {
-    native::sidecar(release)?;
+    sidecar::stage(release)?;
     let mut command = cargo();
     command.args(["test", "--workspace", "--locked"]);
     if release {
@@ -110,5 +115,5 @@ fn format(check: bool) -> Result {
         web.arg("--check");
     }
     run(web.arg("."))?;
-    native::format(check)
+    clang::format(check)
 }

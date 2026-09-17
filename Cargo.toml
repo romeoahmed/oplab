@@ -1,6 +1,14 @@
 [workspace]
-members = ["crates/core", "crates/engine", "src-tauri", "xtask"]
-default-members = ["crates/core", "crates/engine"]
+members = [
+  "crates/core",
+  "crates/engine",
+  "crates/runner",
+  "crates/runtime",
+  "crates/toolchain",
+  "src-tauri",
+  "xtask",
+]
+default-members = ["crates/core", "crates/toolchain", "crates/engine", "crates/runner"]
 resolver = "3"
 
 [workspace.package]
@@ -10,24 +18,22 @@ rust-version = "1.98"
 license = "MPL-2.0"
 
 [workspace.dependencies]
-capstone = { version = "0.14", default-features = false, features = ["std", "full", "arch_arm64"] }
+bindgen = "0.73"
 cargo_metadata = "0.23"
 cc = { version = "1.4", features = ["parallel"] }
 clap = { version = "4.6", features = ["derive"] }
 cxx = "1.0"
 cxx-build = "1.0"
-iced-x86 = { version = "1.21", default-features = false, features = [
-  "std",
-  "decoder",
-  "instr_info",
-  "intel",
-] }
+libloading = "0.9"
+llvm-sys = { version = "231.0", features = ["prefer-dynamic"] }
 object = { version = "0.40", default-features = false, features = ["read", "std", "elf"] }
 oplab-core = { path = "crates/core" }
+oplab-engine = { path = "crates/engine" }
+oplab-runtime = { path = "crates/runtime" }
+oplab-toolchain = { path = "crates/toolchain" }
 proptest = "1.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-shlex = "2.0"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 tauri = "2.11"
 tauri-build = "2.6"
@@ -37,10 +43,6 @@ thiserror = "2.0"
 # ts-rs cannot represent serde's enum unknown-field validation in TypeScript.
 # Suppress that export warning; serde still rejects unknown fields at runtime.
 ts-rs = { version = "12.0", features = ["no-serde-warnings"] }
-unicorn-engine = { version = "2.1", default-features = false, features = [
-  "arch_x86",
-  "arch_aarch64",
-] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

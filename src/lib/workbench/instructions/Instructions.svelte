@@ -6,7 +6,7 @@
   import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
   import type { Target } from '$lib/protocol/generated/Target';
   import { normalizeAddress } from '$lib/protocol/scalars';
-  import { ArrowRight, Circle, CornerDownRight, ListTree } from '@lucide/svelte';
+  import { ArrowRight, Circle, CornerDownRight, ListOrdered } from '@lucide/svelte';
   import { onDestroy, type Snippet } from 'svelte';
 
   import { problemLabel } from '../presentation';
@@ -144,14 +144,17 @@
         /></label
       >
       <button disabled={!connected || busy}>
-        <ListTree size={14} aria-hidden="true" />{m.disassemble({}, options)}
+        <ListOrdered size={14} aria-hidden="true" />{m.disassemble({}, options)}
       </button>
       <button
         type="button"
+        class="icon-button"
+        aria-label={m.next_instructions({}, options)}
+        title={m.next_instructions({}, options)}
         disabled={!connected || busy || result?.type !== 'decoded' || result.next >= bytes.length}
         onclick={() => {
           if (result?.type === 'decoded') void inspect(result.next);
-        }}>{m.next_instructions({}, options)}<ArrowRight size={14} aria-hidden="true" /></button
+        }}><ArrowRight size={14} aria-hidden="true" /></button
       >
     </form>
     {#if live}<p class="muted-note">{m.live_decode_hint({}, options)}</p>{/if}

@@ -54,7 +54,7 @@ test('incremental highlighting agrees with a fresh parse after arbitrary edits',
           '\\',
           'mov x0, #42',
           'label:',
-          '中文',
+          '\u4e2d\u6587',
         ),
         { maxLength: 30 },
       )
@@ -84,4 +84,44 @@ test('incremental highlighting agrees with a fresh parse after arbitrary edits',
       },
     ),
   );
+});
+
+test('GNU labels, prefixes, AT&T immediates, SIMD arrangements and macros retain their roles', () => {
+  const cases = [
+    {
+      target: 'x86_64',
+      source: 'again: lock addq $0x2a, %rax; movdqu %xmm15, (%rdi)\n1: jmp 1b\n.ascii "\u03bb;#"',
+      expected: [
+        ['again', 'labelName'],
+        ['lock', 'keyword'],
+        ['addq', 'keyword'],
+        ['0x2a', 'number'],
+        ['rax', 'variableName2'],
+        ['xmm15', 'variableName2'],
+        ['1b', 'labelName'],
+      ],
+    },
+    {
+      target: 'aarch64',
+      source:
+        '.macro sum reg\nadd \\reg, v1.4s, v31.4s\n.endm\n.L\u503c: mov x0, #42\n# line marker\n.float 1.25e-3',
+      expected: [
+        ['.macro', 'meta'],
+        ['\\reg', 'variableName2'],
+        ['v1.4s', 'variableName2'],
+        ['v31.4s', 'variableName2'],
+        ['.L\u503c', 'labelName'],
+        ['42', 'number'],
+        ['1.25e-3', 'number'],
+      ],
+    },
+  ] as const;
+  for (const { target, source, expected } of cases) {
+    const { result } = highlighted(source, target);
+    for (const [text, role] of expected) {
+      expect(result.some((span) => span.text === text && span.style.includes(`tok-${role}`))).toBe(
+        true,
+      );
+    }
+  }
 });

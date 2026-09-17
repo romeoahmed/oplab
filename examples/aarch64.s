@@ -1,86 +1,58 @@
-// Copy eight signed integers, insertion-sort them, then sum them.
-// At done: X0 = 42; output = [-19, -7, 0, 2, 3, 8, 13, 42].
+// Brighten eight straight-alpha RGBA8 pixels with vector-length-agnostic SVE2.
+// Add 32 to RGB, clamp at 255, preserve alpha. At done: X0 = checksum = 4814.
+.arch armv9-a
 .text
 .p2align 2
 .global _start
 .type _start, %function
 _start:
-    // Page-relative relocations work across text and data pages.
-    adrp x9, stack_top
-    add sp, x9, :lo12:stack_top
-    adrp x2, input
-    add x2, x2, :lo12:input
-    adrp x3, output
-    add x3, x3, :lo12:output
-    mov x4, #count
-.Lcopy:
-    ldr x5, [x2], #8
-    str x5, [x3], #8
-    subs x4, x4, #1
-    b.ne .Lcopy
-
-    // AAPCS64 arguments: X0 = array, X1 = length.
-    adrp x0, output
-    add x0, x0, :lo12:output
-    mov x1, #count
-    bl insertion_sort
-
-    mov x2, x0
+    adrp x1, input
+    add x1, x1, :lo12:input
+    adrp x2, output
+    add x2, x2, :lo12:output
+    mov z1.b, #32
+    and z1.s, z1.s, #0x00ffffff  // Preserve alpha: repeat the byte bias 32, 32, 32, 0.
     mov x0, #0
-.Lsum:
-    ldr x3, [x2], #8
+    mov x4, #0
+    mov x5, #bytes
+    whilelo p0.b, x4, x5
+.Lpixels:
+    ld1b z0.b, p0/z, [x1, x4]
+    uqadd z0.b, p0/m, z0.b, z1.b
+    st1b z0.b, p0, [x2, x4]
+    uaddv d2, p0, z0.b
+    fmov x3, d2
     add x0, x0, x3
-    subs x1, x1, #1
-    b.ne .Lsum
-    adrp x2, total
-    str x0, [x2, :lo12:total]
+    incb x4
+    whilelo p0.b, x4, x5
+    b.any .Lpixels
+
+    adrp x1, checksum
+    str x0, [x1, :lo12:checksum]
 done:
-    // Oplab stops before this instruction; no operating system is required.
+    // Completion boundary; no operating system or stack is needed.
     b done
 .size _start, . - _start
 
-// Leaf function: insert each key into the already-sorted prefix.
-// Uses only caller-saved registers; leaves X0 and X1 intact.
-.type insertion_sort, %function
-insertion_sort:
-    mov x2, #1
-.Lnext:
-    cmp x2, x1
-    b.hs .Lreturn
-    ldr x3, [x0, x2, lsl #3]
-    mov x4, x2
-.Lshift:
-    cbz x4, .Linsert
-    sub x5, x4, #1
-    ldr x6, [x0, x5, lsl #3]
-    cmp x6, x3
-    b.le .Linsert
-    str x6, [x0, x4, lsl #3]
-    mov x4, x5
-    b .Lshift
-.Linsert:
-    str x3, [x0, x4, lsl #3]
-    add x2, x2, #1
-    b .Lnext
-.Lreturn:
-    ret
-.size insertion_sort, . - insertion_sort
-
 .section .rodata
-.p2align 3
+.p2align 4
 input:
-    .quad 13, -7, 42, 0, -19, 8, 3, 2
-.equ count, (. - input) / 8
+    .byte   0,  32,  64, 255
+    .byte 128, 192, 223, 128
+    .byte 224, 240, 255,  64
+    .byte 255,   0,  16,   0
+    .byte  12,  48,  96, 192
+    .byte 200, 220, 222, 254
+    .byte   1, 127, 254,   1
+    .byte  16,  80, 160, 200
+.equ bytes, . - input
 
 .bss
-.p2align 3
-output:
-    .skip count * 8
-total:
-    .skip 8
 .p2align 4
-stack:
-    .skip 4096
-stack_top:
+output:
+    .skip bytes
+.p2align 3
+checksum:
+    .skip 8
 
 .section .note.GNU-stack,"",%progbits

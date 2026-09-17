@@ -5,8 +5,7 @@
   import { Check, Pencil, X } from '@lucide/svelte';
   import { Popover } from 'bits-ui';
 
-  import { registerGroups } from './registers';
-  import { registerNames } from './setup';
+  import { registerGroups, registerNames } from './registers';
 
   import './editing.css';
   const {
@@ -71,6 +70,7 @@
         class="icon-button"
         disabled={!editable}
         aria-label={m.edit_register({}, options)}
+        title={m.edit_register({}, options)}
         ><Pencil size={14} aria-hidden="true" /></Popover.Trigger
       >
       <Popover.Portal>

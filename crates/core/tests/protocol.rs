@@ -1,14 +1,16 @@
 //! Wire serialization is checked independently of TypeScript annotations.
 
+use oplab_core::registers::VectorBits;
 use oplab_core::{
     address::Address,
     protocol::{
         Command, Diagnostic, DiagnosticCode, Reply, Request, Response,
         frame::{Header, Kind, MAX_CONTROL_BYTES},
-        scalar::{Counter, HexAddress, VectorBits},
+        scalar::{Counter, HexAddress},
     },
 };
 use proptest::prelude::*;
+use std::fmt::Write;
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(128))]
@@ -25,10 +27,15 @@ proptest! {
     }
 
     #[test]
-    fn vector_bits_round_trip_without_precision_loss(value in any::<u128>()) {
-        let bits = VectorBits::new(value);
+    fn vector_bits_round_trip_without_precision_loss(value in prop::collection::vec(any::<u8>(), 1..=256)) {
+        let bits = VectorBits::new(value.clone())?;
         let json = serde_json::to_string(&bits)?;
-        prop_assert_eq!(&json, &format!("\"0x{value:032x}\""));
+        prop_assert_eq!(bits.as_le_bytes(), value.as_slice());
+        let mut expected = String::new();
+        for byte in value.iter().rev() {
+            write!(expected, "{byte:02x}")?;
+        }
+        prop_assert_eq!(&json, &format!("\"0x{expected}\""));
         prop_assert_eq!(serde_json::from_str::<VectorBits>(&json)?, bits);
     }
 
@@ -111,11 +118,12 @@ fn wire_schema_rejects_ambiguous_scalars_and_unknown_commands()
 fn execution_observations_preserve_wide_registers_and_strict_session_keys()
 -> Result<(), Box<dyn std::error::Error>> {
     use oplab_core::protocol::execution::{Registers, SessionKey};
+    let zero = VectorBits::new(vec![0; 32])?;
     let registers = Registers::X86_64 {
         gpr: [Counter::new(u64::MAX); 16],
         rip: HexAddress::new(Address::new(u64::MAX)),
         rflags: Counter::new(2),
-        xmm: Box::new([VectorBits::new(0); 16]),
+        ymm: Box::new(std::array::from_fn(|_| zero.clone())),
         mxcsr: 0x1f80,
     };
     let mut json = serde_json::to_value(&registers)?;

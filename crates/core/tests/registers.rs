@@ -114,3 +114,123 @@ fn write_widths_accept_their_limits_without_truncating_overflow() {
         }
     }
 }
+
+proptest! {
+    #[test]
+    fn overlapping_vector_edits_preserve_unselected_and_inactive_bytes(
+        previous in any::<[u8; 256]>(), vq in 1_usize..=16,
+        edits in prop::collection::vec((0_usize..6, any::<u16>(), any::<[u8; 256]>()), 1..16),
+    ) {
+        use oplab_core::registers::{VectorBits, VectorEdit};
+        for (target, size, name, active) in [
+            (Target::X86_64, 32, "ymm15", 32),
+            (Target::X86_64, 32, "xmm15", 16),
+            (Target::Aarch64, vq * 16, "z31", vq * 16),
+            (Target::Aarch64, vq * 16, "v31", 16),
+        ] {
+            let mut actual = previous;
+            let mut expected = previous;
+            for &(kind, position, value) in &edits {
+                let width = [8, 16, 32, 64, 128, u16::try_from(active * 8)?][kind];
+                let count = u16::try_from(active * 8)? / width;
+                let lane = position % count;
+                let length = usize::from(width / 8);
+                let bits = VectorBits::new(value[..length].to_vec())?;
+                VectorEdit::new(target, size, name, width, lane, bits.clone())?.apply(&mut actual)?;
+                let start = usize::from(lane) * length;
+                expected[start..start + length].copy_from_slice(&value[..length]);
+                prop_assert_eq!(actual, expected);
+                prop_assert!(VectorEdit::new(target, size, name, width, count, bits).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn predicate_edits_preserve_adjacent_bits_and_inactive_storage(
+        previous in any::<[u8; 32]>(), set in any::<bool>(),
+        vq in 1_usize..=16, position in any::<u16>(),
+    ) {
+        use oplab_core::registers::{VectorBits, VectorEdit};
+        let lane = position % u16::try_from(vq * 16)?;
+        for name in ["p0", "p15", "ffr"] {
+            let edit = VectorEdit::new(Target::Aarch64, vq * 16, name, 1, lane, VectorBits::new(vec![u8::from(set)])?)?;
+            let mut actual = previous;
+            edit.apply(&mut actual)?;
+            for bit in 0..256 {
+                let observed = actual[bit / 8] >> (bit % 8) & 1;
+                let expected = if bit == usize::from(lane) { u8::from(set) } else { previous[bit / 8] >> (bit % 8) & 1 };
+                prop_assert_eq!(observed, expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn vector_edits_reject_ambiguous_names_invalid_lengths_and_mismatched_values()
+-> Result<(), Box<dyn std::error::Error>> {
+    use oplab_core::registers::{VectorBits, VectorEdit};
+    let zero = VectorBits::new(vec![0; 16])?;
+    for (target, size, names) in [
+        (
+            Target::X86_64,
+            32,
+            &["ymm16", "xmm16", "xmm00", "xmm+1", "XMM0", "z0", "rax"][..],
+        ),
+        (
+            Target::Aarch64,
+            256,
+            &["z32", "p16", "v00", "v+1", "V0", "q0", "s0", "v0.4s"][..],
+        ),
+    ] {
+        for name in names {
+            assert!(VectorEdit::new(target, size, name, 128, 0, zero.clone()).is_err());
+        }
+    }
+    for size in [0, 15, 17, 255, 272] {
+        assert!(VectorEdit::new(Target::Aarch64, size, "z0", 128, 0, zero.clone()).is_err());
+    }
+    for (name, width, lane, value) in [
+        ("z0", 0, 0, vec![0]),
+        ("z0", 24, 0, vec![0; 3]),
+        ("z0", 64, 0, vec![0; 16]),
+        ("p0", 1, 0, vec![2]),
+        ("ffr", 1, 256, vec![1]),
+    ] {
+        assert!(
+            VectorEdit::new(
+                Target::Aarch64,
+                256,
+                name,
+                width,
+                lane,
+                VectorBits::new(value)?
+            )
+            .is_err()
+        );
+    }
+    let edit = VectorEdit::new(Target::Aarch64, 256, "z0", 128, 1, zero)?;
+    let mut short = [7; 16];
+    assert!(edit.apply(&mut short).is_err());
+    assert_eq!(short, [7; 16]);
+    Ok(())
+}
+
+proptest! {
+    #[test]
+    fn rounding_edits_select_architectural_modes_and_preserve_other_bits(previous in any::<u32>()) {
+        use oplab_core::registers::RoundingMode;
+        // MXCSR.RC and FPCR.RMode encode downward/upward rounding in opposite orders.
+        for (mode, x86, arm) in [
+            (RoundingMode::NearestEven, 0, 0),
+            (RoundingMode::Down, 0x2000, 0x0080_0000),
+            (RoundingMode::Up, 0x4000, 0x0040_0000),
+            (RoundingMode::TowardZero, 0x6000, 0x00c0_0000),
+        ] {
+            for (target, mask, bits) in [(Target::X86_64, 0x6000, x86), (Target::Aarch64, 0x00c0_0000, arm)] {
+                let edited = mode.apply(target, previous);
+                prop_assert_eq!(edited & mask, bits);
+                prop_assert_eq!(edited & !mask, previous & !mask);
+            }
+        }
+    }
+}

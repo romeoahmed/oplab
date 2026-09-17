@@ -1,0 +1,26 @@
+[package]
+name = "oplab-toolchain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "LLVM assembly and native instruction analysis for Oplab"
+
+[dependencies]
+oplab-core.workspace = true
+thiserror.workspace = true
+cxx.workspace = true
+llvm-sys.workspace = true
+object.workspace = true
+tempfile.workspace = true
+
+[build-dependencies]
+cc.workspace = true
+cxx-build.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

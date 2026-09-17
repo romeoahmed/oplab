@@ -1,0 +1,15 @@
+//! Worker entry point; stdout carries framed protocol traffic only.
+
+fn main() -> std::process::ExitCode {
+    // Keep dependency panic payloads and build-machine paths out of routine stderr.
+    std::panic::set_hook(Box::new(|_| eprintln!("engine_backend_panic")));
+    let result = oplab_runner::worker::serve();
+    match result {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            // Errors expose only stable categories, never a request, source, or environment.
+            eprintln!("{error}");
+            std::process::ExitCode::FAILURE
+        }
+    }
+}

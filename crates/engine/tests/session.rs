@@ -1,4 +1,4 @@
-//! Independent integer semantics and control boundaries on real guest machines.
+//! Independent computation semantics and control boundaries on real guest machines.
 
 use object::{Object, ObjectSymbol};
 use oplab_core::{
@@ -7,7 +7,12 @@ use oplab_core::{
     registers::MachineRegisters,
     target::Target,
 };
-use oplab_engine::{assembly, session::Session};
+use oplab_engine::{
+    load::{Image, MachineSetup},
+    machine::Machine,
+    session::Session,
+};
+use oplab_toolchain::assembly;
 use proptest::prelude::*;
 use std::fmt::Write;
 
@@ -30,8 +35,8 @@ fn symbol(image: &[u8], name: &str) -> TestResult<Address> {
 }
 
 fn settle(session: &mut Session) -> TestResult {
-    // Bound continuation attempts if the session never reaches a stopped state.
-    for _ in 0..1024 {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while std::time::Instant::now() < deadline {
         if session.state() != ExecutionState::Running {
             return Ok(());
         }
@@ -48,7 +53,7 @@ fn first_integer(session: &Session) -> TestResult<u64> {
 }
 
 #[test]
-fn workbench_examples_sort_signed_values_at_different_link_addresses() -> TestResult {
+fn workbench_examples_match_scalar_pixel_processing_at_both_addresses() -> TestResult {
     for (target, source) in [
         (Target::X86_64, include_str!("../../../examples/x86_64.s")),
         (Target::Aarch64, include_str!("../../../examples/aarch64.s")),
@@ -60,24 +65,26 @@ fn workbench_examples_sort_signed_values_at_different_link_addresses() -> TestRe
                 .map_err(|error| format!("{target:?}: {error:?}"))?;
             let done = symbol(&image, "done")?;
             let output = symbol(&image, "output")?;
-            let total = symbol(&image, "total")?;
+            let checksum = symbol(&image, "checksum")?;
             let input = symbol(&image, "input")?;
-            let mut session = Session::from_elf(&image, target, done, 10_000)?;
-            let original = session.read_memory(input, 64)?;
-            let mut values = original
-                .as_chunks::<8>()
-                .0
+            let machine = Machine::load(Image::Elf(&image), target, MachineSetup::default())?;
+            let mut session = Session::new(machine, done, 10_000)?;
+            let original = session.read_memory(input, 32)?;
+            let expected: Vec<_> = original
                 .iter()
-                .copied()
-                .map(i64::from_le_bytes)
-                .collect::<Vec<_>>();
-            let sum = values
-                .iter()
-                .fold(0_i64, |sum, &value| sum.wrapping_add(value));
-            values.sort_unstable();
-            let expected: Vec<_> = values.into_iter().flat_map(i64::to_le_bytes).collect();
+                .enumerate()
+                .map(|(index, &value)| {
+                    if index % 4 == 3 {
+                        value
+                    } else {
+                        value.saturating_add(32)
+                    }
+                })
+                .collect();
+            let sum: u64 = expected.iter().copied().map(u64::from).sum();
             for _ in 0..2 {
-                assert_eq!(session.read_memory(output, 64)?, [0; 64]);
+                assert_eq!(session.read_memory(output, 32)?, [0; 32]);
+                assert_eq!(session.read_memory(checksum, 8)?, [0; 8]);
                 session.start()?;
                 settle(&mut session)?;
                 assert_eq!(
@@ -87,10 +94,10 @@ fn workbench_examples_sort_signed_values_at_different_link_addresses() -> TestRe
                     session.fault()
                 );
                 assert_eq!(session.read_registers()?.instruction_pointer(), done);
-                assert_eq!(first_integer(&session)?.to_le_bytes(), sum.to_le_bytes());
-                assert_eq!(session.read_memory(output, 64)?, expected);
-                assert_eq!(session.read_memory(total, 8)?, sum.to_le_bytes());
-                assert_eq!(session.read_memory(input, 64)?, original);
+                assert_eq!(first_integer(&session)?, sum);
+                assert_eq!(session.read_memory(output, 32)?, expected);
+                assert_eq!(session.read_memory(checksum, 8)?, sum.to_le_bytes());
+                assert_eq!(session.read_memory(input, 32)?, original);
                 session.reset()?;
             }
         }
@@ -242,6 +249,12 @@ fn faults_and_environment_exits_cannot_masquerade_as_completion() -> TestResult 
             FaultKind::Protection(Access::Write),
         ),
         (Target::X86_64, "ud2", FaultKind::InvalidInstruction),
+        (Target::X86_64, "hlt", FaultKind::Exception(Some(13))),
+        (
+            Target::X86_64,
+            "in eax, 0x80",
+            FaultKind::Exception(Some(13)),
+        ),
         (
             Target::X86_64,
             "movabs rax, 0x800000\njmp rax",
@@ -278,8 +291,6 @@ fn faults_and_environment_exits_cannot_masquerade_as_completion() -> TestResult 
     }
     for (target, source) in [
         (Target::X86_64, "syscall"),
-        (Target::X86_64, "hlt"),
-        (Target::X86_64, "in eax, 0x80"),
         (Target::Aarch64, "svc 0"),
         (Target::Aarch64, "wfi"),
     ] {
@@ -288,7 +299,9 @@ fn faults_and_environment_exits_cannot_masquerade_as_completion() -> TestResult 
         settle(&mut session)?;
         assert_eq!(
             session.state(),
-            ExecutionState::Terminated(Termination::UnsupportedEnvironment)
+            ExecutionState::Terminated(Termination::UnsupportedEnvironment),
+            "{target:?}: {source}: {:?}",
+            session.fault()
         );
         assert!(session.fault().is_none());
     }

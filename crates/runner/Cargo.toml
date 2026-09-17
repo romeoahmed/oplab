@@ -1,0 +1,23 @@
+[package]
+name = "oplab-runner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "CLI and isolated execution worker for Oplab"
+
+[dependencies]
+oplab-core.workspace = true
+oplab-toolchain.workspace = true
+oplab-engine.workspace = true
+clap.workspace = true
+object.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

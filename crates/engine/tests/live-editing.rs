@@ -7,11 +7,11 @@ use oplab_core::{
     target::Target,
 };
 use oplab_engine::{
-    assembly,
     load::{Image, MachineSetup},
     machine::{Machine, MachineError},
     session::Session,
 };
+use oplab_toolchain::assembly;
 use proptest::prelude::*;
 use std::fmt::Write;
 
@@ -245,7 +245,6 @@ fn editing_a_paused_rep_continuation_preserves_instruction_accounting() -> TestR
             },
             Target::X86_64,
             MachineSetup {
-                cpu: None,
                 registers: Some(InitialRegisters::from_assignments(
                     Target::X86_64,
                     [("rax", 1), ("rcx", 5000), ("rdi", 0x8000)],
@@ -330,7 +329,6 @@ fn maximum_patches_fit_one_mapping_and_cannot_span_adjacent_mappings() -> TestRe
             },
             target,
             MachineSetup {
-                cpu: None,
                 registers: None,
                 mappings: vec![InitialMapping {
                     range: AddressRange::new(Address::new(0x11000), 4096, 4096)?,

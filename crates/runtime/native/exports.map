@@ -1,0 +1,4 @@
+{
+  global: oplab_qemu;
+  local: *;
+};

@@ -36,6 +36,8 @@ pub enum DataAccess {
     ReadWrite,
     /// Read, with a conditional write.
     ReadConditionalWrite,
+    /// Conditional read, followed by an unconditional write.
+    ConditionalReadWrite,
 }
 
 /// One backend-named register access; aliases are not expanded into machine registers.
@@ -67,22 +69,22 @@ pub struct MemoryAccess {
     deny_unknown_fields
 )]
 pub enum ArchitectureAnalysis {
-    /// iced-x86 instruction information.
+    /// Intel XED instruction information.
     X86 {
         /// Control-flow classification.
         flow: FlowControl,
-        /// Required CPUID feature identifiers reported by iced-x86.
-        cpuid: Vec<String>,
+        /// Intel XED ISA-set identifier; not a complete CPUID predicate.
+        isa: String,
         /// RFLAGS and x87 condition-code effects, retaining undefined and constant results.
         flags: FlagEffects,
-        /// Register lists omit some state for save/restore instructions.
+        /// The decoder reports incomplete register effects, such as save/restore state.
         registers_incomplete: bool,
         /// Decoder identifies a privileged instruction; no OS environment is implied.
         privileged: bool,
     },
-    /// Capstone `AArch64` detail. Groups are not a complete architectural feature requirement set.
+    /// LLVM MC `AArch64` detail; conservative static effects.
     Aarch64 {
-        /// Decoder group names, including control-flow and extension classifications.
+        /// Control-flow groups; no architectural extension requirements are inferred.
         groups: Vec<String>,
         /// Decoder reports that the instruction updates condition flags.
         updates_flags: bool,

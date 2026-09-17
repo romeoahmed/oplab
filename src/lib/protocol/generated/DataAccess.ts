@@ -10,4 +10,5 @@ export type DataAccess =
   | 'write'
   | 'conditional_write'
   | 'read_write'
-  | 'read_conditional_write';
+  | 'read_conditional_write'
+  | 'conditional_read_write';

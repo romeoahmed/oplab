@@ -8,6 +8,7 @@
   let { preferences = $bindable(), locale }: { preferences: Preferences; locale: Locale } =
     $props();
   const options = $derived({ locale });
+  const id = $props.id();
 </script>
 
 <Popover.Root>
@@ -38,13 +39,17 @@
             ></select
           ></label
         >
-        <label
-          >{m.font_size({}, options)}<span class="range-field"
-            ><input type="range" min="12" max="22" bind:value={preferences.fontSize} /><output
-              >{preferences.fontSize} px</output
-            ></span
-          ></label
-        >
+        <div class="range-field">
+          <label for={`${id}-fontSize`}>{m.font_size({}, options)}</label>
+          <output for={`${id}-fontSize`}>{preferences.fontSize} px</output>
+          <input
+            id={`${id}-fontSize`}
+            type="range"
+            min="12"
+            max="22"
+            bind:value={preferences.fontSize}
+          />
+        </div>
         <label class="checkbox-field"
           ><input type="checkbox" bind:checked={preferences.wrap} />{m.word_wrap(
             {},
@@ -52,20 +57,28 @@
           )}</label
         >
         <hr />
-        <label
-          >{m.inspector_width({}, options)}<span class="range-field"
-            ><input type="range" min="26" max="45" bind:value={preferences.inspectorWidth} /><output
-              >{preferences.inspectorWidth}%</output
-            ></span
-          ></label
-        >
-        <label
-          >{m.memory_height({}, options)}<span class="range-field"
-            ><input type="range" min="20" max="45" bind:value={preferences.memoryHeight} /><output
-              >{preferences.memoryHeight}%</output
-            ></span
-          ></label
-        >
+        <div class="range-field">
+          <label for={`${id}-inspectorWidth`}>{m.inspector_width({}, options)}</label>
+          <output for={`${id}-inspectorWidth`}>{preferences.inspectorWidth}%</output>
+          <input
+            id={`${id}-inspectorWidth`}
+            type="range"
+            min="26"
+            max="45"
+            bind:value={preferences.inspectorWidth}
+          />
+        </div>
+        <div class="range-field">
+          <label for={`${id}-memoryHeight`}>{m.memory_height({}, options)}</label>
+          <output for={`${id}-memoryHeight`}>{preferences.memoryHeight}%</output>
+          <input
+            id={`${id}-memoryHeight`}
+            type="range"
+            min="20"
+            max="45"
+            bind:value={preferences.memoryHeight}
+          />
+        </div>
         <button
           type="button"
           disabled={preferences.inspectorWidth === defaultPreferences.inspectorWidth &&

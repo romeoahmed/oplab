@@ -5,10 +5,10 @@ use oplab_core::{
     address::Address, diagnostic::ValidationError, memory::MAX_MAPPED_BYTES, target::Target,
 };
 use oplab_engine::{
-    assembly,
     load::{LoadError, LoadPlan},
     machine::Machine,
 };
+use oplab_toolchain::assembly;
 use proptest::prelude::*;
 
 proptest! {

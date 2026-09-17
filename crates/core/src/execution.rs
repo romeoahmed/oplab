@@ -16,7 +16,7 @@ pub enum Access {
     Fetch,
 }
 
-/// Architectural fault category, without native error codes in the domain contract.
+/// Execution fault category, independent of native error representations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(
     tag = "type",
@@ -31,8 +31,10 @@ pub enum FaultKind {
     Protection(Access),
     /// An access violates architectural alignment.
     Unaligned(Access),
-    /// The backend cannot execute the instruction.
+    /// The guest reports an invalid or unavailable instruction in its current state.
     InvalidInstruction,
+    /// The translated instruction requires an operation the runtime cannot lower.
+    UnsupportedInstruction,
     /// A processor exception, with its reported vector when available.
     Exception(Option<u32>),
 }
@@ -40,11 +42,11 @@ pub enum FaultKind {
 /// A terminal guest fault. Partial instruction effects are not rolled back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GuestFault {
-    /// Architectural failure category.
+    /// Execution failure category.
     pub kind: FaultKind,
-    /// Program counter reported after the fault; this is not an inferred source location.
+    /// Address of the instruction whose translation or execution faulted.
     pub pc: Address,
-    /// Memory address reported by the backend, if a memory hook supplied it.
+    /// Failing memory address, when supplied by the runtime.
     pub address: Option<Address>,
     /// Access width in bytes reported by the backend, if available.
     pub size: Option<u64>,

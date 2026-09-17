@@ -12,7 +12,7 @@ export type Fault = {
    */
   kind: FaultKind;
   /**
-   * Observed processor PC after the fault.
+   * Address of the instruction whose translation or execution faulted.
    */
   pc: HexAddress;
   /**

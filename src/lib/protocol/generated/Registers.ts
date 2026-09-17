@@ -4,9 +4,9 @@ import type { HexAddress } from './HexAddress.js';
 import type { VectorBits } from './VectorBits.js';
 
 /**
- * Coherent integer and 128-bit SIMD banks.
+ * Coherent integer, vector and predicate banks.
  *
- * 64-bit register values use decimal strings, addresses and vectors use fixed-width
+ * 64-bit register values use decimal strings, addresses and vector bytes use exact
  * hex, and 32-bit controls use JSON numbers.
  * Raw bits do not imply flag definedness.
  */
@@ -44,9 +44,9 @@ export type Registers =
          */
         rflags: Counter;
         /**
-         * XMM0–XMM15; excludes AVX upper halves and x87 state.
+         * YMM0–YMM15, 32 bytes each; XMM aliases their low half.
          */
-        xmm: [
+        ymm: [
           VectorBits,
           VectorBits,
           VectorBits,
@@ -65,7 +65,7 @@ export type Registers =
           VectorBits,
         ];
         /**
-         * Raw backend MXCSR; accrued floating-point exception flags may be incomplete.
+         * MXCSR control and accrued SIMD floating-point exception flags.
          */
         mxcsr: number;
       };
@@ -122,9 +122,9 @@ export type Registers =
          */
         nzcv: number;
         /**
-         * V0–V31, including aliased scalar floating-point bits.
+         * Z0–Z31 at `max_vl` bytes each; V aliases their low 128 bits.
          */
-        v: [
+        z: [
           VectorBits,
           VectorBits,
           VectorBits,
@@ -158,6 +158,39 @@ export type Registers =
           VectorBits,
           VectorBits,
         ];
+        /**
+         * P0–P15 at `max_vl` / 8 bytes each, one bit per vector byte.
+         */
+        p: [
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+          VectorBits,
+        ];
+        /**
+         * First-fault predicate at `max_vl` / 8 bytes.
+         */
+        ffr: VectorBits;
+        /**
+         * Effective vector length in bytes, a multiple of 16 in 16–256.
+         */
+        vl: number;
+        /**
+         * Maximum storage length in bytes, a multiple of 16 in 16–256 and at least `vl`.
+         */
+        max_vl: number;
         /**
          * Raw floating-point control.
          */

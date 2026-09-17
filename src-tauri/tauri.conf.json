@@ -34,6 +34,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/oplab-worker"]
+    "externalBin": ["binaries/oplab-worker"],
+    "resources": { "runtime/": "runtime/" }
   }
 }

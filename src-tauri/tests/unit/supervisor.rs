@@ -61,6 +61,9 @@ fn desktop_executes_standard_images_and_reattaches_without_replaying_mutations()
         .and_then(std::path::Path::parent)
         .ok_or("test output directory unavailable")?
         .join(format!("oplab-worker{}", std::env::consts::EXE_SUFFIX));
+    let runtime = std::path::PathBuf::from(
+        std::env::var_os("OPLAB_QEMU_DIR").ok_or("QEMU SDK directory missing")?,
+    );
     for (target, source) in [
         (
             Target::X86_64,
@@ -74,7 +77,7 @@ fn desktop_executes_standard_images_and_reattaches_without_replaying_mutations()
         let service = Service::default();
         let (events, receiver) = channel();
         let info = service
-            .connect(&worker, events, false)
+            .connect(&worker, &runtime, events, false)
             .map_err(|error| format!("{error:?}"))?;
         let (key, window) = load_example(&service, &info, target, source)?;
         request(
@@ -119,7 +122,7 @@ fn desktop_executes_standard_images_and_reattaches_without_replaying_mutations()
         );
         let (events, _) = channel();
         let attached = service
-            .connect(&worker, events, false)
+            .connect(&worker, &runtime, events, false)
             .map_err(|error| format!("{error:?}"))?;
         assert_eq!(attached.connection, info.connection);
         assert_ne!(attached.view, info.view);
@@ -168,7 +171,7 @@ fn unresponsive_child_is_killed_reaped_and_admitted_outcome_is_unknown() -> Test
     let service = Service::default();
     let (events, _) = channel();
     let failure = service
-        .connect(&executable, events, false)
+        .connect(&executable, temporary.path(), events, false)
         .err()
         .ok_or("unresponsive worker connected")?;
     assert_eq!(failure.code, FailureCode::Deadline);

@@ -38,6 +38,10 @@ pub(crate) async fn worker_connect(
             .ok_or_else(|| DesktopFailure::new(FailureCode::Unavailable))?;
         app.state::<Service>().connect(
             &parent.join(format!("oplab-worker{}", std::env::consts::EXE_SUFFIX)),
+            &app.path()
+                .resource_dir()
+                .map_err(|_| DesktopFailure::new(FailureCode::Unavailable))?
+                .join("runtime"),
             channel,
             restart,
         )

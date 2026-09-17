@@ -2,19 +2,20 @@
 
 Run commands from the repository root. Manifests and lockfiles define dependencies;
 [testing](testing.md) defines acceptance. Install native tools before building;
-`build.rs` and xtask do not download them.
+`build.rs` does not download native dependencies. The explicit `cargo xtask sdk`
+command obtains pinned SDK sources and delegates to upstream build tools.
 
 ## Requirements by task
 
-| Task                                                | Requirements                                                                                                                                                    |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend development, static build, types and lints | Node satisfying `package.json`, pnpm, installed JavaScript dependencies                                                                                         |
-| Frontend tests                                      | The above plus Playwright Chromium and its host dependencies                                                                                                    |
-| Core tests and xtask compilation                    | Stable Rust satisfying workspace `rust-version`                                                                                                                 |
-| Contract generation                                 | Rust, Node, pnpm and installed JavaScript dependencies; no LLVM                                                                                                 |
-| Engine, CLI and worker                              | Rust, C/C++ toolchain with C++23 support, LLVM 23 development installation, matching LLD development installation, libclang, CMake, a build tool and pkg-config |
-| Desktop and full workspace checks/tests             | All engine/frontend requirements plus the platform's Tauri prerequisites, rustfmt, Clippy, clang-format and clang-tidy                                          |
-| Icon regeneration only                              | ImageMagick and the project's Tauri CLI                                                                                                                         |
+| Task                                                | Requirements                                                                                                           |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Frontend development, static build, types and lints | Node satisfying `package.json`, pnpm, installed JavaScript dependencies                                                |
+| Frontend tests                                      | The above plus Playwright Chromium and its host dependencies                                                           |
+| Core tests and xtask compilation                    | Stable Rust satisfying workspace `rust-version`                                                                        |
+| Contract generation                                 | Rust, Node, pnpm and installed JavaScript dependencies; no LLVM                                                        |
+| Native libraries, CLI and worker                    | Rust, GNU C23/C++23 toolchain, LLVM 23 development installation, matching LLD and QEMU/XED SDK                         |
+| Desktop and full workspace checks/tests             | All engine/frontend requirements plus the platform's Tauri prerequisites, rustfmt, Clippy, clang-format and clang-tidy |
+| Icon regeneration only                              | ImageMagick and the project's Tauri CLI                                                                                |
 
 `rust-toolchain.toml` selects stable and installs rustfmt/Clippy. The manifests own
 minimum Rust and Node versions; pnpm 12 is the verified package manager.
@@ -37,6 +38,7 @@ Follow [Tauri's platform setup](https://tauri.app/start/prerequisites/) before a
 Guest architecture is independent of host architecture. An AArch64 Mac can emulate
 both supported guests without cross-compiling Oplab. Cross-compilation instead
 means building the host application for a different Rust target.
+The execution runtime currently requires a 64-bit little-endian host.
 
 Tauri's minimum platform requirements alone do not establish Oplab's supported
 WebView minimums. Native CSS and Web APIs must also pass on the intended host.
@@ -50,33 +52,63 @@ A compiler-only LLVM installer or a standalone `ld.lld` is insufficient. Supply:
 - `llvm-config`, LLVM headers and libraries with the **X86 and AArch64** targets.
 - LLD's `include/lld/Common/Driver.h`, `lib/lldELF` and `lib/lldCommon` libraries
   (platform naming applies), plus a host-runnable `bin/ld.lld` for version discovery.
-- A C++23 compiler and compatible standard library. The bridge uses CXX; CXX does
+- GNU C23 and C++23 compilers with a compatible standard library. The bridge uses CXX; CXX does
   not provide LLVM, an SDK, or a C++ standard library.
-- `libclang` for Unicorn's generated bindings. Select its directory with
-  `LIBCLANG_PATH` when automatic discovery fails; see [bindgen requirements](https://rust-lang.github.io/rust-bindgen/requirements.html).
-- CMake and Ninja or the platform's Make/build tool. Ninja is recommended and is
-  used by Unicorn's MSVC path. Unix Unicorn configuration requires **pkg-config**
-  even when building its bundled sources; pkgconf can provide that executable.
-- `clang-format` and `clang-tidy` in the selected LLVM tool directory for full checks.
+- QEMU 11.1.1 and Intel XED v2026.08.23, built with `cargo xtask sdk`.
+- Git, Python, Ninja, pkg-config and GLib development files. QEMU's configure
+  creates its own Python environment and obtains its declared build dependencies.
+- `clang-format` and `clang-tidy` from the selected LLVM installation.
 
-Unicorn's Rust build generates bindings, probes a system Unicorn installation,
-then builds bundled sources if the probe fails. For the verified bundled path,
-set `UNICORN_NO_PKG_CONFIG=1`. This disables the system-library probe; it does **not**
-remove the bundled configure script's pkg-config requirement. The Cargo features
-select x86 and AArch64; upstream also builds ARM internally for AArch64.
+### QEMU and XED SDK
+
+After selecting the host compiler, run:
+
+```sh
+cargo xtask sdk
+export XED_PREFIX="$PWD/target/native-sdk/xed"
+export OPLAB_QEMU_DIR="$PWD/target/native-sdk/lib"
+```
+
+These commands build the native SDK, not the worker. Next install frontend
+dependencies and run `pnpm tauri dev`, or use `cargo xtask sidecar` for staging alone.
+The default uses Cargo's target directory; adjust the two exports when using
+`CARGO_TARGET_DIR` or `--prefix`. `--qemu-source`, `--xed-source` and
+`--mbuild-source` optionally clone local Git repositories instead of downloading
+upstream sources. Exact release tags are verified. User source checkouts are never
+modified. Incremental QEMU builds reconfigure Meson and clear its dependency
+cache so package upgrades do not retain stale library paths; unchanged compilation
+outputs remain incremental. Use a fresh prefix
+when changing compilers, host targets or SDK release tags. Stop workers before
+rebuilding an SDK, and restart them after staging. XED uses mbuild v2026.08.23
+and installs static headers/libraries independently of QEMU. XED and mbuild have
+independent releases; their selected tags currently share the same date.
+
+The owned QEMU checkout receives two build-only integrations: an additional Meson
+shared-library target and the minimal ARM GICv5 CPU-interface configuration required
+by MAX helpers. CPU translators, helpers, SoftFloat and lifecycle source are not
+patched. The project adapter uses GNU C23 with warnings treated as errors;
+upstream QEMU retains its own language standard and warning policy. Per-target
+compiler arguments, source selection and dependencies come from QEMU's build graph.
+Unchanged adapter files retain their timestamps for incremental builds.
+Re-run SDK construction after adapter changes;
+Cargo only generates bindings for the private boundary header.
+
+`--asan` builds an instrumented QEMU SDK for native memory checks. Load the selected
+Clang AddressSanitizer runtime when running it inside an uninstrumented Rust test
+binary. Do not ship the instrumented SDK. Apple Silicon builds are verified;
+Linux and Windows SDK construction and deployment remain acceptance gates.
 
 ### macOS example
 
 After installing Rust, Node, pnpm and the macOS SDK, a Homebrew setup is:
 
 ```sh
-brew install llvm@23 lld@23 cmake ninja pkgconf
-export LLVM_CONFIG="$(brew --prefix llvm@23)/bin/llvm-config"
+brew install llvm@23 lld@23 ninja pkgconf glib
 export LLD_PREFIX="$(brew --prefix lld@23)"
-export LIBCLANG_PATH="$(brew --prefix llvm@23)/lib"
 export CC="$(brew --prefix llvm@23)/bin/clang"
 export CXX="$(brew --prefix llvm@23)/bin/clang++"
-export UNICORN_NO_PKG_CONFIG=1
+export LLVM_SYS_231_PREFIX="$(brew --prefix llvm@23)"
+export LIBCLANG_PATH="$LLVM_SYS_231_PREFIX/lib"
 ```
 
 Ensure Homebrew's executable directory is on `PATH`. These are shell settings,
@@ -89,43 +121,51 @@ names vary. If unavailable, build a matching LLVM 23 release from the
 [LLVM project](https://github.com/llvm/llvm-project/releases) using its
 [CMake instructions](https://llvm.org/docs/CMake.html). Enable `clang`,
 `clang-tools-extra` and `lld`, and targets `X86;AArch64`; install headers, libraries,
-`llvm-config`, libclang and analysis tools, not just compiler/linker executables.
+`llvm-config` and analysis tools, not just compiler/linker executables.
 On supported Unix hosts, `LLVM_BUILD_LLVM_DYLIB` and `LLVM_LINK_LLVM_DYLIB` select a
 shared LLVM build. Those options are not a portable Windows recipe.
 
 ### Discovery and overrides
 
-| Variable         | Meaning                                       | Default                                                                        |
-| ---------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
-| `LLVM_CONFIG`    | Host-runnable LLVM discovery executable       | `llvm-config` on `PATH`                                                        |
-| `LLD_PREFIX`     | Prefix containing LLD `include`, `lib`, `bin` | LLVM prefix                                                                    |
-| `LLVM_LINK_KIND` | `dylib` or `static`                           | `llvm-config --shared-mode`                                                    |
-| `LLD_LINK_KIND`  | `dylib` or `static`                           | Shared if LLVM is shared and both LLD shared libraries exist; otherwise static |
+[`llvm-sys`](https://gitlab.com/taricorp/llvm-sys.rs) owns LLVM discovery and
+linkage for both ORC and the CXX bridge. The bridge obtains the selected
+`llvm-config` through [Cargo dependency metadata](https://doc.rust-lang.org/cargo/reference/build-scripts.html#the-links-manifest-key)
+and adds matching LLD and static XED libraries. It does not parse LLVM linker
+arguments or maintain a second LLVM selector.
 
-The bridge resolves these four overrides in order: `NAME_<target-triple>`,
-`NAME_<target_with_underscores>`, `HOST_NAME` for a native build or `TARGET_NAME` for
-a cross build, then `NAME`. Empty values fail. This follows
-[cc-rs precedence](https://docs.rs/cc/latest/cc/#external-configuration-via-environment-variables).
-`CC`, `CXX`, `AR`, `CXXFLAGS`, standard-library selection and target flags retain
-upstream behavior. CXX's `link-cplusplus` dependency selects the C++ runtime;
-cc-rs selects the compiler and archiver. The bridge adds `/EHsc` for MSVC-compatible
-compilers so CXX exception translation unwinds C++ owners. Libclang and pkg-config
-retain their upstream environment conventions.
+| Variable              | Purpose                                          | Default                                                              |
+| --------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
+| `LLVM_SYS_231_PREFIX` | LLVM 23 installation for both Rust and C++       | llvm-sys discovery on `PATH`                                         |
+| `LLD_PREFIX`          | Matching LLD `include`, `lib` and `bin`          | Selected LLVM prefix                                                 |
+| `LLD_LINK_KIND`       | `dylib` or `static` for LLD only                 | Shared when LLVM and both LLD libraries support it; otherwise static |
+| `XED_PREFIX`          | Static Intel XED installation                    | Required                                                             |
+| `OPLAB_QEMU_DIR`      | Directory containing both private QEMU libraries | Required for native execution and staging                            |
+| `LIBCLANG_PATH`       | libclang for bindgen                             | bindgen discovery                                                    |
+
+The workspace enables llvm-sys `prefer-dynamic`: use shared LLVM when available,
+otherwise static. Static LLD with shared LLVM is valid; shared LLD with static LLVM
+is rejected to avoid duplicate LLVM state. Release-static linkage and cross builds
+remain unverified. Static native libraries still have transitive system dependencies.
+
+`LLD_PREFIX`, `LLD_LINK_KIND` and `XED_PREFIX` follow
+[cc-rs environment precedence](https://docs.rs/cc/latest/cc/#external-configuration-via-environment-variables):
+`NAME_<target-triple>`, `NAME_<target_with_underscores>`, `HOST_NAME` for native
+builds or `TARGET_NAME` for cross builds, then `NAME`. Empty overrides fail.
+LLVM and bindgen retain their own discovery rules. The desktop resolves its bundled
+QEMU resource directory and passes it to the worker instead of relying on the
+inherited development path.
+
+`CC`, `CXX`, `AR`, `CXXFLAGS`, target flags and standard-library selection retain
+upstream behavior. CXX's `link-cplusplus` selects the C++ runtime; cc-rs selects the
+compiler and archiver. The bridge adds `/EHsc` for MSVC-compatible compilers to
+preserve CXX exception unwinding. It does not copy LLVM's `--cxxflags`, which may
+select an older standard or disable exceptions.
 
 On macOS, explicit compiler sysroot flags take precedence; otherwise `SDKROOT` or
-`xcrun` supplies the SDK. `build.rs` tracks selected environment and identity files.
-Discovery rejects installations missing either guest target before compilation.
-It uses [llvm-config](https://llvm.org/docs/CommandGuide/llvm-config.html) for library
-names and dependencies, without copying `--cxxflags`, which may select an older
-language standard or disable exceptions needed by the bridge.
-
-Static LLD with shared LLVM is valid. Shared LLD with static LLVM is rejected to
-avoid duplicate LLVM runtime state. Static linking still requires transitive system
-libraries and does not make the whole application self-contained. Cross builds
-need host-runnable discovery tools describing target libraries, target SDK/compiler,
-and Cargo linker settings. Cross, static and universal macOS builds remain unverified.
-`cargo xtask fmt` uses the unqualified `LLVM_CONFIG` to locate host clang-format;
-compilation and clang-tidy use the build's resolved target configuration.
+`xcrun` supplies the SDK. Cross builds need host-runnable discovery tools describing
+target libraries, a target SDK/compiler and Cargo linker settings.
+`cargo xtask fmt` finds host `llvm-config` under `LLVM_SYS_231_PREFIX/bin`, or on
+`PATH` when no prefix is set. clang-tidy uses the actual CXX compilation metadata.
 
 ### Diagnose setup before changing code
 
@@ -135,27 +175,19 @@ With the variables above selected, run:
 rustc --version
 node --version
 pnpm --version
-"$LLVM_CONFIG" --version
-"$LLVM_CONFIG" --targets-built
-"$LLVM_CONFIG" --includedir --libdir --shared-mode
+"$LLVM_SYS_231_PREFIX/bin/llvm-config" --version
+"$LLVM_SYS_231_PREFIX/bin/llvm-config" --targets-built
+"$LLVM_SYS_231_PREFIX/bin/llvm-config" --includedir --libdir
 "$LLD_PREFIX/bin/ld.lld" --version
-cmake --version
 ninja --version
 pkg-config --version
 ```
 
-The shell examples are POSIX; use PowerShell's environment syntax and call operator
-on Windows. A missing-header or missing-library error calls for a complete development
-installation. A libclang error calls for bindgen discovery. If Unicorn configuration
-fails, read the **first configure error**, not only the later generated-header errors.
-After correcting a compiler or configure dependency, clean only its failed build:
-
-```sh
-cargo clean -p unicorn-engine-sys --target <host-triple>
-```
-
-Use the triple from the failed invocation. Keep compiler/SDK settings consistent
-across commands; do not patch generated native headers to hide a failed configure.
+These commands assume explicit LLVM/LLD prefixes. Shell examples are POSIX; use
+PowerShell environment syntax and its call operator on Windows. A missing-header or missing-library error calls for a complete development
+installation. Keep compiler, SDK, deployment minimum and library settings consistent
+across the dependency SDK and Cargo build; do not patch generated headers to hide
+configuration errors.
 
 ## Commands and ownership
 
@@ -181,6 +213,7 @@ pnpm exec playwright install --with-deps --no-shell chromium
 | xtask        | `cargo xtask test [--release]`           | Stage worker, test Rust workspace, delegate to `pnpm test`; release applies to Rust    |
 | xtask        | `cargo xtask fmt [--check]`              | rustfmt, Oxfmt and clang-format                                                        |
 | xtask        | `cargo xtask codegen [--check]`          | Export or verify Rust-owned TypeScript contracts                                       |
+| xtask        | `cargo xtask sdk`                        | Build isolated, versioned QEMU and static XED SDKs                                     |
 | xtask        | `cargo xtask sidecar [--release]`        | Build and stage the worker without starting the app                                    |
 
 package.json owns frontend recipes, xtask owns cross-tool verification and formatting,
@@ -188,9 +221,10 @@ and Tauri owns desktop builds. Use `cargo xtask --help` for options. Focused run
 native arguments: `pnpm test --project logic`, `pnpm test --project browser` or
 `cargo test -p oplab-core --locked`.
 
-Check/test commands may compile dependencies, refresh ignored generated files
-and copy worker binaries into `src-tauri/binaries/`. They preserve lockfiles,
-tracked source and the Git index.
+Check/test commands compile dependencies, refresh ignored generated files and stage
+the worker plus QEMU libraries in `src-tauri/binaries/` and `src-tauri/runtime/`.
+They preserve lockfiles, tracked source and the Git index. Codegen writes committed
+DTOs unless `--check` is supplied; formatting writes source unless `--check` is supplied.
 Frontend and catalog changes use HMR; engine changes require worker staging and
 an app restart. Tauri's watcher does not rebuild the independent worker automatically.
 Protocol changes require rebuilding clients and worker together: the private
@@ -198,18 +232,33 @@ Protocol changes require rebuilding clients and worker together: the private
 
 ## API documentation
 
-TypeScript uses [TSDoc](https://tsdoc.org/) summaries, with `@remarks`, `@returns` or
-`@throws` when they add useful information; do not repeat declared types in tags.
-Rust uses [`//!` for modules and `///` for items](https://doc.rust-lang.org/reference/comments.html),
-with linked API references, `# Errors` sections and runnable examples where useful.
-Edit exported contract comments in Rust, then run `cargo xtask codegen`.
+Comments describe caller-visible contracts and non-obvious constraints: units,
+ownership, bounds, failure and partial effects. Remove narration of syntax, change
+history and details already expressed by types. Keep FFI safety reasoning beside
+unsafe operations and native lifetime rules beside their owning boundary.
 
-With the native toolchain configured, verify Rust documentation and its examples:
+- [TSDoc](https://tsdoc.org/): start with a short summary. Put additional behavior
+  in `@remarks`; use `@param`, `@returns` and `@throws` only for information beyond
+  the signature. Use backticks for identifiers and units, not repeated type tags.
+- [Rust](https://doc.rust-lang.org/reference/comments.html): use `//!` for modules
+  and `///` for items. Separate summaries from `# Errors`, `# Panics` or `# Safety`
+  where applicable; link related items with rustdoc links. Keep useful examples
+  runnable and distinguish guest faults returned as data from infrastructure errors.
+- Generated DTO comments originate in Rust. Run `cargo xtask codegen` after changing
+  them; do not edit TypeScript output or generated/cache documentation.
+
+With the native toolchain configured, verify rendering diagnostics and examples:
 
 ```sh
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 cargo test --workspace --doc --locked
+cargo xtask codegen --check
 ```
+
+README introduces the product and first workflow; AGENTS gives repository rules.
+Each reference owns one subject. Keep dated acceptance in the roadmap, not inline
+comments or repeated audit histories. These roles follow [AGENTS.md](https://agents.md/)
+and the structure examples in [Awesome README](https://github.com/matiassingers/awesome-readme).
 
 ## Outputs and distribution
 
@@ -223,7 +272,7 @@ The staged name follows [Tauri sidecar naming](https://tauri.app/develop/sidecar
 | --------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | `build/`                                                                          | SvelteKit static frontend; no Node server in the desktop bundle |
 | Cargo target directory                                                            | Rust binaries, native objects and build metadata                |
-| `src-tauri/binaries/`                                                             | Ignored target-suffixed worker copies for Tauri                 |
+| `src-tauri/binaries/`, `src-tauri/runtime/`                                       | Ignored worker and private QEMU libraries staged for Tauri      |
 | Cargo bundle directory                                                            | Platform packages from `pnpm tauri build`                       |
 | `src/lib/protocol/generated/`                                                     | Committed ts-rs contracts; regenerate with xtask                |
 | `src/lib/paraglide/`, `.svelte-kit/`, `src-tauri/gen/`, autogenerated permissions | Ignored generated output                                        |
@@ -235,11 +284,12 @@ pnpm tauri build --debug --bundles app
 ```
 
 `pnpm tauri build` selects release builds and configured platform bundle targets.
-The worker's transitive LLVM/LLD shared libraries are **not automatically bundled
-by declaring `externalBin`**. Local debug success can depend on installed native
-libraries. Inspect native dependencies and implement target-specific bundling,
-loader paths, licensing and signing/JIT policy before distribution. See the
-[release gates](roadmap.md#release-gates).
+The worker and private QEMU libraries are staged by Tauri hooks. Declaring
+`externalBin` does not bundle transitive LLVM/LLD/GLib libraries. Development bundles
+can depend on locally installed libraries; inspect loader paths and dependencies
+before distributing. [Runtime](runtime.md#distribution-design) describes the planned
+mixed linkage. Release-static LLVM, dependency relocation, signing/JIT policy and
+independently installed acceptance remain [release gates](roadmap.md#release-gates).
 
 ### Distribution licensing
 
@@ -248,21 +298,11 @@ Oplab's source uses standard MPL-2.0. The root `LICENSE` contains the unchanged
 the copyright holder. No Exhibit B opt-out applies: retaining that exhibit in the
 standard text does not apply its notice to the project.
 
-The locked `unicorn-engine` and `unicorn-engine-sys` packages declare `GPL-2.0`,
-and [Unicorn identifies its license as GPLv2](https://www.unicorn-engine.org/).
-MPL §§1.12 and 3.3 permit combination with GPLv2 through secondary licensing;
-they do not relicense Unicorn under MPL or remove GPL obligations. When distributing
-the linked worker or CLI, distribute the combined work under GPLv2 and also make
-its MPL-covered source available under MPL, retaining existing notices. Supply
-the GPL text and complete corresponding source, including required build scripts,
-or another source-provision option permitted by GPLv2 §3. See
-[Mozilla's compatibility FAQ](https://www.mozilla.org/en-US/MPL/2.0/FAQ/#q14-may-i-combine-mpl-licensed-code-and-lgpl-licensed-code-in-the-same-executable-program)
-and [distribution guidance](https://www.mozilla.org/en-US/MPL/2.0/combining-mpl-and-gpl/).
-
-Before distribution, review compatibility across the complete linked dependency
-set, including LLVM/LLD, and package its licenses and notices. The MPL/GPL route
-alone does not clear a release, and a sidecar boundary alone does not establish
-independent works. Distribution remains a [release gate](roadmap.md#release-gates).
+QEMU, XED, LLVM/LLD and their compiled transitive dependencies require a complete
+notice and compatibility inventory before release. Preserve MPL secondary-license
+compatibility. The [backend reference](runtime.md#distribution-design)
+records the intended distribution boundary; license review does not block local
+implementation or acceptance testing.
 
 ## Configuration and assets
 
@@ -285,20 +325,21 @@ so standalone editor formatting agrees with Cargo. Tauri retains explicit applic
 identity, window geometry, build hooks and capabilities; bundle targets use platform defaults.
 
 CXX exposes headers under the Cargo package name. The include
-`oplab-engine/src/assembly/ffi.rs.h` refers to the generated bridge header under
+`oplab-toolchain/src/assembly/ffi.rs.h` refers to the generated bridge header under
 `OUT_DIR/cxxbridge/include`, not a source-tree file. CXX also exposes handwritten
 headers through its crate include directory; no custom include prefix is needed.
-The bridge's three C++ translation units compile through cc-rs's `parallel`
+The bridge's C++ translation units compile through cc-rs's `parallel`
 feature, coordinated by Cargo's jobserver and `-j` limit.
 
-The native bridge's `OUT_DIR` holds compilation metadata. xtask obtains it from
+The CXX bridge's `OUT_DIR` holds compilation metadata. xtask obtains it from
 Cargo and runs clang-tidy against the cc-rs/CXX compiler arguments, carrying over
 cc-rs's tool environment for SDK/MSVC headers. The JSON database uses argument
 arrays without shell escaping; paths and arguments must be UTF-8.
-C++ formatting inherits LLVM style with C++23 and a 100-column limit. clang-tidy
+C and C++ formatting inherit LLVM style with a 100-column limit; C++ uses C++23. clang-tidy
 owns brace enforcement, correctness, modernization and direct-include checks;
 formatting does not insert control-flow syntax. Both tools come from the selected
-LLVM installation. Knip declares the dynamically imported Svelte editor as an
+LLVM installation. The QEMU adapter uses a separate C-only clang-tidy policy and
+QEMU's Meson compilation database; checks reject stale staged adapter sources. Knip declares the dynamically imported Svelte editor as an
 entry so its dependency tree remains checked. Its two dependency exceptions cover Oxfmt invoked
 by Rust and the inlang-owned message-format plugin.
 

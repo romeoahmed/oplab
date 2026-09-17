@@ -1,0 +1,19 @@
+[package]
+name = "oplab-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "QEMU instruction translation and LLVM execution for Oplab"
+
+[dependencies]
+oplab-core.workspace = true
+libloading.workspace = true
+llvm-sys.workspace = true
+thiserror.workspace = true
+
+[build-dependencies]
+bindgen.workspace = true
+
+[lints]
+workspace = true

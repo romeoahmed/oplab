@@ -77,15 +77,22 @@ test('a narrow panel returns from analysis to its decoded page without another r
   const analyze = vi.fn<Props['analyze']>().mockResolvedValue(addAnalysis);
   const view = await render(Instructions, { props: { ...initial, decode, analyze } });
   view.container.style.cssText = 'width: 600px; height: 240px';
-  const disassemble = page.getByRole('button', { name: en.disassemble, exact: true });
+  const disassemble = page.getByRole('button', {
+    name: en.disassemble,
+    exact: true,
+    includeHidden: true,
+  });
   await disassemble.click();
-  const table = page.getByRole('table').element();
-  const control = disassemble.element();
+  const table = page.getByRole('table', {
+    name: en.instructions,
+    exact: true,
+    includeHidden: true,
+  });
   await page.getByRole('button', { name: add.text, exact: true }).click();
   const panel = page.getByRole('region', { name: en.instruction_analysis });
   await expect.element(panel).toMatchTextContent('rax');
   await expect.element(table).not.toBeVisible();
-  await expect.element(control).not.toBeVisible();
+  await expect.element(disassemble).not.toBeVisible();
   await panel.getByRole('button', { name: en.close, exact: true }).click();
   await expect.element(panel).not.toBeInTheDocument();
   await expect.element(page.getByRole('table')).toMatchTextContent(ret.text);

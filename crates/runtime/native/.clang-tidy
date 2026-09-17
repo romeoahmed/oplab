@@ -1,0 +1,19 @@
+# QEMU requires ordered umbrella headers and fixed C callback signatures.
+# C++ modernization and direct-include rewriting are inappropriate at this boundary.
+InheritParentConfig: false
+Checks:
+  - '-*'
+  - clang-analyzer-*
+  - bugprone-*
+  - performance-*
+  - misc-unused-parameters
+  - misc-definitions-in-headers
+  - readability-braces-around-statements
+  - '-bugprone-easily-swappable-parameters'
+  # QEMU's enum/macro masks intentionally mix signed and unsigned C constants.
+  - '-bugprone-signed-bitwise'
+  # Native JIT entry addresses and GLib's once-init macros intentionally use integer pointers.
+  - '-performance-no-int-to-ptr'
+WarningsAsErrors: '*'
+HeaderFilterRegex: '(^|/)qemu/oplab/'
+FormatStyle: file

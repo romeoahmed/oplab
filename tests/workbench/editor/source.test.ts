@@ -44,7 +44,7 @@ test('UTF-8 boundaries locate the same Unicode prefix in the editor', () => {
 });
 
 test('locations preserve BOM, supplementary characters, combining marks and EOF', () => {
-  const source = '\uFEFF// 😀e\u0301\r\n中文: invalid';
+  const source = '\uFEFF// \u{1f600}e\u0301\r\n\u4e2d\u6587: invalid';
   expect(sourceInfo(source)).toEqual({ lines: 2, ending: 'CRLF' });
   expect(sourceInfo('a\r\nb\rc\n')).toEqual({ lines: 4, ending: 'mixed' });
   const prefix = source.slice(0, source.indexOf('invalid'));

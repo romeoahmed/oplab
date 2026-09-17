@@ -8,8 +8,9 @@ import {
 import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { Command } from '$lib/protocol/generated/Command';
 import type { FileFormat } from '$lib/protocol/generated/FileFormat';
+import { createWorkbench } from '$lib/workbench/controller.svelte';
 import Workbench from '$lib/workbench/Workbench.svelte';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, onTestFinished, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page, userEvent } from 'vitest/browser';
 
@@ -29,6 +30,28 @@ afterEach(() => {
   localStorage.clear();
 });
 
+test('an oversized edit preserves the last recoverable draft', () => {
+  const work = createWorkbench(() => null);
+  onTestFinished(() => {
+    work.dispose();
+    localStorage.clear();
+  });
+  work.initialize();
+  const oversized = '\u4e2d'.repeat(87382);
+  work.setSource(oversized);
+  // Closing flushes pending storage synchronously; it must not replace a valid draft.
+  work.dispose();
+  expect(work.source).toBe(oversized);
+  expect(work.problem).toBe('storage');
+  const recovered = createWorkbench(() => null);
+  onTestFinished(() => {
+    recovered.dispose();
+    localStorage.clear();
+  });
+  recovered.initialize();
+  expect(recovered.source).toBe(scratch.source);
+});
+
 test('switching locale retains edits and undo history', async () => {
   await render(Workbench);
   const editor = page.getByRole('textbox', { name: en.editor_label });
@@ -45,15 +68,22 @@ test('switching locale retains edits and undo history', async () => {
   await expect.element(chinese).toHaveTextContent(originalText);
 });
 
-test('an open search panel adopts the new language without losing its query', async () => {
+test('open editor panels retain their drafts and actions across language changes', async () => {
   await render(Workbench);
   await page.getByRole('textbox', { name: en.editor_label }).click();
   await userEvent.keyboard('{ControlOrMeta>}f{/ControlOrMeta}');
   await userEvent.keyboard('rax');
+  await page.getByRole('button', { name: en.go_to_line, exact: true }).click();
+  await page.getByRole('textbox', { name: `${en.go_to_line}:` }).fill('2:4');
   await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
   await expect
     .element(page.getByRole('textbox', { name: zh.find, exact: true }))
     .toHaveValue('rax');
+  const line = page.getByRole('textbox', { name: `${zh.go_to_line}:` });
+  await expect.element(line).toHaveValue('2:4');
+  await page.getByRole('button', { name: zh.go, exact: true }).click();
+  await expect.element(line).not.toBeInTheDocument();
+  await expect.element(page.getByRole('textbox', { name: zh.editor_label })).toHaveFocus();
 });
 
 test.each(['artifact', 'diagnostic'] as const)(
@@ -205,13 +235,13 @@ test('a saved draft restores source and architecture when the workbench is reope
   const first = await render(Workbench);
   await page.getByRole('combobox', { name: en.target }).selectOptions('aarch64');
   await page.getByRole('textbox', { name: en.editor_label }).click();
-  await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}// 中文{Enter}mov x0, #7');
+  await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}// \u4e2d\u6587{Enter}mov x0, #7');
   await first.unmount();
   await render(Workbench);
   await expect.element(page.getByRole('combobox', { name: en.target })).toHaveValue('aarch64');
   await expect
     .element(page.getByRole('textbox', { name: en.editor_label }))
-    .toHaveTextContent('// 中文mov x0, #7');
+    .toHaveTextContent('// \u4e2d\u6587mov x0, #7');
 });
 
 test('assembly, loading and execution stay separate; a rejected reset retains the machine', async () => {
@@ -315,7 +345,7 @@ test('build diagnostics locate Unicode source, follow locale and expire on edits
   });
   const editor = page.getByRole('textbox', { name: en.editor_label });
   await editor.click();
-  await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}// 中文{Enter}  invalid');
+  await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}// \u4e2d\u6587{Enter}  invalid');
   await page.getByRole('button', { name: en.assemble, exact: true }).click();
   await page
     .getByRole('button', { name: show_diagnostic({ line: '2', column: '3' }, { locale: 'en' }) })
@@ -337,7 +367,7 @@ test('build diagnostics locate Unicode source, follow locale and expire on edits
 
 test('imported source reaches assembly unchanged and binary inspection never loads a machine', async () => {
   const bytes = new Uint8Array([0x90, 0xc3]);
-  const source = '\uFEFF# 中文 😀\r\n' + '  nop\r\n'.repeat(512);
+  const source = '\uFEFF# \u4e2d\u6587 \u{1f600}\r\n' + '  nop\r\n'.repeat(512);
   const saved: { format: string; bytes: Uint8Array }[] = [];
   await render(Workbench, {
     filePort: {
@@ -416,11 +446,11 @@ test('imported source reaches assembly unchanged and binary inspection never loa
   await page.getByRole('button', { name: 'nop', exact: true }).click();
   await expect
     .element(page.getByRole('region', { name: en.instruction_analysis }))
-    .toMatchTextContent('X64');
+    .toMatchTextContent('LONGMODE');
   await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
   await expect
     .element(page.getByRole('region', { name: zh.instruction_analysis }))
-    .toMatchTextContent('X64');
+    .toMatchTextContent('LONGMODE');
   await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
 });
 
@@ -453,7 +483,6 @@ test('initial setup is target-specific, survives locale changes and applies only
     }),
   });
   await page.getByRole('button', { name: en.configuration, exact: true }).click();
-  await page.getByRole('combobox', { name: en.cpu_model }).selectOptions('nehalem');
   await disclosure(en.configuration, en.initial_registers).click();
   await page.getByRole('button', { name: en.add_register }).click();
   await page.getByRole('textbox', { name: /RAX/ }).fill('0xffffffffffffffff');
@@ -473,7 +502,6 @@ test('initial setup is target-specific, survives locale changes and applies only
   expect(commands).toEqual([]);
   await page.getByRole('combobox', { name: en.target }).selectOptions('aarch64');
   await page.getByRole('button', { name: en.configuration, exact: true }).click();
-  await page.getByRole('combobox', { name: en.cpu_model }).selectOptions('cortex_a53');
   await disclosure(en.configuration, en.initial_registers).click();
   await expect
     .element(page.getByRole('combobox', { name: en.register_name, exact: true }))
@@ -482,7 +510,6 @@ test('initial setup is target-specific, survives locale changes and applies only
   await page.getByRole('combobox', { name: en.target }).selectOptions('x86_64');
   await page.getByRole('combobox', { name: en.language }).selectOptions('zh-CN');
   await page.getByRole('button', { name: zh.configuration, exact: true }).click();
-  await expect.element(page.getByRole('combobox', { name: zh.cpu_model })).toHaveValue('nehalem');
   await disclosure(zh.configuration, zh.initial_registers).click();
   await expect
     .element(page.getByRole('textbox', { name: /RAX/ }))
@@ -502,8 +529,111 @@ test('initial setup is target-specific, survives locale changes and applies only
   const load = commands.find((command) => command.type === 'load');
   if (load?.type !== 'load') throw new Error('Missing load request');
   expect(load.data.initial).toEqual({
-    cpu: 'nehalem',
     registers: [{ name: 'rax', value: '18446744073709551615' }],
     mappings: [{ address: '0x0000000000080000', length: 4096, flags: 6 }],
   });
 });
+
+test.each(['en', 'zh-CN'] as const)(
+  '%s observation panel opens on assembly and retains its draft when hidden',
+  async (locale) => {
+    localStorage.setItem('PARAGLIDE_LOCALE', locale);
+    const copy = locale === 'en' ? en : zh;
+    const build = Promise.withResolvers<Awaited<ReturnType<WorkerPort['request']>>>();
+    await render(Workbench, {
+      portFactory: (): WorkerPort => ({
+        connect: () => Promise.resolve(connection()),
+        request: () => build.promise,
+        acknowledge: () => Promise.resolve(),
+        detach: () => {},
+      }),
+    });
+    const toggle = page.getByRole('button', { name: copy.toggle_panel });
+    await expect.element(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect
+      .element(page.getByRole('tab', { name: copy.memory, exact: true }))
+      .not.toBeInTheDocument();
+    await page.getByRole('button', { name: copy.assemble, exact: true }).click();
+    await expect.element(toggle).toHaveAttribute('aria-expanded', 'true');
+    const address = page.getByRole('textbox', { name: copy.address, exact: true });
+    await address.fill('0x1234');
+    await page.getByRole('button', { name: copy.hide_panel }).click();
+    await expect.element(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.keyboard('{ControlOrMeta>}j{/ControlOrMeta}');
+    await expect.element(address).toHaveValue('0x1234');
+    build.resolve({
+      response: {
+        id: '1',
+        result: { type: 'error', data: { code: 'assembly', address: null, source_offset: null } },
+      },
+      payloads: [],
+    });
+    await expect.element(page.getByRole('alert')).toBeVisible();
+    await expect.element(toggle).toHaveAttribute('aria-expanded', 'true');
+  },
+);
+
+test.each(['en', 'zh-CN'] as const)(
+  '%s starts blank, loads examples explicitly and restores a deliberately empty draft',
+  async (locale) => {
+    localStorage.removeItem('oplab.scratch.v1');
+    localStorage.setItem('PARAGLIDE_LOCALE', locale);
+    const copy = locale === 'en' ? en : zh;
+    const request = vi.fn<WorkerPort['request']>((command) => {
+      if (command.type === 'assemble') return Promise.resolve(assembled(command.data.identity));
+      throw new Error(`Unexpected ${command.type}`);
+    });
+    const saved: Uint8Array[] = [];
+    const props = {
+      portFactory: (): WorkerPort => ({
+        connect: () => Promise.resolve(connection()),
+        request,
+        acknowledge: () => Promise.resolve(),
+        detach: () => {},
+      }),
+      filePort: {
+        open: () => Promise.resolve(null),
+        save: (_format: FileFormat, _title: string, bytes: Uint8Array) => {
+          saved.push(bytes);
+          return Promise.resolve(true);
+        },
+      },
+    };
+    const first = await render(Workbench, props);
+    const editor = page.getByRole('textbox', { name: copy.editor_label });
+    const assemble = page.getByRole('button', { name: copy.assemble, exact: true });
+    await expect.element(editor).toBeVisible();
+    await expect.element(assemble).toBeDisabled();
+    await editor.click();
+    await userEvent.keyboard('{ControlOrMeta>}{Enter}{/ControlOrMeta}');
+    await expect
+      .element(page.getByRole('button', { name: copy.toggle_panel }))
+      .toHaveAttribute('aria-expanded', 'false');
+    expect(request).not.toHaveBeenCalled();
+    const exportSource = async () => {
+      await page.getByRole('button', { name: copy.files, exact: true }).click();
+      await page.getByRole('menuitem', { name: copy.export_source }).click();
+    };
+    await exportSource();
+    await expect.poll(() => saved.at(-1)).toEqual(new Uint8Array());
+    await page.getByRole('button', { name: copy.load_example }).click();
+    await expect.element(assemble).toBeEnabled();
+    await exportSource();
+    await expect.poll(() => saved.at(-1)?.length ?? 0).toBeGreaterThan(0);
+    const example = saved.at(-1);
+    await editor.click();
+    await userEvent.keyboard('{ControlOrMeta>}{Enter}{/ControlOrMeta}');
+    await expect.poll(() => request.mock.calls.length).toBe(1);
+    const command = request.mock.calls[0]?.[0];
+    if (command?.type !== 'assemble') throw new Error('Missing assembly request');
+    expect(new TextEncoder().encode(command.data.source)).toEqual(example);
+    await editor.click();
+    await userEvent.keyboard('{ControlOrMeta>}a{/ControlOrMeta}{Backspace}');
+    await expect.element(assemble).toBeDisabled();
+    await first.unmount();
+    await render(Workbench, props);
+    await expect.element(assemble).toBeDisabled();
+    await exportSource();
+    await expect.poll(() => saved.at(-1)).toEqual(new Uint8Array());
+  },
+);

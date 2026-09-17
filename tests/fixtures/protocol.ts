@@ -9,7 +9,6 @@ import type { Target } from '$lib/protocol/generated/Target';
 // Shared protocol data; native behavior is exercised by the Rust process tests.
 export function observation(sequence = '9007199254740993', target: Target = 'x86_64'): Observation {
   return {
-    cpu: target === 'x86_64' ? 'haswell' : 'cortex_a72',
     key: { session: '2', generation: '0' },
     sequence,
     status: { type: 'ready' },
@@ -56,10 +55,17 @@ export function observation(sequence = '9007199254740993', target: Target = 'x86
               sp: '0',
               pc: '0x0000000000001000',
               nzcv: 0,
-              v: Array(32).fill('0x00000000000000000000000000000000') as Extract<
+              z: Array(32).fill('0x' + '00'.repeat(256)) as Extract<
                 Registers,
                 { type: 'aarch64' }
-              >['data']['v'],
+              >['data']['z'],
+              p: Array(16).fill('0x' + '00'.repeat(32)) as Extract<
+                Registers,
+                { type: 'aarch64' }
+              >['data']['p'],
+              ffr: '0x' + '00'.repeat(32),
+              vl: 256,
+              max_vl: 256,
               fpcr: 0,
               fpsr: 0,
             },
@@ -70,10 +76,10 @@ export function observation(sequence = '9007199254740993', target: Target = 'x86
               gpr: ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
               rip: '0x0000000000001000',
               rflags: '2',
-              xmm: Array(16).fill('0x00000000000000000000000000000000') as Extract<
+              ymm: Array(16).fill('0x' + '00'.repeat(32)) as Extract<
                 Registers,
                 { type: 'x86_64' }
-              >['data']['xmm'],
+              >['data']['ymm'],
               mxcsr: 0,
             },
           },
@@ -131,7 +137,7 @@ export const nopAnalysis = {
     type: 'x86',
     data: {
       flow: 'next',
-      cpuid: ['X64'],
+      isa: 'LONGMODE',
       privileged: false,
       registers_incomplete: false,
       flags: { read: [], written: [], cleared: [], set: [], undefined: [] },

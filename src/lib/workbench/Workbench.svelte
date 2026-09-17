@@ -3,11 +3,15 @@
   import { desktopFiles, type FilePort } from '$lib/desktop/files';
   import { createLocaleController } from '$lib/i18n/locale.svelte';
   import * as m from '$lib/paraglide/messages.js';
+  import type { RoundingMode } from '$lib/protocol/generated/RoundingMode';
+  import type { VectorWrite } from '$lib/protocol/generated/VectorWrite';
   import type { Diagnostic } from '@codemirror/lint';
   import {
     Binary,
     Hammer,
-    Import,
+    ArrowDownToLine,
+    PanelBottom,
+    BookOpen,
     Play,
     StepForward,
     Pause,
@@ -20,26 +24,26 @@
     Minimize2,
     MemoryStick,
     Box,
-    ArrowRight,
+    ScanEye,
     CircleCheck,
-    ListTree,
+    ListOrdered,
     LocateFixed,
     RefreshCw,
   } from '@lucide/svelte';
-  import { Toolbar, Tooltip, Popover, Tabs } from 'bits-ui';
+  import { Toolbar, Tooltip, Popover, Tabs, Toggle } from 'bits-ui';
   import { onMount, untrack } from 'svelte';
 
   import Appearance from './Appearance.svelte';
   import { createWorkbench, examples } from './controller.svelte';
   import { sourceInfo, sourceLocation } from './editor/source';
-  import Files from './Files.svelte';
+  import FileMenu from './FileMenu.svelte';
   import { segmentBytes } from './instructions/bytes';
   import Instructions from './instructions/Instructions.svelte';
+  import InitialState from './load/InitialState.svelte';
+  import RawCode from './load/RawCode.svelte';
   import Machine from './machine/Machine.svelte';
   import Memory from './machine/Memory.svelte';
-  import Patch from './machine/Patch.svelte';
-  import Raw from './machine/Raw.svelte';
-  import Setup from './machine/Setup.svelte';
+  import MemoryPatch from './machine/MemoryPatch.svelte';
   import { defaultPreferences, readPreferences } from './preferences';
   import { problemLabel } from './presentation';
   import ToolbarAction from './ToolbarAction.svelte';
@@ -56,6 +60,7 @@
   const options = $derived({ locale: language.current });
   let byteSource = $state('');
   let observationTab = $state('memory');
+  let panelOpen = $state(false);
   let fileProblem = $state<string | null>(null);
   const captured = $derived(work.inspected);
   const artifactSources = $derived(
@@ -138,23 +143,22 @@
       ['ready', 'paused', 'stepped', 'breakpoint'].includes(observation.status.type),
   );
   const sourceDetails = $derived(sourceInfo(work.source));
+  const canAssemble = $derived(work.connected && !work.building && work.source.trim().length > 0);
   const actions = $derived([
     {
       label: work.building ? m.assembling({}, options) : m.assemble({}, options),
       hint: m.assemble_hint({}, options),
       icon: Hammer,
-      disabled: !work.connected || work.building,
+      disabled: !canAssemble,
       primary: true,
       prominent: true,
       shortcut: 'Meta+Enter Control+Enter',
-      run: () => {
-        void work.assemble();
-      },
+      run: assemble,
     },
     {
       label: m.load_artifact({}, options),
       hint: m.load_hint({}, options),
-      icon: Import,
+      icon: ArrowDownToLine,
       prominent: true,
       disabled: !work.connected || !work.artifactCurrent || work.controlling || running,
       run: () => {
@@ -235,11 +239,26 @@
       preferencesFailed = true;
     }
   });
+  function togglePanel() {
+    panelOpen = focused || !panelOpen;
+    if (panelOpen) focused = false;
+  }
+  function assemble() {
+    panelOpen = true;
+    focused = false;
+    void work.assemble();
+  }
   function shortcuts(event: KeyboardEvent) {
-    if (!work.connected || event.isComposing || event.defaultPrevented || event.repeat) return;
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !work.building) {
+    if (event.isComposing || event.defaultPrevented || event.repeat) return;
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
       event.preventDefault();
-      void work.assemble();
+      togglePanel();
+      return;
+    }
+    if (!work.connected) return;
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && canAssemble) {
+      event.preventDefault();
+      assemble();
     }
     if (event.key === 'F10' && resumable && !work.controlling) {
       event.preventDefault();
@@ -258,6 +277,7 @@
     <main
       class="workbench"
       class:focus-mode={focused}
+      class:panel-hidden={!panelOpen}
       class:system-font={preferences.font === 'system'}
       style:--editor-size={`${String(preferences.fontSize)}px`}
       style:--inspector-width={`${String(preferences.inspectorWidth)}%`}
@@ -270,7 +290,7 @@
             >oplab<span class="brand-period">.</span></strong
           >
         </h1>
-        <Files
+        <FileMenu
           port={filePort}
           locale={language.current}
           source={work.source}
@@ -284,6 +304,7 @@
             work.importBinary(bytes);
             byteSource = 'imported';
             observationTab = 'raw';
+            panelOpen = true;
             focused = false;
           }}
           onerror={(code: string | null) => {
@@ -348,7 +369,11 @@
                 >
               </div>
               <p class="muted-note">{m.configuration_hint({}, options)}</p>
-              <Setup bind:value={work.setup} target={work.target} locale={language.current} />
+              <InitialState
+                bind:value={work.setup}
+                target={work.target}
+                locale={language.current}
+              />
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>
@@ -376,6 +401,14 @@
               <span class="revision-tag">r{work.revision}</span>
             </div>
             <div class="pane-tools">
+              <button
+                class="icon-button"
+                aria-label={m.load_example({}, options)}
+                title={m.load_example({}, options)}
+                onclick={() => {
+                  work.setSource(examples[work.target]);
+                }}><BookOpen size={16} aria-hidden="true" /></button
+              >
               <label class="target-picker"
                 ><span class="sr-only">{m.target({}, options)}</span><select
                   value={work.target}
@@ -386,31 +419,18 @@
                   ></select
                 ></label
               >
-              <button
+              <Toggle.Root
                 class="icon-button"
                 aria-label={m.focus_editor({}, options)}
-                aria-pressed={focused}
-                onclick={() => {
-                  focused = !focused;
-                }}
+                title={m.focus_editor({}, options)}
+                bind:pressed={focused}
                 >{#if focused}<Minimize2 size={16} aria-hidden="true" />{:else}<Maximize2
                     size={16}
                     aria-hidden="true"
-                  />{/if}</button
+                  />{/if}</Toggle.Root
               >
             </div>
           </header>
-          <div class="source-context">
-            <span
-              >{m.source({}, options)} <span aria-hidden="true">/</span>
-              {m.assembly_syntax({}, options)}</span
-            ><button
-              class="text-button"
-              onclick={() => {
-                work.setSource(examples[work.target]);
-              }}>{m.load_example({}, options)}<ArrowRight size={13} aria-hidden="true" /></button
-            >
-          </div>
           <div class="editor-body">
             {#await import('./editor/Editor.svelte')}
               <p class="editor-message muted-note" role="status">{m.editor_loading({}, options)}</p>
@@ -422,6 +442,9 @@
                 locale={language.current}
                 target={work.target}
                 wrap={preferences.wrap}
+                onassemble={() => {
+                  if (canAssemble) assemble();
+                }}
                 oncursor={(line: number, column: number) => {
                   cursor = { line, column };
                 }}
@@ -461,18 +484,24 @@
           onbreakpoint={(address: string, enabled: boolean) => {
             void work.breakpoint(address, enabled);
           }}
+          onrounding={(mode: RoundingMode) => {
+            void work.setRounding(mode);
+          }}
+          onvector={(write: VectorWrite) => {
+            void work.writeVector(write);
+          }}
           onregister={(name: string, value: string) => {
             void work.writeRegister(name, value);
           }}
           locale={language.current}
         />
-        <Tabs.Root bind:value={observationTab} class="observation-pane">
+        <Tabs.Root bind:value={observationTab} class="observation-pane" id="observations">
           <div class="pane-header">
             <Tabs.List class="panel-tabs" aria-label={m.observation_views({}, options)}
               ><Tabs.Trigger value="memory"
                 ><MemoryStick size={15} aria-hidden="true" />{m.memory({}, options)}</Tabs.Trigger
               ><Tabs.Trigger value="instructions"
-                ><ListTree size={15} aria-hidden="true" />{m.instructions(
+                ><ListOrdered size={15} aria-hidden="true" />{m.instructions(
                   {},
                   options,
                 )}</Tabs.Trigger
@@ -481,6 +510,14 @@
               ><Tabs.Trigger value="artifact"
                 ><Box size={15} aria-hidden="true" />{m.artifact({}, options)}</Tabs.Trigger
               ></Tabs.List
+            >
+            <button
+              class="icon-button"
+              aria-label={m.hide_panel({}, options)}
+              title={m.hide_panel({}, options)}
+              onclick={() => {
+                panelOpen = false;
+              }}><X size={15} aria-hidden="true" /></button
             >
           </div>
           <Tabs.Content value="memory" class="memory-content">
@@ -507,26 +544,28 @@
                   bind:value={work.memoryLength}
                 /><span class="input-unit">B</span></label
               >
-              <button
-                type="button"
-                disabled={!work.connected || pc === undefined}
-                onclick={(event) => {
-                  if (pc !== undefined) {
-                    work.memoryAddress = pc;
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}><LocateFixed size={14} aria-hidden="true" />{m.inspect_pc({}, options)}</button
-              >
-              <button disabled={!work.connected || observation === undefined}
-                >{m.inspect_memory({}, options)}<ArrowRight size={14} aria-hidden="true" /></button
-              >
-              <Patch
-                disabled={!work.connected || !resumable || work.controlling}
-                locale={language.current}
-                onwrite={(address: string, bytes: string) => {
-                  void work.writeMemory(address, bytes);
-                }}
-              />
+              <div class="memory-actions">
+                <button
+                  type="button"
+                  disabled={!work.connected || pc === undefined}
+                  onclick={(event) => {
+                    if (pc !== undefined) {
+                      work.memoryAddress = pc;
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}><LocateFixed size={14} aria-hidden="true" />{m.inspect_pc({}, options)}</button
+                >
+                <button disabled={!work.connected || observation === undefined}
+                  ><ScanEye size={14} aria-hidden="true" />{m.inspect_memory({}, options)}</button
+                >
+                <MemoryPatch
+                  disabled={!work.connected || !resumable || work.controlling}
+                  locale={language.current}
+                  onwrite={(address: string, bytes: string) => {
+                    void work.writeMemory(address, bytes);
+                  }}
+                />
+              </div>
             </form>
             <Memory
               window={captured?.observation.memory ?? null}
@@ -582,7 +621,7 @@
             </Instructions>
           </Tabs.Content>
           <Tabs.Content value="raw" class="raw-content">
-            <Raw
+            <RawCode
               bind:value={work.raw}
               bind:setup={work.rawSetup}
               bind:budget={work.budget}
@@ -662,6 +701,18 @@
           {language.failed ? m.locale_failed({}, options) : m.preferences_failed({}, options)}
         </p>{/if}
       <footer class="statusbar">
+        <button
+          class="panel-toggle"
+          aria-label={m.toggle_panel({}, options)}
+          aria-expanded={panelOpen && !focused}
+          aria-controls="observations"
+          aria-keyshortcuts="Meta+J Control+J"
+          title={m.toggle_panel({}, options)}
+          onclick={togglePanel}
+          ><PanelBottom size={15} aria-hidden="true" /><span
+            >{m.observation_views({}, options)}</span
+          ></button
+        >
         <span
           ><span class="status-dot" class:offline={!work.connected} aria-hidden="true"
           ></span>{work.preview
