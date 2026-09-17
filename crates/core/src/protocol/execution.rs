@@ -115,6 +115,19 @@ pub enum SessionAction {
     Run,
     /// Begin one architectural step, including REP continuation.
     Step,
+    /// Step one instruction, or run a call until its fallthrough and original stack pointer.
+    StepOver,
+    /// Run until any listed instruction address, without changing retained breakpoints.
+    RunUntil {
+        /// One to 256 aligned addresses; other stops cancel the temporary goal.
+        addresses: Vec<HexAddress>,
+    },
+    /// Enable or disable instruction-start recording; existing entries are retained.
+    RecordTrace(bool),
+    /// Clear recorded entries without changing execution counters or recording mode.
+    ClearTrace,
+    /// Read the bounded trace on demand, independently of observation subscriptions.
+    ReadTrace,
     /// Pause at the next ownership boundary.
     Pause,
     /// Terminate execution as cancelled.
@@ -170,6 +183,8 @@ pub enum Status {
     Paused,
     /// An address breakpoint stopped before effects.
     Breakpoint(HexAddress),
+    /// A temporary run target stopped before effects.
+    Target(HexAddress),
     /// Execution ended with an explicit outcome.
     Terminated(Termination),
     /// The native state is unusable; register observations are unavailable.
@@ -323,4 +338,28 @@ impl From<GuestFault> for Fault {
             size: fault.size.map(Counter::new),
         }
     }
+}
+
+/// A snapshot of instruction starts, not retirement or replay data.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ExecutionTrace {
+    /// Exact session generation that owns the trace.
+    pub key: SessionKey,
+    /// Whether new instruction starts are being recorded.
+    pub enabled: bool,
+    /// Oldest-first suffix of at most 512 entries. REP continuations do not add entries.
+    pub entries: Vec<TraceEntry>,
+    /// Entries evicted since the last clear/reset; disabled intervals are not counted.
+    pub discarded: Counter,
+}
+
+/// One instruction admitted for execution; it may subsequently fault or yield.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct TraceEntry {
+    /// One-based instruction-start counter in this reset generation; gaps are possible.
+    pub instruction: Counter,
+    /// Address at admission. Later patches do not change this historical address.
+    pub pc: HexAddress,
 }

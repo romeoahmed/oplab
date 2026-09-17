@@ -26,6 +26,7 @@
   overflow-wrap: anywhere;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  color: var(--data-value);
 }
 
 .vector-lanes {
@@ -48,6 +49,7 @@
   code {
     overflow-wrap: anywhere;
     font-size: 12px;
+    color: var(--data-value);
   }
 }
 
@@ -102,11 +104,12 @@
     span {
       display: inline-block;
       min-inline-size: 4ch;
+      color: var(--syntax-register);
       margin-inline-end: 8px;
     }
 
     code {
-      color: var(--text);
+      color: var(--data-value);
       overflow-wrap: anywhere;
     }
   }

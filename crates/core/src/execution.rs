@@ -61,6 +61,8 @@ pub enum PauseReason {
     Requested,
     /// Execution stopped before this instruction.
     Breakpoint(Address),
+    /// A temporary run target was reached before effects.
+    Target(Address),
 }
 
 /// An explicit terminal outcome; faults and budget limits are never success.

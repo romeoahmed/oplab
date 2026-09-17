@@ -17,13 +17,16 @@
   --selection: oklch(37% 0.055 230deg);
   --warning: oklch(83% 0.12 80deg);
   --error: oklch(78% 0.14 25deg);
+  --data-address: oklch(81% 0.085 240deg);
+  --data-value: oklch(86% 0.095 85deg);
+  --data-padding: oklch(64% 0.018 255deg);
   --syntax-instruction: oklch(82% 0.1 290deg);
   --syntax-directive: oklch(79% 0.09 240deg);
   --syntax-register: oklch(83% 0.095 175deg);
   --syntax-literal: oklch(85% 0.11 80deg);
   --syntax-label: oklch(84% 0.1 40deg);
   --syntax-string: oklch(82% 0.085 135deg);
-  --syntax-comment: oklch(65% 0.025 255deg);
+  --syntax-comment: oklch(68% 0.022 255deg);
 
   background: var(--surface-deep);
   color: var(--text);

@@ -41,6 +41,8 @@
 
 .instruction-table {
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   min-block-size: 0;
 
   table {
@@ -49,6 +51,7 @@
     text-align: start;
     white-space: nowrap;
     font: 12px/1.8 var(--mono);
+    font-variant-numeric: tabular-nums;
   }
 
   th,
@@ -62,7 +65,7 @@
     inset-block-start: 0;
     background: var(--surface);
     color: var(--muted);
-    font-weight: 500;
+    font: 11px/1.8 var(--sans);
   }
 }
 
@@ -187,6 +190,14 @@
   .instruction-table:has(+ .instruction-analysis) {
     display: none;
   }
+}
+
+.instruction-address {
+  color: var(--data-address);
+}
+
+.instruction-bytes {
+  color: var(--muted);
 }
 
 .instruction-table tr[aria-current='step'] {

@@ -180,6 +180,8 @@ pub enum Reply {
     Analyzed(Box<analysis::InstructionAnalysis>),
     /// One coherent observation; optional memory follows as binary frames.
     Observed(Box<Observation>),
+    /// On-demand instruction-start history, separate from streamed register observations.
+    Trace(execution::ExecutionTrace),
     /// The selected session was dropped on its owning thread.
     SessionClosed(SessionKey),
     /// Observation events will follow; the ID is the Subscribe request ID.

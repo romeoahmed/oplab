@@ -9,7 +9,8 @@ use oplab_core::{
     protocol::{
         Command, Diagnostic, DiagnosticCode, Reply, Response,
         execution::{
-            InitialState, LoadImage, MemoryWindow, Observation, SessionAction, SessionKey, Status,
+            ExecutionTrace, InitialState, LoadImage, MemoryWindow, Observation, SessionAction,
+            SessionKey, Status, TraceEntry,
         },
         scalar::{Counter, HexAddress},
     },
@@ -180,7 +181,7 @@ fn run(receiver: &Receiver<Job>) {
             let advanced = matches!(
                 job.command,
                 Command::Execute {
-                    action: SessionAction::Step,
+                    action: SessionAction::Step | SessionAction::StepOver,
                     ..
                 }
             ) && matches!(result, Reply::Observed(_));
@@ -266,6 +267,24 @@ fn dispatch(
                 *active = None;
                 return Ok((Reply::SessionClosed(*session), Vec::new()));
             }
+            if *action == SessionAction::ReadTrace {
+                let trace = bound.machine.trace();
+                return Ok((
+                    Reply::Trace(ExecutionTrace {
+                        key: bound.key(),
+                        enabled: trace.enabled(),
+                        discarded: Counter::new(trace.discarded()),
+                        entries: trace
+                            .entries()
+                            .map(|entry| TraceEntry {
+                                instruction: Counter::new(entry.instruction),
+                                pc: HexAddress::new(entry.pc),
+                            })
+                            .collect(),
+                    }),
+                    Vec::new(),
+                ));
+            }
             if bound.sequence == u64::MAX {
                 return Err(Diagnostic::new(DiagnosticCode::ResourceLimit));
             }
@@ -329,6 +348,15 @@ fn apply(
     match action {
         SessionAction::Run => session.start()?,
         SessionAction::Step => session.step()?,
+        SessionAction::StepOver => session.step_over()?,
+        SessionAction::RunUntil { addresses } => session.run_until(
+            &addresses
+                .iter()
+                .map(|address| address.address())
+                .collect::<Vec<_>>(),
+        )?,
+        SessionAction::RecordTrace(enabled) => session.record_trace(*enabled)?,
+        SessionAction::ClearTrace => session.clear_trace()?,
         SessionAction::Pause => session.pause()?,
         SessionAction::Cancel => session.cancel()?,
         SessionAction::Reset => session.reset()?,
@@ -358,7 +386,9 @@ fn apply(
             session.set_breakpoints(&addresses, *enabled)?;
         }
         SessionAction::Observe { memory } => return Ok(*memory),
-        SessionAction::Close => return Err(ValidationError::Transition.into()),
+        SessionAction::Close | SessionAction::ReadTrace => {
+            return Err(ValidationError::Transition.into());
+        }
     }
     Ok(None)
 }
@@ -382,6 +412,9 @@ const fn status(state: ExecutionState) -> Status {
         ExecutionState::Paused(PauseReason::Requested) => Status::Paused,
         ExecutionState::Paused(PauseReason::Breakpoint(address)) => {
             Status::Breakpoint(HexAddress::new(address))
+        }
+        ExecutionState::Paused(PauseReason::Target(address)) => {
+            Status::Target(HexAddress::new(address))
         }
         ExecutionState::Terminated(reason) => Status::Terminated(reason),
         ExecutionState::Crashed => Status::Crashed,

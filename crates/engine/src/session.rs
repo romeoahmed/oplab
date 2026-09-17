@@ -1,6 +1,6 @@
 //! Synchronous machine ownership with bounded slices for a worker command loop.
 
-use crate::machine::{Machine, MachineError, SLICE_DISPATCHES, Slice, SliceStop};
+use crate::machine::{Machine, MachineError, RunGoal, SLICE_DISPATCHES, Slice, SliceStop, Trace};
 use oplab_core::{
     address::Address,
     diagnostic::ValidationError,
@@ -22,7 +22,7 @@ pub struct Session {
     dispatches: u64,
     instructions: u64,
     fault: Option<GuestFault>,
-    stepping: bool,
+    goal: RunGoal,
     bypass: Option<Address>,
 }
 
@@ -66,7 +66,7 @@ impl Session {
             dispatches: 0,
             instructions: 0,
             fault: None,
-            stepping: false,
+            goal: RunGoal::Continue,
             bypass: None,
         })
     }
@@ -111,7 +111,7 @@ impl Session {
     ///
     /// Rejects running, terminal, or crashed sessions.
     pub fn start(&mut self) -> Result<(), MachineError> {
-        self.begin(false)
+        self.begin(RunGoal::Continue)
     }
 
     /// Begin one architectural step and execute its first slice.
@@ -123,17 +123,84 @@ impl Session {
     ///
     /// Rejects illegal control states and propagates native failures as Crashed.
     pub fn step(&mut self) -> Result<(), MachineError> {
-        self.begin(true)?;
+        self.begin(RunGoal::Step)?;
         self.advance()
     }
 
-    fn begin(&mut self, stepping: bool) -> Result<(), MachineError> {
+    /// Run to any of 1–256 aligned addresses without changing retained breakpoints.
+    ///
+    /// Stops before effects, including when already at a target. Completion, faults,
+    /// budgets and user breakpoints remain authoritative; any stop cancels the goal.
+    ///
+    /// # Errors
+    ///
+    /// Rejects illegal states, empty/oversized inputs and target misalignment before mutation.
+    pub fn run_until(&mut self, addresses: &[Address]) -> Result<(), MachineError> {
+        self.state.require_patchable()?;
+        let goal = self.machine.run_goal(addresses)?;
+        self.begin(goal)
+    }
+
+    /// Step an instruction, or run a call to its fallthrough with the original SP.
+    ///
+    /// Uses live instruction bytes and decoder metadata. Other stops cancel the goal.
+    /// Nonstandard calls that do not restore SP remain subject to the normal budget.
+    ///
+    /// # Errors
+    ///
+    /// Rejects illegal states, unreadable/undecodable instructions and invalid fallthroughs
+    /// before execution. Native execution failures mark the session Crashed.
+    pub fn step_over(&mut self) -> Result<(), MachineError> {
+        self.state.require_patchable()?;
+        let goal = if self.machine.pc()? == self.policy.completion() {
+            RunGoal::Step
+        } else {
+            self.machine.step_over_goal()?
+        };
+        self.begin(goal)?;
+        self.advance()
+    }
+
+    /// Current bounded history. Observation does not clear or enable recording.
+    #[must_use]
+    pub const fn trace(&self) -> &Trace {
+        self.machine.trace()
+    }
+
+    /// Change recording mode between instructions without clearing existing entries.
+    ///
+    /// # Errors
+    ///
+    /// Rejects states other than ready or paused.
+    pub fn record_trace(&mut self, enabled: bool) -> Result<(), MachineError> {
+        self.state.require_patchable()?;
+        self.machine.record_trace(enabled);
+        Ok(())
+    }
+
+    /// Clear the trace while retaining recording mode and execution counters.
+    ///
+    /// # Errors
+    ///
+    /// Rejects running or crashed sessions.
+    pub fn clear_trace(&mut self) -> Result<(), MachineError> {
+        if matches!(
+            self.state,
+            ExecutionState::Running | ExecutionState::Crashed
+        ) {
+            return Err(ValidationError::Transition.into());
+        }
+        self.machine.clear_trace();
+        Ok(())
+    }
+
+    fn begin(&mut self, goal: RunGoal) -> Result<(), MachineError> {
         let next = self.state.transition(ControlEvent::Start)?;
         self.bypass = match self.state {
             ExecutionState::Paused(PauseReason::Breakpoint(address)) => Some(address),
             _ => None,
         };
-        self.stepping = stepping;
+        self.goal = goal;
         self.state = next;
         Ok(())
     }
@@ -151,7 +218,7 @@ impl Session {
             return Err(ValidationError::Transition.into());
         }
         let remaining = self.policy.instruction_budget() - self.instructions;
-        let count = if self.stepping {
+        let count = if matches!(self.goal, RunGoal::Step) {
             1
         } else {
             remaining.clamp(1, SLICE_DISPATCHES)
@@ -163,6 +230,8 @@ impl Session {
                 count,
                 remaining,
                 self.bypass.take(),
+                &self.goal,
+                self.instructions,
             )
             .and_then(|slice| self.accept(slice));
         if result.is_err() {
@@ -181,6 +250,7 @@ impl Session {
             SliceStop::Completed => self.terminate(Termination::Completed),
             SliceStop::Budget => self.terminate(Termination::Budget),
             SliceStop::Breakpoint(address) => self.pause_with(PauseReason::Breakpoint(address)),
+            SliceStop::Target(address) => self.pause_with(PauseReason::Target(address)),
             SliceStop::Fault(fault) => {
                 self.fault = Some(fault);
                 self.terminate(Termination::GuestFault)
@@ -193,7 +263,7 @@ impl Session {
                 self.terminate(Termination::Budget)
             }
             SliceStop::Yield
-                if self.stepping
+                if matches!(self.goal, RunGoal::Step)
                     && slice.dispatches != 0
                     && !slice.repeated_instruction_pending =>
             {
@@ -247,7 +317,7 @@ impl Session {
         self.dispatches = 0;
         self.instructions = 0;
         self.fault = None;
-        self.stepping = false;
+        self.goal = RunGoal::Continue;
         self.bypass = None;
         Ok(())
     }
@@ -300,7 +370,7 @@ impl Session {
         self.accept_write(result)?;
         if edit.storage() == RegisterStorage::InstructionPointer {
             self.bypass = None;
-            self.stepping = false;
+            self.goal = RunGoal::Continue;
             if matches!(self.state, ExecutionState::Paused(_)) {
                 self.state = ExecutionState::Paused(PauseReason::Requested);
             }

@@ -1,5 +1,5 @@
 //! Session boundaries precede fetch; only the native owner executes guest instructions.
-use super::{Machine, MachineError};
+use super::{Machine, MachineError, RunGoal};
 use oplab_core::{address::Address, execution::GuestFault};
 use oplab_runtime::Outcome;
 use std::time::{Duration, Instant};
@@ -10,6 +10,7 @@ pub(crate) enum SliceStop {
     Completed,
     Budget,
     Breakpoint(Address),
+    Target(Address),
     Fault(GuestFault),
     Environment,
 }
@@ -27,6 +28,8 @@ impl Machine {
         dispatches: u64,
         instruction_limit: u64,
         bypass: Option<Address>,
+        goal: &RunGoal,
+        instructions: u64,
     ) -> Result<Slice, MachineError> {
         if dispatches == 0 || dispatches > SLICE_DISPATCHES {
             return Err(MachineError::Backend);
@@ -59,6 +62,10 @@ impl Machine {
                 result.stop = SliceStop::Breakpoint(pc);
                 break;
             }
+            if !continuation && self.reached(goal, pc)? {
+                result.stop = SliceStop::Target(pc);
+                break;
+            }
             let step = self
                 .native
                 .execute(pc, dispatches - result.dispatches)
@@ -68,6 +75,9 @@ impl Machine {
             }
             result.dispatches += step.dispatches;
             result.instructions += u64::from(step.started && !continuation);
+            if step.started && !continuation {
+                self.trace.record(instructions + result.instructions, pc);
+            }
             self.pending_repeat = step.repeated.then_some(pc);
             match step.outcome {
                 Outcome::Finished => {}

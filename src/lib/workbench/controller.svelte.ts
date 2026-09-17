@@ -6,6 +6,7 @@ import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruct
 import type { DesktopFailure } from '$lib/protocol/generated/DesktopFailure';
 import type { Diagnostic } from '$lib/protocol/generated/Diagnostic';
 import type { DiagnosticCode } from '$lib/protocol/generated/DiagnosticCode';
+import type { ExecutionTrace } from '$lib/protocol/generated/ExecutionTrace';
 import type { FailureCode } from '$lib/protocol/generated/FailureCode';
 import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
 import type { LoadImage } from '$lib/protocol/generated/LoadImage';
@@ -63,6 +64,8 @@ export const examples: Record<Target, string> = {
  * artifacts and snapshots are read-only by convention, including their byte buffers.
  */
 export function createWorkbench(factory: Factory = desktopWorker) {
+  let trace = $state.raw<ExecutionTrace | null>(null);
+  let traceRequest: symbol | undefined;
   let source = $state('');
   let target = $state<Target>('x86_64');
   let base = $state('0x1000');
@@ -148,6 +151,8 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   }
   function failed(error: DesktopFailure): void {
     connected = false;
+    trace = null;
+    traceRequest = undefined;
     inspected = null;
     snapshot = null;
     loaded = null;
@@ -267,6 +272,8 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     if (port === null || connecting) return;
     connecting = true;
     connected = false;
+    trace = null;
+    traceRequest = undefined;
     problem = null;
     unknown = false;
     try {
@@ -463,6 +470,43 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       };
     });
   }
+  async function readTrace(): Promise<void> {
+    if (port === null || snapshot === null || !connected) return;
+    const key = snapshot.observation.key;
+    const request = Symbol();
+    traceRequest = request;
+    try {
+      const message = await port.request({
+        type: 'execute',
+        data: { session: key, action: { type: 'read_trace' } },
+      });
+      lifetime.signal.throwIfAborted();
+      const current = currentSession();
+      if (
+        traceRequest !== request ||
+        current?.session !== key.session ||
+        current.generation !== key.generation
+      )
+        return;
+      const result = message.response.result;
+      if (result.type === 'error') throw new RequestError(result.data.code);
+      if (
+        result.type !== 'trace' ||
+        result.data.key.session !== key.session ||
+        result.data.key.generation !== key.generation
+      )
+        throw new RequestError('protocol');
+      trace = result.data;
+    } catch (error) {
+      const current = currentSession();
+      if (
+        traceRequest === request &&
+        current?.session === key.session &&
+        current.generation === key.generation
+      )
+        report(error);
+    }
+  }
   async function execute(action: SessionAction, payload?: Uint8Array): Promise<void> {
     if (port === null || snapshot === null || controlling || !connected) return;
     controlling = true;
@@ -482,6 +526,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       if (result.type === 'observed') {
         publish({ observation: result.data, memory: message.payloads[0] ?? null });
         if (action.type === 'reset') await subscribe();
+        if (action.type === 'record_trace' || action.type === 'clear_trace') await readTrace();
         if (action.type === 'write_memory' && result.data.status.type !== 'crashed') {
           inspected = null;
           memoryAddress = action.data.address;
@@ -549,6 +594,29 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   return {
     decode,
     analyze,
+    readTrace,
+    get trace() {
+      const key = snapshot?.observation.key;
+      return connected &&
+        trace?.key.session === key?.session &&
+        trace?.key.generation === key?.generation
+        ? trace
+        : null;
+    },
+    async runToSource(line: number) {
+      if (loaded?.type !== 'source' || !matches(loaded.identity)) return;
+      const addresses = loaded.sourceMap.locations
+        .filter((point) => point.line === line)
+        .map((point) => point.address);
+      if (addresses.length > 0) await execute({ type: 'run_until', data: { addresses } });
+    },
+    async runToAddress(address: string) {
+      try {
+        await execute({ type: 'run_until', data: { addresses: [normalizeAddress(address)] } });
+      } catch (error) {
+        report(error);
+      }
+    },
     get source() {
       return source;
     },

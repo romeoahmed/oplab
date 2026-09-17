@@ -2,13 +2,14 @@
 
 use object::{Object, ObjectSymbol};
 use oplab_core::{
-    address::Address,
+    address::{Address, AddressRange},
     execution::{Access, ExecutionState, FaultKind, PauseReason, Termination},
+    memory::Permissions,
     registers::MachineRegisters,
     target::Target,
 };
 use oplab_engine::{
-    load::{Image, MachineSetup},
+    load::{Image, InitialMapping, MachineSetup},
     machine::Machine,
     session::Session,
 };
@@ -190,6 +191,7 @@ fn repeat_step_finishes_the_instruction_and_reset_restores_written_memory() -> T
     let (mut session, image) = fixture(Target::X86_64, source, 100)?;
     let repeat = symbol(&image, "repeat_here")?;
     let output = symbol(&image, "output")?;
+    session.record_trace(true)?;
     session.set_breakpoint(repeat, true)?;
     session.start()?;
     settle(&mut session)?;
@@ -204,6 +206,15 @@ fn repeat_step_finishes_the_instruction_and_reset_restores_written_memory() -> T
         session.read_registers()?.instruction_pointer(),
         symbol(&image, "after_repeat")?
     );
+    assert_eq!(
+        session
+            .trace()
+            .entries()
+            .filter(|entry| entry.pc == repeat)
+            .count(),
+        1
+    );
+    assert_eq!(session.trace().entries().len(), 4);
     assert_eq!(session.read_memory(output, 8)?, [42; 8]);
     let MachineRegisters::X86_64 { gpr, .. } = session.read_registers()? else {
         return Err("wrong register bank".into());
@@ -323,6 +334,7 @@ fn branch_steps_finish_before_the_next_fetch_but_data_faults_remain_immediate() 
         ),
     ] {
         let (mut session, _) = fixture(target, branch, 100)?;
+        session.record_trace(true)?;
         for _ in 0..2 {
             session.step()?;
             settle(&mut session)?;
@@ -344,6 +356,7 @@ fn branch_steps_finish_before_the_next_fetch_but_data_faults_remain_immediate() 
             Some(FaultKind::Unmapped(Access::Fetch))
         );
         assert_eq!(session.instructions(), 2);
+        assert_eq!(session.trace().entries().len(), 2);
 
         // An exhausted budget prevents the next fetch, but cannot erase a fault
         // produced by the last admitted instruction's own memory access.
@@ -352,10 +365,12 @@ fn branch_steps_finish_before_the_next_fetch_but_data_faults_remain_immediate() 
             (store, Termination::GuestFault),
         ] {
             let (mut session, _) = fixture(target, source, 2)?;
+            session.record_trace(true)?;
             session.start()?;
             settle(&mut session)?;
             assert_eq!(session.state(), ExecutionState::Terminated(expected));
             assert_eq!(session.instructions(), 2);
+            assert_eq!(session.trace().entries().len(), 2);
             if expected == Termination::GuestFault {
                 assert_eq!(
                     session.fault().map(|fault| fault.kind),
@@ -591,5 +606,394 @@ fn grouped_breakpoint_limits_and_alignment_fail_without_partial_updates() -> Tes
         session.set_breakpoints(&addresses[128..256], true)?;
         assert_eq!(session.breakpoints().collect::<Vec<_>>(), addresses[..256]);
     }
+    Ok(())
+}
+
+fn call_fixture(target: Target, indirect: bool) -> TestResult<(Session, Vec<u8>)> {
+    let source = match target {
+        Target::X86_64 => {
+            let call = if indirect {
+                "lea r11, [rip + outer]\ncallsite: call r11"
+            } else {
+                "callsite: call outer"
+            };
+            format!(
+                r".intel_syntax noprefix
+.text
+.globl _start
+_start:
+    lea rsp, [rip + stack_end]
+    {call}
+returned:
+    add rax, 100
+    jmp done
+outer:
+    inc rax
+    call inner
+    ret
+inner:
+    add rax, 2
+    ret
+done: nop
+.bss
+.balign 16
+.space 4096
+stack_end:"
+            )
+        }
+        Target::Aarch64 => {
+            let call = if indirect {
+                "adr x10, outer\ncallsite: blr x10"
+            } else {
+                "callsite: bl outer"
+            };
+            format!(
+                r".text
+.globl _start
+_start:
+    adrp x9, stack_end
+    add x9, x9, :lo12:stack_end
+    mov sp, x9
+    {call}
+returned:
+    add x0, x0, 100
+    b done
+outer:
+    stp x29, x30, [sp, -16]!
+    add x0, x0, 1
+    bl inner
+    ldp x29, x30, [sp], 16
+    ret
+inner:
+    add x0, x0, 2
+    ret
+done: nop
+.bss
+.balign 16
+.space 4096
+stack_end:"
+            )
+        }
+    };
+    fixture(target, &source, 2000)
+}
+
+#[test]
+fn temporary_targets_and_step_over_preserve_breakpoints_and_stop_before_effects() -> TestResult {
+    for (target, indirect) in [
+        (Target::X86_64, false),
+        (Target::X86_64, true),
+        (Target::Aarch64, false),
+        (Target::Aarch64, true),
+    ] {
+        let (mut session, image) = call_fixture(target, indirect)?;
+        let call = symbol(&image, "callsite")?;
+        let returned = symbol(&image, "returned")?;
+        let inner = symbol(&image, "inner")?;
+        session.record_trace(true)?;
+        session.run_until(&[call; 256])?;
+        settle(&mut session)?;
+        assert_eq!(
+            session.state(),
+            ExecutionState::Paused(PauseReason::Target(call))
+        );
+        let count = session.instructions();
+        session.run_until(&[call])?;
+        settle(&mut session)?;
+        assert_eq!(session.instructions(), count);
+        assert!(session.run_until(&[]).is_err());
+        assert!(session.run_until(&[call; 257]).is_err());
+        assert_eq!(
+            session.state(),
+            ExecutionState::Paused(PauseReason::Target(call))
+        );
+        session.step_over()?;
+        settle(&mut session)?;
+        assert_eq!(
+            session.state(),
+            ExecutionState::Paused(PauseReason::Target(returned))
+        );
+        assert_eq!(first_integer(&session)?, 3);
+        assert_eq!(session.breakpoints().count(), 0);
+        assert!(session.trace().entries().any(|entry| entry.pc == inner));
+        assert!(!session.trace().entries().any(|entry| entry.pc == returned));
+        session.step_over()?;
+        settle(&mut session)?;
+        assert_eq!(first_integer(&session)?, 103);
+        assert_eq!(session.state(), ExecutionState::Paused(PauseReason::Step));
+
+        session.reset()?;
+        assert!(session.trace().enabled());
+        assert_eq!(session.trace().entries().len(), 0);
+        session.run_until(&[call])?;
+        settle(&mut session)?;
+        session.set_breakpoint(inner, true)?;
+        session.step_over()?;
+        settle(&mut session)?;
+        assert_eq!(
+            session.state(),
+            ExecutionState::Paused(PauseReason::Breakpoint(inner))
+        );
+        assert_eq!(first_integer(&session)?, 1);
+        session.start()?;
+        settle(&mut session)?;
+        assert_eq!(
+            session.state(),
+            ExecutionState::Terminated(Termination::Completed)
+        );
+        assert_eq!(first_integer(&session)?, 103);
+        assert_eq!(session.breakpoints().collect::<Vec<_>>(), [inner]);
+    }
+    Ok(())
+}
+
+#[test]
+fn trace_capacity_clear_and_reset_preserve_execution_ownership() -> TestResult {
+    for target in [Target::X86_64, Target::Aarch64] {
+        let (mut session, _) = fixture(target, ".rept 514\nnop\n.endr\ndone:", 1000)?;
+        assert!(!session.trace().enabled());
+        session.record_trace(true)?;
+        let width = if target == Target::X86_64 { 1 } else { 4 };
+        for count in [511, 512, 513] {
+            session.run_until(&[Address::new(0x1000 + count * width)])?;
+            settle(&mut session)?;
+            assert_eq!(session.instructions(), count);
+            assert_eq!(session.trace().discarded(), count.saturating_sub(512));
+            assert_eq!(
+                session
+                    .trace()
+                    .entries()
+                    .map(|entry| entry.instruction)
+                    .collect::<Vec<_>>(),
+                (count.saturating_sub(512) + 1..=count).collect::<Vec<_>>()
+            );
+        }
+        session.clear_trace()?;
+        assert_eq!(session.instructions(), 513);
+        assert_eq!(session.trace().entries().len(), 0);
+        assert_eq!(session.trace().discarded(), 0);
+        assert!(session.trace().enabled());
+        session.step()?;
+        settle(&mut session)?;
+        assert_eq!(
+            session
+                .trace()
+                .entries()
+                .next()
+                .map(|entry| entry.instruction),
+            Some(514)
+        );
+        session.reset()?;
+        assert_eq!(session.instructions(), 0);
+        assert_eq!(session.trace().entries().len(), 0);
+        assert_eq!(session.trace().discarded(), 0);
+        assert!(session.trace().enabled());
+    }
+    Ok(())
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(16))]
+    #[test]
+    fn trace_matches_recorded_intervals_after_clears(
+        intervals in prop::collection::vec((any::<bool>(), any::<bool>(), 1_u16..160), 1..7),
+    ) {
+        let total: u64 = intervals.iter().map(|(_, _, count)| u64::from(*count)).sum();
+        for target in [Target::X86_64, Target::Aarch64] {
+            let (mut session, _) = fixture(target, &format!(".rept {total}\nnop\n.endr\ndone:"), total)
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            let width = if target == Target::X86_64 { 1 } else { 4 };
+            let mut starts = 0;
+            let mut recorded = Vec::new();
+            for &(enabled, clear, count) in &intervals {
+                if clear {
+                    session.clear_trace()?;
+                    recorded.clear();
+                }
+                session.record_trace(enabled)?;
+                let end = starts + u64::from(count);
+                if enabled { recorded.extend(starts + 1..=end); }
+                session.run_until(&[Address::new(0x1000 + end * width)])?;
+                settle(&mut session).map_err(|error| TestCaseError::fail(error.to_string()))?;
+                starts = end;
+                let discarded = recorded.len().saturating_sub(512);
+                let expected: Vec<_> = recorded[discarded..].iter()
+                    .map(|&instruction| (instruction, 0x1000 + (instruction - 1) * width)).collect();
+                let actual: Vec<_> = session.trace().entries()
+                    .map(|entry| (entry.instruction, entry.pc.get())).collect();
+                prop_assert_eq!(actual, expected);
+                prop_assert_eq!(session.trace().discarded(), u64::try_from(discarded)?);
+                prop_assert_eq!(session.trace().enabled(), enabled);
+                prop_assert_eq!(session.instructions(), starts);
+            }
+            prop_assert_eq!(session.state(), ExecutionState::Terminated(Termination::Completed));
+        }
+    }
+}
+
+#[test]
+fn temporary_runs_remain_interruptible_and_budgeted() -> TestResult {
+    for target in [Target::X86_64, Target::Aarch64] {
+        let source = if target == Target::X86_64 {
+            ".text\n.globl _start\n_start: jmp _start\ndone: nop\n"
+        } else {
+            ".text\n.globl _start\n_start: b _start\ndone: nop\n"
+        };
+        let (mut session, _) = fixture(target, source, 30)?;
+        session.run_until(&[Address::new(0x8000)])?;
+        assert!(session.record_trace(true).is_err());
+        assert!(session.clear_trace().is_err());
+        session.pause()?;
+        session.record_trace(true)?;
+        session.step()?;
+        settle(&mut session)?;
+        assert_eq!(session.state(), ExecutionState::Paused(PauseReason::Step));
+        session.run_until(&[Address::new(0x8000)])?;
+        settle(&mut session)?;
+        assert_eq!(
+            session.state(),
+            ExecutionState::Terminated(Termination::Budget)
+        );
+        assert_eq!(session.instructions(), 30);
+        assert_eq!(session.trace().entries().len(), 30);
+    }
+    Ok(())
+}
+
+#[test]
+fn step_over_distinguishes_recursive_visits_to_the_same_return_address() -> TestResult {
+    for (target, source) in [
+        (
+            Target::X86_64,
+            ".intel_syntax noprefix\n.text\n.globl _start\n_start: lea rsp, [rip + stack_end]\ncall recur\njmp done\nrecur: cmp eax, 3\nje base\ninc eax\ncallsite: call recur\nreturned: nop\nbase: ret\ndone: nop\n.bss\n.balign 16\n.space 4096\nstack_end:\n",
+        ),
+        (
+            Target::Aarch64,
+            ".text\n.globl _start\n_start: adrp x9, stack_end\nadd x9, x9, :lo12:stack_end\nmov sp, x9\nbl recur\nb done\nrecur: stp x29, x30, [sp, -16]!\ncmp x0, 3\nb.eq base\nadd x0, x0, 1\ncallsite: bl recur\nreturned: nop\nbase: ldp x29, x30, [sp], 16\nret\ndone: nop\n.bss\n.balign 16\n.space 4096\nstack_end:\n",
+        ),
+    ] {
+        let (mut session, image) = fixture(target, source, 100)?;
+        let call = symbol(&image, "callsite")?;
+        let returned = symbol(&image, "returned")?;
+        session.run_until(&[call])?;
+        settle(&mut session)?;
+        assert_eq!(first_integer(&session)?, 1);
+        session.record_trace(true)?;
+        session.step_over()?;
+        settle(&mut session)?;
+        assert_eq!(
+            session.state(),
+            ExecutionState::Paused(PauseReason::Target(returned))
+        );
+        assert_eq!(first_integer(&session)?, 3);
+        assert_eq!(
+            session
+                .trace()
+                .entries()
+                .filter(|entry| entry.pc == returned)
+                .count(),
+            2
+        );
+        session.start()?;
+        settle(&mut session)?;
+        assert_eq!(
+            session.state(),
+            ExecutionState::Terminated(Termination::Completed)
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn step_over_at_mapping_edges_preserves_state_on_decode_failure() -> TestResult {
+    for (target, offset, invalid, nop) in [
+        (Target::X86_64, 4095, &[0x0f][..], &[0x90][..]),
+        (
+            Target::Aarch64,
+            4092,
+            &[0xff; 4][..],
+            &[0x1f, 0x20, 0x03, 0xd5][..],
+        ),
+    ] {
+        let mut bytes = vec![0; 4096];
+        bytes[offset..].copy_from_slice(invalid);
+        let entry = Address::new(0x1000 + u64::try_from(offset)?);
+        let machine = Machine::load(
+            Image::Raw {
+                bytes: &bytes,
+                base: Address::new(0x1000),
+                entry,
+            },
+            target,
+            MachineSetup::default(),
+        )?;
+        let mut session = Session::new(machine, Address::new(0x3000), 10)?;
+        session.record_trace(true)?;
+        assert!(session.step_over().is_err());
+        assert_eq!(session.state(), ExecutionState::Ready);
+        assert_eq!(session.instructions(), 0);
+        assert_eq!(session.read_registers()?.instruction_pointer(), entry);
+        assert_eq!(session.trace().entries().len(), 0);
+
+        session.write_memory(entry, nop)?;
+        session.step_over()?;
+        settle(&mut session)?;
+        assert_eq!(session.state(), ExecutionState::Paused(PauseReason::Step));
+        assert_eq!(
+            session.read_registers()?.instruction_pointer(),
+            Address::new(0x2000)
+        );
+        assert_eq!(session.trace().entries().len(), 1);
+        assert_eq!(
+            session.trace().entries().next().map(|entry| entry.pc),
+            Some(entry)
+        );
+        assert!(session.step_over().is_err());
+        assert_eq!(session.state(), ExecutionState::Paused(PauseReason::Step));
+        session.step()?;
+        settle(&mut session)?;
+        assert_eq!(
+            session.state(),
+            ExecutionState::Terminated(Termination::GuestFault)
+        );
+        assert_eq!(session.instructions(), 1);
+        assert_eq!(session.trace().entries().len(), 1);
+    }
+    Ok(())
+}
+
+#[test]
+fn step_over_decodes_an_instruction_spanning_adjacent_mappings() -> TestResult {
+    let mut bytes = vec![0; 4096];
+    bytes[4095] = 0xb8; // MOV EAX, imm32; the immediate resides in the next mapping.
+    let machine = Machine::load(
+        Image::Raw {
+            bytes: &bytes,
+            base: Address::new(0x1000),
+            entry: Address::new(0x1fff),
+        },
+        Target::X86_64,
+        MachineSetup {
+            registers: None,
+            mappings: vec![InitialMapping {
+                range: AddressRange::new(Address::new(0x2000), 4096, 4096)?,
+                permissions: Permissions {
+                    read: true,
+                    write: false,
+                    execute: true,
+                },
+                bytes: vec![42, 0, 0, 0],
+            }],
+        },
+    )?;
+    let mut session = Session::new(machine, Address::new(0x3000), 10)?;
+    session.step_over()?;
+    settle(&mut session)?;
+    assert_eq!(session.state(), ExecutionState::Paused(PauseReason::Step));
+    assert_eq!(first_integer(&session)?, 42);
+    assert_eq!(
+        session.read_registers()?.instruction_pointer(),
+        Address::new(0x2004)
+    );
     Ok(())
 }

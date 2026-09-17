@@ -14,6 +14,8 @@ export function stateLabel(status: Status | undefined, locale: Locale): string {
       return m.state_paused({}, options);
     case 'stepped':
       return m.state_stepped({}, options);
+    case 'target':
+      return m.state_target({}, options);
     case 'breakpoint':
       return m.state_breakpoint({}, options);
     case 'crashed':

@@ -277,5 +277,18 @@
   "reveal_source": "Go to source line {line}",
   "source_map_truncated": "Source location limit reached. Some lines are omitted.",
   "add_source_breakpoint": "Click to add a breakpoint",
-  "remove_source_breakpoint": "Click to remove the breakpoint"
+  "remove_source_breakpoint": "Click to remove the breakpoint",
+  "step_over": "Step over",
+  "step_over_hint": "Execute one instruction. For a call, stop at its return address once the stack pointer is restored.",
+  "run_to_cursor": "Run to cursor",
+  "run_to_address": "Run to address",
+  "state_target": "Target reached",
+  "trace": "Trace",
+  "trace_record": "Record trace",
+  "trace_refresh": "Refresh trace",
+  "trace_clear": "Clear trace",
+  "trace_hint": "Up to 512 instruction starts, oldest first. A recorded instruction may still fault.",
+  "trace_empty": "No recorded instructions.",
+  "trace_discarded": "{count} earlier entries discarded",
+  "trace_instruction": "Start #"
 }

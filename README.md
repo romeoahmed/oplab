@@ -22,14 +22,14 @@ The editor starts blank and restores your last draft on reopening.
 
 1. Choose an architecture and **Load example**.
 2. **Assemble** (`Ctrl+Enter` / `⌘+Enter`), then **Load artifact**.
-3. **Step** (`F10`) or **Run** (`F5`). Both examples brighten eight RGBA pixels,
-   preserving alpha, using AVX2 or a vector-length-agnostic SVE2 loop.
+3. **Step** (`F11`), **Step over** (`F10`) or **Run** (`F5`).
 4. Inspect `output` in **Memory** and checksum **4814** (`0x12ce`) in RAX or X0.
 5. **Reset** restores the loaded program and initial state, retaining breakpoints.
 
-Assembly, loading and execution are explicit actions. Editing source leaves the
-loaded machine intact. Programs have an explicit completion address or symbol
-and instruction budget; stacks and operating-system services are not implicit.
+Both examples brighten eight RGBA pixels while preserving alpha, using AVX2 or a
+vector-length-agnostic SVE2 loop. Assembly, loading and execution are explicit
+actions. Editing source leaves the loaded machine intact. Programs have an explicit
+completion address or symbol and instruction budget; stacks and operating-system services are not implicit.
 
 ## What you can do
 
@@ -37,7 +37,11 @@ and instruction budget; stacks and operating-system services are not implicit.
   label navigation, search/replacement, history and source diagnostics.
 - **Debug source:** set line breakpoints (`F9`), navigate between source and
   instructions, and highlight the current execution line. Debug links belong to
-  the assembled revision and are cleared when the source changes.
+  the assembled revision and are cleared when the source changes. Run to the cursor
+  with `Ctrl+F10` / `⌘+F10` without adding a persistent breakpoint.
+- **Follow execution:** step over calls, run to an address and optionally record the last
+  512 instruction starts. Recording is off by default; history contains addresses
+  and counters, not replayable machine snapshots.
 - **Run ELF or raw code:** step, run, pause, stop, reset and set address breakpoints.
   Configure initial GPRs and additional memory before loading.
 - **Inspect effects:** integer registers, flags, memory, disassembly and on-demand

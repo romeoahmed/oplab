@@ -1,0 +1,123 @@
+.trace-content:not([hidden]) {
+  display: flex;
+  flex: 1;
+  min-block-size: 0;
+}
+
+.execution-trace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 10px;
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: 12px var(--pane-inset, 16px);
+
+  > .muted-note {
+    font-size: 11px;
+  }
+}
+
+.trace-table {
+  min-block-size: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+
+  table {
+    inline-size: 100%;
+    border-collapse: collapse;
+    font: 12px/1.8 var(--mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  th,
+  td {
+    padding: 4px 12px;
+    border-block-end: 1px solid var(--border);
+    text-align: start;
+  }
+
+  th {
+    position: sticky;
+    inset-block-start: 0;
+    background: var(--surface-deep);
+    color: var(--muted);
+    font: 11px/1.8 var(--sans);
+  }
+
+  td:first-child {
+    color: var(--data-value);
+  }
+
+  th:first-child,
+  td:first-child {
+    padding-inline-start: 0;
+    inline-size: 8ch;
+    text-align: end;
+  }
+
+  tr:hover td {
+    background: var(--surface);
+  }
+}
+
+.trace-address {
+  color: var(--data-address);
+}
+
+.trace-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  form {
+    display: flex;
+    gap: 6px;
+    min-inline-size: 0;
+    margin-inline-start: auto;
+  }
+
+  input {
+    inline-size: 18ch;
+    min-inline-size: 0;
+  }
+
+  button {
+    font-size: 12px;
+  }
+}
+
+.trace-record {
+  &[aria-pressed='true'] {
+    background: color-mix(in oklch, var(--error) 10%, var(--surface-deep));
+    border-color: color-mix(in oklch, var(--error), var(--border) 60%);
+  }
+
+  svg {
+    color: var(--error);
+  }
+}
+
+.trace-source {
+  min-block-size: 26px;
+  margin-inline-end: 4px;
+  padding: 2px 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+}
+
+@container observation (width < 640px) {
+  .trace-controls form {
+    flex: 1 1 100%;
+  }
+
+  .trace-controls input {
+    flex: 1;
+  }
+}

@@ -7,7 +7,7 @@
   import type { SourceLocation } from '$lib/protocol/generated/SourceLocation';
   import type { Target } from '$lib/protocol/generated/Target';
   import { normalizeAddress } from '$lib/protocol/scalars';
-  import { ArrowRight, Circle, CornerDownRight, ListOrdered } from '@lucide/svelte';
+  import { ArrowRight, ListEnd, Circle, CornerDownRight, ListOrdered } from '@lucide/svelte';
   import { onDestroy, type Snippet } from 'svelte';
 
   import { sourceIndex } from '../editor/source';
@@ -30,6 +30,7 @@
     editable = false,
     onbreakpoint,
     onsetpc,
+    onrun,
     locations = [],
     onsource,
   }: {
@@ -42,6 +43,7 @@
     editable?: boolean;
     onbreakpoint?: (address: string, enabled: boolean) => void;
     onsetpc?: (address: string) => void;
+    onrun?: (address: string) => void;
     bytes: Uint8Array | undefined;
     target: Target;
     base: string;
@@ -217,13 +219,23 @@
                         onclick={() => {
                           onsetpc?.(row.address);
                         }}><CornerDownRight size={14} aria-hidden="true" /></button
-                      ></td
-                    >{/if}<td
+                      >{#if onrun !== undefined}<button
+                          class="icon-button"
+                          type="button"
+                          disabled={!editable}
+                          aria-label={`${m.run_to_address({}, options)} ${row.address}`}
+                          title={m.run_to_address({}, options)}
+                          onclick={() => {
+                            onrun(row.address);
+                          }}><ListEnd size={14} aria-hidden="true" /></button
+                        >{/if}</td
+                    >{/if}<td class="instruction-address"
                     >{#if row.address === pc}<ArrowRight
                         size={12}
                         aria-label={m.current_instruction({}, options)}
                       />{/if}{row.address}</td
-                  ><td>{row.bytes.map((byte) => byte.toString(16).padStart(2, '0')).join(' ')}</td
+                  ><td class="instruction-bytes"
+                    >{row.bytes.map((byte) => byte.toString(16).padStart(2, '0')).join(' ')}</td
                   ><td
                     ><button
                       type="button"

@@ -101,12 +101,27 @@ The [loader](engine.md#raw-code-and-initial-conditions) checks page geometry,
 overlap, target and aggregate limits before native mapping.
 These values are load inputs, not live patches, and reset reapplies them.
 
-`execute` carries a session key and `run`, `step`, `pause`, `cancel`, `reset`,
+`execute` carries a session key and `run`, `step`, `step_over`, `run_until`,
+`record_trace`, `read_trace`, `clear_trace`, `pause`, `cancel`, `reset`,
 `breakpoint`, `write_register`, `write_vector`, `set_rounding`, `write_memory`,
 `observe` or `close`. Keys contain decimal `session` and `generation`. Stale keys
 fail before mutation. Reset advances generation; close drops the owner,
 even when running, and returns `session_closed`. IDs must also be qualified by the
 worker connection, because they can recur after restart.
+
+`run_until` carries `{addresses}` with 1–256 aligned canonical addresses. It does
+not change retained breakpoints. `step_over` uses live decoder facts and the
+original SP to stop before a call's fallthrough. A temporary stop reports
+`{type: "target", data: address}`. Other stops cancel the goal; see
+[execution semantics](engine.md#temporary-execution-goals-and-trace).
+
+`record_trace` carries a boolean and requires ready/paused state. `clear_trace`
+rejects running/crashed sessions. Both return ordinary observations. `read_trace`
+returns `trace` with the exact session key, recording mode, discarded count and
+up to 512 `{instruction, pc}` entries. No binary payload follows, and no observation
+sequence is consumed. Clients reject obsolete success and failure replies after
+a connection/session change, reset or newer trace request. Trace requests neither
+refresh nor replace an observation subscription.
 
 `breakpoint` carries `{addresses, enabled}`. At most 256 canonical addresses are
 accepted per request. Duplicate addresses have no additional effect. Alignment and

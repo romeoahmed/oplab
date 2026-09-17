@@ -79,9 +79,8 @@ modified. Incremental QEMU builds reconfigure Meson and clear its dependency
 cache so package upgrades do not retain stale library paths; unchanged compilation
 outputs remain incremental. Use a fresh prefix when changing compilers, host
 targets or SDK release tags. Stop workers before rebuilding an SDK and restart
-them after staging. XED uses mbuild v2026.08.23
-and installs headers and a static library independently of QEMU. XED and mbuild
-are independently versioned; both selected tags are v2026.08.23.
+them after staging. XED installs headers and a static library independently of QEMU.
+XED and mbuild are independently versioned; both selected tags are v2026.08.23.
 
 The owned QEMU checkout receives two build-only integrations: an additional Meson
 shared-library target and the minimal ARM GICv5 CPU-interface configuration required
@@ -187,8 +186,7 @@ These commands assume explicit LLVM/LLD prefixes. Shell examples are POSIX; use
 PowerShell environment syntax and its call operator on Windows. Missing headers
 or libraries require a complete development installation. Keep compiler, SDK,
 deployment minimum and library settings consistent across the dependency SDK and
-Cargo build; do not patch generated headers to hide
-configuration errors.
+Cargo build; do not patch generated headers to hide configuration errors.
 
 ## Commands and ownership
 
@@ -302,7 +300,7 @@ standard text does not apply its notice to the project.
 
 QEMU, XED, LLVM/LLD and their compiled transitive dependencies require a complete
 notice and compatibility inventory before release. Preserve MPL secondary-license
-compatibility. The [backend reference](runtime.md#distribution-design)
+compatibility. The [runtime reference](runtime.md#distribution-design)
 records the intended distribution boundary; license review does not block local
 implementation or acceptance testing.
 
@@ -346,9 +344,9 @@ clang-tidy policy because its SDK can live outside the repository. It preserves
 QEMU's ordered umbrella headers, fixed callback signatures and native mask types;
 `nullptr` modernization also applies to C23. Checks reject stale staged adapter
 sources and report only owned headers, without rewriting dependency headers.
-Knip declares the dynamically imported Svelte editor as an
-entry so its dependency tree remains checked. Its two dependency exceptions cover Oxfmt invoked
-by Rust and the inlang-owned message-format plugin.
+Knip declares the dynamically imported Svelte editor as an entry so its dependency
+tree remains checked. Its two dependency exceptions cover Oxfmt invoked by Rust and
+the inlang-owned message-format plugin.
 
 `static/icon.svg` is the application icon master and README logo. Review it in a
 browser at small and large sizes. To regenerate desktop formats:

@@ -978,3 +978,88 @@ fn vector_writes_merge_current_lanes_and_reject_stale_generations() -> TestResul
     }
     Ok(())
 }
+
+#[test]
+fn temporary_targets_and_trace_survive_wire_transport_but_not_reset_identity() -> TestResult {
+    for (target, source) in [
+        (
+            Target::X86_64,
+            "nop\nnext: mov eax, 42\ndone: nop\n.data\noutput: .quad 0",
+        ),
+        (
+            Target::Aarch64,
+            "nop\nnext: mov x0, 42\ndone: nop\n.data\noutput: .quad 0",
+        ),
+    ] {
+        let (image, completion, _) = fixture(target, source)?;
+        let next = address(if target == Target::X86_64 {
+            0x1001
+        } else {
+            0x1004
+        });
+        interactive::worker(|client| {
+            client.request(Command::Hello { version: VERSION }, None)?;
+            let loaded = load(client, target, &image, completion, 100, None)?;
+            let key = observed(&loaded)?.key;
+            execute(client, key, SessionAction::RecordTrace(true))?;
+            execute(
+                client,
+                key,
+                SessionAction::RunUntil {
+                    addresses: vec![next],
+                },
+            )?;
+            let paused = settle(client, key)?;
+            assert_eq!(observed(&paused)?.status, Status::Target(next));
+            assert_eq!(integer(observed(&paused)?)?, 0);
+            assert!(observed(&paused)?.breakpoints.is_empty());
+            let history = execute(client, key, SessionAction::ReadTrace)?;
+            assert!(history.payloads.is_empty());
+            let Reply::Trace(trace) = history.response.result else {
+                return Err("missing trace".into());
+            };
+            assert_eq!(trace.key, key);
+            assert!(trace.enabled);
+            assert_eq!(trace.entries.len(), 1);
+            assert_eq!(trace.entries[0].pc, address(0x1000));
+            assert_eq!(trace.entries[0].instruction.get(), 1);
+            let unchanged = execute(client, key, SessionAction::Observe { memory: None })?;
+            assert_eq!(
+                observed(&unchanged)?.sequence.get(),
+                observed(&paused)?.sequence.get() + 1
+            );
+            assert_eq!(
+                observed(&unchanged)?.instructions,
+                observed(&paused)?.instructions
+            );
+            execute(client, key, SessionAction::StepOver)?;
+            let done = settle(client, key)?;
+            assert_eq!(
+                observed(&done)?.status,
+                Status::Terminated(Termination::Completed)
+            );
+            assert_eq!(integer(observed(&done)?)?, 42);
+            let cleared = execute(client, key, SessionAction::ClearTrace)?;
+            assert_eq!(observed(&cleared)?.status, observed(&done)?.status);
+            assert_eq!(
+                observed(&cleared)?.instructions,
+                observed(&done)?.instructions
+            );
+            let empty = execute(client, key, SessionAction::ReadTrace)?;
+            assert!(matches!(empty.response.result, Reply::Trace(ref trace)
+                if trace.enabled && trace.entries.is_empty() && trace.discarded.get() == 0));
+            let reset = execute(client, key, SessionAction::Reset)?;
+            let new_key = observed(&reset)?.key;
+            let rejected = execute(client, key, SessionAction::RecordTrace(false))?;
+            assert!(
+                matches!(rejected.response.result, Reply::Error(ref error) if error.code == DiagnosticCode::StaleSession)
+            );
+            let cleared = execute(client, new_key, SessionAction::ReadTrace)?;
+            assert!(
+                matches!(cleared.response.result, Reply::Trace(ref trace) if trace.key == new_key && trace.enabled && trace.entries.is_empty())
+            );
+            Ok(())
+        })?;
+    }
+    Ok(())
+}

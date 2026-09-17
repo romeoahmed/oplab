@@ -277,5 +277,18 @@
   "reveal_source": "转到源码第 {line} 行",
   "source_map_truncated": "源码位置超出显示上限，部分行已省略。",
   "add_source_breakpoint": "单击以添加断点",
-  "remove_source_breakpoint": "单击以移除断点"
+  "remove_source_breakpoint": "单击以移除断点",
+  "step_over": "单步跳过",
+  "step_over_hint": "执行一条指令；遇到调用则运行至返回地址，且栈指针恢复原值。",
+  "run_to_cursor": "执行到光标",
+  "run_to_address": "执行到地址",
+  "state_target": "已到达目标",
+  "trace": "执行轨迹",
+  "trace_record": "记录轨迹",
+  "trace_refresh": "刷新轨迹",
+  "trace_clear": "清空轨迹",
+  "trace_hint": "按执行顺序保留最近 512 条指令的起始记录。已记录的指令仍可能触发异常。",
+  "trace_empty": "暂无执行记录。",
+  "trace_discarded": "已移除最早的 {count} 条记录",
+  "trace_instruction": "指令序号"
 }

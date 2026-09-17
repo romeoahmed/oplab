@@ -8,8 +8,8 @@ behavior, planned capabilities and verified platforms.
 ## Commands
 
 Run from the repository root. Install with `pnpm install --frozen-lockfile`.
-Native work requires stable Rust, GNU C23, C++23, LLVM 23 with matching LLD development
-files, the QEMU/XED SDK and [platform prerequisites](docs/development.md#native-toolchain).
+Native builds require stable Rust, GNU C23, C++23, LLVM 23 with matching LLD
+development files, the QEMU/XED SDK and [platform prerequisites](docs/development.md#native-toolchain).
 Use installed tool discovery; do not invent paths or patch generated headers.
 
 | Command                                                     | Purpose                                                   |
@@ -102,7 +102,8 @@ editor state. Native changes need real worker/guest evidence; relevant UI/native
 changes also need a fresh desktop bundle. Follow [testing](docs/testing.md).
 
 Run checks proportionate to the change: actual xtask flows for orchestration,
-codegen verification for contracts, workspace checks/tests for broad changes.
+codegen verification for contracts, workspace checks/tests for broad code changes.
+For documentation-only edits, check formatting, local links and claims against code.
 Report what ran and what remains unverified. Local debug success does not establish
 distribution readiness. Keep setup in the development guide, contracts in their owning
 references and dated evidence in the roadmap.

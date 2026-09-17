@@ -54,7 +54,7 @@ src/
     workbench/          # Composition, controller, recovery and preferences
       editor/           # CodeMirror, language support and CSS
       load/             # Raw-code and initial-condition inputs
-      machine/          # Live registers, memory and breakpoints
+      machine/          # Registers, memory, breakpoints and execution history
       instructions/     # Disassembly and static analysis
   routes/               # SvelteKit entry points
 src-tauri/              # Shell, supervisor, capabilities and icons
@@ -158,8 +158,9 @@ action. Editing source invalidates its mappings; markers are not moved to new te
 
 Bits UI owns toolbars, tooltips, tabs, menus and popovers. Native forms own validation
 and submission, including shortcuts through `requestSubmit()`. Preserve native
-`disabled`, library attachments and event composition. Hidden panels retain state;
-semantic fields, tables and definition lists describe content.
+`disabled`, library attachments and event composition. Controller-owned state
+survives panel changes; panel-local drafts follow component lifetime. Semantic
+fields, tables and definition lists describe content.
 
 The default window is 1440×900 logical pixels with an 880×600 minimum and Tauri
 `preventOverflow`. Decorations remain native; macOS retains the default application
@@ -174,7 +175,13 @@ and search options 24px. Familiar secondary actions use icons with tooltips;
 ambiguous memory actions retain text. JetBrains Mono defaults to 14px without
 ligatures; preferences offer system monospace, 12–22px text, wrapping and panel
 proportions. Layout reset changes only proportions. Actual WebView acceptance is
-required for Newly Baseline features.
+required for Newly Baseline features. Shared controls live in `workbench/controls.css`;
+feature styles stay beside their components. Data views use tabular monospace,
+blue addresses, warm numeric values and muted register padding. Trace tables scroll
+independently beneath their controls, with sticky column headers. Closing or hiding
+the trace panel unmounts it and suspends automatic reads; the controller retains
+accepted history. Late replies must match the current connection, session,
+generation and latest trace request.
 
 ### Inspection and editing
 
@@ -190,9 +197,9 @@ Only captured-memory rows can toggle breakpoints or set the next instruction.
 
 SIMD views project active SVE lengths from maximum-width storage. `BigInt` and
 `DataView` interpret exact integers and f16/f32/f64; native `details` lazily creates
-expanded lanes. Predicate views select the significant bits for `.b/.h/.s/.d`.
-Architecture changes reset bank selection; ordinary observations preserve view
-choices and drafts. These banks are not complete CPU snapshots.
+expanded lanes. Predicate views select the significant bits for `.b/.h/.s/.d`;
+native list ordinals preserve their actual bit indices. Architecture changes reset
+bank selection; ordinary observations preserve view choices and drafts. These banks are not complete CPU snapshots.
 
 Ready/paused edits await authoritative replies. Rust validates widths, alignment,
 state and native merges; observations do not overwrite a typed SIMD draft.

@@ -13,6 +13,19 @@ import type { VectorWrite } from './VectorWrite.js';
 export type SessionAction =
   | { type: 'run' }
   | { type: 'step' }
+  | { type: 'step_over' }
+  | {
+      type: 'run_until';
+      data: {
+        /**
+         * One to 256 aligned addresses; other stops cancel the temporary goal.
+         */
+        addresses: Array<HexAddress>;
+      };
+    }
+  | { type: 'record_trace'; data: boolean }
+  | { type: 'clear_trace' }
+  | { type: 'read_trace' }
   | { type: 'pause' }
   | { type: 'cancel' }
   | { type: 'reset' }

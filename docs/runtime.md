@@ -16,8 +16,8 @@ Guest bytes + QEMU CPU state
 ```
 
 `crates/runtime/native` owns QEMU layouts, vCPU work queues, memory regions and
-exceptions. `src/qemu.rs` loads its private SDK; `src/jit.rs` and `src/jit/` own
-LLVM compilation and TCG lowering. Bindgen generates only the private Oplab ABI;
+exceptions. Within `crates/runtime`, `src/qemu.rs` loads the private SDK;
+`src/jit.rs` and `src/jit/` own LLVM compilation and TCG lowering. Bindgen generates only the private Oplab ABI;
 Rust never mirrors `CPUArchState`, TCG structs or helper type encodings. Each guest
 uses a private shared library exporting only `oplab_qemu`; libraries remain loaded
 for the worker lifetime because QEMU owns process hooks and native threads.
@@ -44,8 +44,8 @@ remains future optimization work.
 The adapter uses QOM type registration and instance initialization/finalization,
 non-migrating RAM, native vCPU threads and `run_on_cpu`. A per-library lock serializes
 QEMU operations. The vCPU owns instruction execution; QEMU's BQL and RCU protect
-internal readers and retirement. Host callers use call-scoped RCU registration so Rust thread teardown
-cannot leave QEMU registry entries pointing at released TLS.
+internal readers and retirement. Host callers use call-scoped RCU registration so
+Rust thread teardown cannot leave QEMU registry entries pointing at released TLS.
 `adapter.c` owns this lifecycle and the ABI table; `translate.c` owns TCG export,
 dispatch and exception recovery. Memory helpers and architectural state each have
 their own source file. The export uses QEMU's operation count and checks ABI array

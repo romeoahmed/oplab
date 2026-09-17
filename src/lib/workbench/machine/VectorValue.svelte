@@ -26,7 +26,7 @@
     {#if format !== 'hex'}
       <ol class="vector-lanes" start="0">
         {#each lanes as lane, position (position)}
-          {#if position % stride === 0}<li><code>{lane}</code></li>{/if}
+          {#if position % stride === 0}<li value={position}><code>{lane}</code></li>{/if}
         {/each}
       </ol>
     {/if}

@@ -115,9 +115,10 @@
     </p>
     <dl class="register-grid">
       {#each controls as control (control.name)}
+        {@const digits = control.value.toString(16)}
         <div>
           <dt>{control.name}</dt>
-          <dd>{control.value.toString(16).padStart(8, '0')}</dd>
+          <dd><span class="numeric-padding">{'0'.repeat(8 - digits.length)}</span>{digits}</dd>
         </div>
       {/each}
     </dl>

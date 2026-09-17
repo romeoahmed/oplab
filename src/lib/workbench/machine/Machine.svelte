@@ -1,4 +1,5 @@
 <script lang="ts">
+  import './machine.css';
   import * as m from '$lib/paraglide/messages.js';
   import type { Locale } from '$lib/paraglide/runtime';
   import type { Observation } from '$lib/protocol/generated/Observation';
@@ -147,8 +148,7 @@
     {/if}
   </div>
   <div class="inspector-footer">
-    <Keyboard size={15} aria-hidden="true" /><span>{m.step({}, options)} <kbd>F10</kbd></span><span
-      >{m.run({}, options)} <kbd>F5</kbd></span
-    >
+    <Keyboard size={15} aria-hidden="true" /><span>{m.step_over({}, options)} <kbd>F10</kbd></span
+    ><span>{m.run({}, options)} <kbd>F5</kbd></span>
   </div>
 </aside>

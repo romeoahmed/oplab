@@ -51,6 +51,7 @@
     Search,
     Circle,
     ArrowRight,
+    ListEnd,
     ListStart,
     Ellipsis,
     Undo2,
@@ -84,6 +85,7 @@
     currentLine,
     editable = false,
     onbreakpoint,
+    onrun,
     onreveal,
   }: {
     value: string;
@@ -99,6 +101,7 @@
     currentLine?: number | undefined;
     editable?: boolean;
     onbreakpoint?: (line: number) => void;
+    onrun?: (line: number) => void;
     onreveal?: (line: number) => void;
   } = $props();
 
@@ -242,6 +245,15 @@
             { key: 'F12', run: jumpToLabel, preventDefault: true },
             { key: 'F8', run: nextDiagnostic },
             {
+              key: 'Mod-F10',
+              run: (view) => {
+                const line = view.state.doc.lineAt(view.state.selection.main.head).number;
+                if (!editable || !mapped.lines.has(line) || onrun === undefined) return false;
+                onrun(line);
+                return true;
+              },
+            },
+            {
               key: 'F9',
               run: (view) => {
                 const line = view.state.doc.lineAt(view.state.selection.main.head).number;
@@ -364,6 +376,17 @@
         onclick={() => {
           onbreakpoint(cursorLine);
         }}><Circle size={14} aria-hidden="true" /></button
+      >
+    {/if}
+    {#if onrun !== undefined}
+      <button
+        class="icon-button"
+        disabled={!editable || !mapped.lines.has(cursorLine)}
+        aria-label={m.run_to_cursor({}, options)}
+        title={`${m.run_to_cursor({}, options)} · Ctrl / ⌘ + F10`}
+        onclick={() => {
+          onrun(cursorLine);
+        }}><ListEnd size={14} aria-hidden="true" /></button
       >
     {/if}
     {#if onreveal !== undefined}

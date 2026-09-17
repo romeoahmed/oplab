@@ -19,38 +19,34 @@ See [runtime](runtime.md) for boundaries and [development](development.md) for s
 
 ## Implemented
 
-| Area             | Available behavior                                                                                                                                                         |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Assembly         | LLVM 23 MC/LLD through CXX/C++23; unchanged GNU-style source, separate compile/link APIs and complete ELF object/image output                                              |
-| Loading          | Validated static ELF64 program headers, entry, permissions, BSS and padding; raw-code loading in desktop/worker/CLI                                                        |
-| Execution        | Both guests; step/run/pause/stop/reset, explicit completion and budgets, managed address breakpoints, integer/SIMD/flags/memory observations and fault outcomes            |
-| Initial state    | Canonical GPRs and extra zero-filled mappings in desktop/worker/CLI; shared validation, failed-load preservation and reset to retained setup                               |
-| Live editing     | Ready/paused GPR/alias/PC/flag writes, full YMM/Z/P/FFR and lane edits, FP rounding and memory patches (4 KiB desktop, 64 KiB engine/worker); reset restores initial state |
-| Inspection       | Bounded raw/ELF-segment/observed-memory disassembly and on-demand instruction metadata in desktop/worker/CLI; static recognition remains distinct from execution support   |
-| Editor           | GNU-aware CodeMirror/Lezer highlighting and completion, block folding, literal-label navigation, search/history/comments and build-scoped Unicode diagnostics              |
-| Source debugging | Build-scoped DWARF points, bidirectional source/instruction navigation, current execution line and atomic grouped source breakpoints                                       |
-| Workbench        | Separate document/artifact/session state, stale-result rejection, blank first launch, scratch recovery, configuration, focus mode and collapsible/adjustable panels        |
-| Files            | Native UTF-8 source and exact-byte import/export, complete ELF exports, bounded I/O and atomic replacement with paths kept native                                          |
-| CLI              | Source/ELF/raw execution, explicit completion and instruction/time limits, final JSON registers/faults and optional bounded memory                                         |
-| Delivery         | Bounded framing, correlated requests, assembly coalescing/cancellation, reserved output, full/delta observations and orderly shutdown                                      |
-| Supervision      | View leases, deadlines/RSS monitoring, uncertain outcomes, bounded WebView delivery, kill/reap and explicit worker recovery                                                |
-| Presentation     | English/Simplified Chinese, self-hosted/system monospace, native CSS, Bits UI, Lucide and application icon assets                                                          |
-| Tooling          | Workspace dependencies/lints, clap CLI/xtask, native build lifecycles, strict checks, contract generation and isolated behavior/property tests                             |
+| Area             | Available behavior                                                                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Assembly         | LLVM 23 MC/LLD through CXX/C++23; unchanged GNU-style source, separate compile/link APIs and complete ELF object/image output                                                        |
+| Loading          | Validated static ELF64 program headers, entry, permissions, BSS and padding; raw-code loading in desktop/worker/CLI                                                                  |
+| Execution        | Both guests; step/run/pause/stop/reset, explicit completion and budgets, managed address breakpoints, temporary run targets, call step-over, bounded opt-in trace and fault outcomes |
+| Initial state    | Canonical GPRs and extra zero-filled mappings in desktop/worker/CLI; shared validation, failed-load preservation and reset to retained setup                                         |
+| Live editing     | Ready/paused GPR/alias/PC/flag writes, full YMM/Z/P/FFR and lane edits, FP rounding and memory patches (4 KiB desktop, 64 KiB engine/worker); reset restores initial state           |
+| Inspection       | Bounded raw/ELF-segment/observed-memory disassembly and on-demand instruction metadata in desktop/worker/CLI; static recognition remains distinct from execution support             |
+| Editor           | GNU-aware CodeMirror/Lezer highlighting and completion, block folding, literal-label navigation, search/history/comments and build-scoped Unicode diagnostics                        |
+| Source debugging | Build-scoped DWARF points, bidirectional source/instruction navigation, current execution line, atomic grouped source breakpoints and run-to-cursor                                  |
+| Workbench        | Separate document/artifact/session state, stale-result rejection, blank first launch, scratch recovery, configuration, focus mode and collapsible/adjustable panels                  |
+| Files            | Native UTF-8 source and exact-byte import/export, complete ELF exports, bounded I/O and atomic replacement with paths kept native                                                    |
+| CLI              | Source/ELF/raw execution, explicit completion and instruction/time limits, final JSON registers/faults and optional bounded memory                                                   |
+| Delivery         | Bounded framing, correlated requests, assembly coalescing/cancellation, reserved output, full/delta observations and orderly shutdown                                                |
+| Supervision      | View leases, deadlines/RSS monitoring, uncertain outcomes, bounded WebView delivery, kill/reap and explicit worker recovery                                                          |
+| Presentation     | English/Simplified Chinese, self-hosted/system monospace, native CSS, Bits UI, Lucide and application icon assets                                                                    |
+| Tooling          | Workspace dependencies/lints, clap CLI/xtask, native build lifecycles, strict checks, contract generation and isolated behavior/property tests                                       |
 
 ## Next product work
 
-1. **Debugging:** build on source navigation and line breakpoints with watchpoints,
-   stepping over calls and bounded execution traces. Define whether each event is
-   observed before or after instruction effects. User-authored DWARF and source
-   mappings for modified code need separate designs.
-2. **Execution coverage:** extend the tested guest/extension matrix beyond static
-   recognition. Full AVX2/SVE register inspection/editing and directed rounding
-   are implemented; broader instruction, exception and vector-length-transition
-   coverage remains, including undefined flags and self-modifying code. AVX-512,
-   x87 and SME matrix views are outside current scope.
+1. **Debugging:** add data watchpoints with explicit before/after-effect semantics.
+   Define frame/unwind policy before step-out, and source provenance before supporting
+   user-authored DWARF or mappings for modified code.
+2. **Execution coverage:** extend the verified guest/extension matrix, including
+   exceptions, vector-length transitions, undefined flags and self-modifying code.
+   AVX-512 execution, x87 views and SME matrix views remain outside current scope.
 3. **Workbench:** add multiple source documents and keyboard-accessible draggable
-   separators. Extend large-data views as needed. Label navigation and GNU block
-   folding are already available.
+   separators. Expand large-data views when measured workloads justify it.
 
 Files use standard assembly text, raw bytes and ELF; no saved-experiment container
 is planned. Local scratch/settings recovery remains. Importing a file never
@@ -91,8 +87,8 @@ runs; browser fixtures, native tests and desktop acceptance establish different 
 | Verification               | Recorded result                                                                                                                                 |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | SDK                        | QEMU 11.1.1, XED/mbuild v2026.08.23 and GNU C23 adapter built with LLVM/LLD 23.1.1                                                              |
-| Workspace checks           | `cargo xtask check`: Rust/C/C++ and frontend lints, types, 51 generated declarations and formatting passed                                      |
-| Automated tests            | 150 Rust tests (including doctests) and 127 frontend tests passed through `cargo xtask test`                                                    |
+| Workspace checks           | `cargo xtask check`: Rust/C/C++ and frontend lints, types, 53 generated declarations and formatting passed                                      |
+| Automated tests            | `cargo xtask test`: 158 Rust tests (including doctests) and 136 frontend tests passed                                                           |
 | Native execution           | Both guests: loading, flags, memory faults, REP, cache invalidation, edits/reset, analysis, CLI and worker transport                            |
 | SIMD                       | Full YMM/Z/P/FFR, highest lanes, alias/inactive-bit preservation, rounding, independent guest stores and full-bank delivery                     |
 | Contract/interaction tests | Mixed decode boundaries, overlapping edits, all SVE view lengths, half-precision conversion, retained baselines and duplicate-submit prevention |
@@ -110,10 +106,28 @@ effects, grouped requests and reset. Chromium covers navigation, partial groups,
 pending/rejected updates, retry, `F9` and edit invalidation in both languages.
 Concurrent decode success/failure is checked in both completion orders.
 
+**Temporary goals and trace:** both guests cover direct/indirect and recursive calls,
+user-breakpoint interruption, current-address targets, budget termination, trace
+capacity/gaps and reset. Recording/clear properties compare both guests against an
+independent history; fixed cases cover 511/512/513 starts. REP starts are recorded
+once; data-fault admission and failed fetches remain distinct. Real worker tests
+verify run targets, trace replies without observation-sequence changes, terminal
+clear and stale-generation mutation rejection. Chromium covers both languages,
+F10/F11, run-to-cursor/address, recording/clear and late trace success/failure after
+reset, reconnect or a newer refresh. Consecutive steps refresh history without
+polling unchanged observations. Mapping-edge tests cover invalid bytes without
+execution, live patches and x86 instructions spanning adjacent mappings. Focus mode unmounts the trace panel to suspend automatic reads.
+
 **Guest programs:** both examples match scalar RGBA results and checksum 4814 at
 two link addresses and after reset. SVE2 also passed 1, 3, 7, 8, 63, 64, 65, 127
 and 129 pixels at MAX's 256-byte vector length; SVE2.1 is not required. Synthetic
 length properties do not verify guest-driven length transitions.
+
+**Presentation:** the refreshed static debug bundle passed English/Chinese checks
+for register, memory, SIMD, disassembly and trace contrast. Native half-screen
+layout preserved source/search state and wrapped memory/trace controls. Search and
+go-to-line remained right-aligned overlays. Chromium SIMD tests check actual
+predicate bit indices at all four element strides.
 
 **Packaged WKWebView:** acceptance covered both examples, full SIMD views, Float16
 writes, FFR's highest bit, reset, architecture/locale changes, search/replacement,
@@ -121,7 +135,11 @@ undo, focus mode and appearance. Earlier checks covered analysis, memory/PC
 inspection, patches and source/binary I/O. AArch64 source-debugging acceptance
 covered assembly/load, navigation, execution-line reveal, breakpoints, stepping and
 completion with checksum 4814. Gutter markers precede line numbers, appear on hover
-and remain red when set. These checks were separate runs, not one complete matrix.
+and remain red when set. The trace panel passed English/Chinese visual checks;
+AArch64 acceptance covered address targets, Command+F10 source targets, consecutive
+steps, recording, source links, clear/reset and completion with checksum 4814.
+Direct/indirect and recursive calls were verified in native tests, not this UI pass.
+These checks were separate runs, not one complete matrix.
 
 **Browser layout:** visual checks covered 1440×900, 880×600 and 414px widths,
 both languages, long-vector previews and matching search/line-navigation overlays.

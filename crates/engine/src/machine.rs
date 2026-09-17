@@ -8,7 +8,10 @@ use oplab_core::{
 };
 use oplab_runtime::{Register, Runtime};
 use std::collections::BTreeSet;
+mod debug;
 mod registers;
+pub(crate) use debug::RunGoal;
+pub use debug::{Trace, TraceEntry};
 mod run;
 pub(crate) use run::{SLICE_DISPATCHES, Slice, SliceStop};
 
@@ -34,6 +37,7 @@ pub struct Machine {
     breakpoints: BTreeSet<Address>,
     pending_repeat: Option<Address>,
     bypass: Option<Address>,
+    trace: Trace,
 }
 impl Machine {
     /// Validate and load static ELF with exact guest permissions and default initial state.
@@ -62,12 +66,14 @@ impl Machine {
             breakpoints: BTreeSet::new(),
             pending_repeat: None,
             bypass: None,
+            trace: Trace::default(),
         })
     }
     pub(crate) fn reset(&mut self) -> Result<(), MachineError> {
         self.native = initialize(&self.initial)?;
         self.pending_repeat = None;
         self.bypass = None;
+        self.trace.clear();
         Ok(())
     }
     pub(crate) fn breakpoints(&self) -> impl Iterator<Item = Address> + '_ {
@@ -151,7 +157,7 @@ impl Machine {
             .read(address.get(), length)
             .map_err(|_| MachineError::Backend)
     }
-    fn pc(&self) -> Result<Address, MachineError> {
+    pub(crate) fn pc(&self) -> Result<Address, MachineError> {
         registers::read(&self.native, Register::Pc)
             .map(u64::from_le_bytes)
             .map(Address::new)

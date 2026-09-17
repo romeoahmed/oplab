@@ -14,6 +14,8 @@
     BookOpen,
     Play,
     StepForward,
+    CornerRightDown,
+    Route,
     Pause,
     Square,
     RotateCcw,
@@ -44,6 +46,7 @@
   import Machine from './machine/Machine.svelte';
   import Memory from './machine/Memory.svelte';
   import MemoryPatch from './machine/MemoryPatch.svelte';
+  import Trace from './machine/Trace.svelte';
   import { defaultPreferences, readPreferences } from './preferences';
   import { problemLabel } from './presentation';
   import ToolbarAction from './ToolbarAction.svelte';
@@ -64,23 +67,25 @@
   let panelOpen = $state(false);
   let fileProblem = $state<string | null>(null);
   const captured = $derived(work.inspected);
-  const artifactSources = $derived(
-    work.candidate?.artifact.image.segments
+  const artifactSources = $derived.by(() => {
+    const candidate = work.candidate;
+    if (candidate === null) return [];
+    return candidate.artifact.image.segments
       .flatMap((segment, index) => {
-        if (segment.file_bytes === 0 || work.candidate === null) return [];
+        if (segment.file_bytes === 0) return [];
         return [
           {
             id: `segment-${String(index)}`,
             label: `${segment.address} · ${segment.flags & 4 ? 'R' : '-'}${segment.flags & 2 ? 'W' : '-'}${segment.flags & 1 ? 'X' : '-'} · ${String(segment.file_bytes)} B`,
             executable: (segment.flags & 1) !== 0,
-            bytes: segmentBytes(work.candidate.image, segment),
-            target: work.candidate.artifact.identity.target,
+            bytes: segmentBytes(candidate.image, segment),
+            target: candidate.artifact.identity.target,
             base: segment.address,
           },
         ];
       })
-      .toSorted((left, right) => Number(right.executable) - Number(left.executable)) ?? [],
-  );
+      .toSorted((left, right) => Number(right.executable) - Number(left.executable));
+  });
   const byteSources = $derived([
     ...(work.binary === undefined
       ? []
@@ -160,7 +165,7 @@
   const running = $derived(observation?.status.type === 'running');
   const resumable = $derived(
     observation !== undefined &&
-      ['ready', 'paused', 'stepped', 'breakpoint'].includes(observation.status.type),
+      ['ready', 'paused', 'stepped', 'breakpoint', 'target'].includes(observation.status.type),
   );
   const sourceDetails = $derived(sourceInfo(work.source));
   const canAssemble = $derived(work.connected && !work.building && work.source.trim().length > 0);
@@ -197,11 +202,21 @@
       },
     },
     {
+      label: m.step_over({}, options),
+      hint: m.step_over_hint({}, options),
+      icon: CornerRightDown,
+      disabled: !work.connected || !resumable || work.controlling,
+      shortcut: 'F10',
+      run: () => {
+        void work.execute({ type: 'step_over' });
+      },
+    },
+    {
       label: m.step({}, options),
       hint: m.step_hint({}, options),
       icon: StepForward,
       disabled: !work.connected || !resumable || work.controlling,
-      shortcut: 'F10',
+      shortcut: 'F11',
       run: () => {
         void work.execute({ type: 'step' });
       },
@@ -280,9 +295,17 @@
       event.preventDefault();
       assemble();
     }
-    if (event.key === 'F10' && resumable && !work.controlling) {
+    if (
+      (event.key === 'F10' || event.key === 'F11') &&
+      !event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      resumable &&
+      !work.controlling
+    ) {
       event.preventDefault();
-      void work.execute({ type: 'step' });
+      void work.execute({ type: event.key === 'F10' ? 'step_over' : 'step' });
     }
     if (event.key === 'F5' && resumable && !work.controlling) {
       event.preventDefault();
@@ -465,6 +488,9 @@
                   work.connected &&
                   resumable &&
                   !work.controlling}
+                onrun={(line: number) => {
+                  void work.runToSource(line);
+                }}
                 onbreakpoint={(line: number) => {
                   void work.sourceBreakpoint(line);
                 }}
@@ -541,6 +567,8 @@
                   {},
                   options,
                 )}</Tabs.Trigger
+              ><Tabs.Trigger value="trace"
+                ><Route size={15} aria-hidden="true" />{m.trace({}, options)}</Tabs.Trigger
               ><Tabs.Trigger value="raw"
                 ><Binary size={15} aria-hidden="true" />{m.raw_code({}, options)}</Tabs.Trigger
               ><Tabs.Trigger value="artifact"
@@ -635,6 +663,9 @@
               onbreakpoint={(address: string, enabled: boolean) => {
                 void work.breakpoint(address, enabled);
               }}
+              onrun={(address: string) => {
+                void work.runToAddress(address);
+              }}
               onsetpc={(address: string) => {
                 if (selectedBytes?.id === 'live')
                   void work.writeRegister(
@@ -662,6 +693,27 @@
                   </label>{/if}
               {/snippet}
             </Instructions>
+          </Tabs.Content>
+          <Tabs.Content value="trace" class="trace-content">
+            {#if panelOpen && !focused && observationTab === 'trace'}<Trace
+                trace={work.trace}
+                {observation}
+                connected={work.connected}
+                busy={work.controlling}
+                locale={language.current}
+                onrefresh={work.readTrace}
+                onrecord={(enabled: boolean) => {
+                  void work.execute({ type: 'record_trace', data: enabled });
+                }}
+                onclear={() => {
+                  void work.execute({ type: 'clear_trace' });
+                }}
+                onrun={(address: string) => work.runToAddress(address)}
+                sourceIndex={loadedIndex}
+                onsource={(line: number) => {
+                  editor?.revealLine(line);
+                }}
+              />{/if}
           </Tabs.Content>
           <Tabs.Content value="raw" class="raw-content">
             <RawCode

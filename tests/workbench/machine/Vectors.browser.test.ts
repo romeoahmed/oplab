@@ -204,6 +204,21 @@ test.each([
     await userEvent.keyboard('{Escape}');
     if (target === 'aarch64') {
       await page.getByRole('combobox', { name: copy.vector_bank }).selectOptions('predicates');
+      await page.getByText('FFR', { exact: true }).click();
+      for (const stride of [1, 2, 4, 8]) {
+        await page
+          .getByRole('combobox', { name: copy.vector_element })
+          .selectOptions(String(stride));
+        // Native ordinals identify predicate bits, not positions in the filtered view.
+        const indices = page
+          .getByRole('listitem')
+          .elements()
+          .map((lane) => {
+            if (!(lane instanceof HTMLLIElement)) throw new Error('Missing native list ordinal');
+            return lane.value;
+          });
+        expect(indices).toEqual(Array.from({ length: 256 / stride }, (_, index) => index * stride));
+      }
       await page.getByRole('button', { name: copy.edit_vector }).click();
       await form.getByRole('combobox', { name: copy.register_name }).selectOptions('16');
       await form.getByRole('combobox', { name: copy.vector_format }).selectOptions('bit');

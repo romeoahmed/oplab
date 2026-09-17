@@ -133,8 +133,9 @@ For visual acceptance, use HMR at 1440×900 and the desktop minimum 880×600, th
 check 800px/414px layouts, zoom, long values and both languages. Inspect the floating
 upper-right search and line-navigation panels, including simultaneous display,
 replacement, wrapping, keyboard focus and retained drafts after closing/reopening
-observations. Broader keyboard and screen-reader acceptance remains open, including toolbars whose actions start disabled;
-prefer native semantics and Bits UI over focus patches.
+observations. Broader keyboard and screen-reader acceptance remains open, including
+toolbars whose actions start disabled; prefer native semantics and Bits UI over
+focus patches.
 
 Component fixtures do not establish native IPC or guest behavior. Known tool warnings
 and the scope of completed visual/native checks belong in the
@@ -178,6 +179,20 @@ QEMU adapter lifecycle/reset/concurrent-session tests with AddressSanitizer; rec
 known upstream limitations without hiding diagnostics. Report sandbox restrictions
 separately. Browser success is not packaged-WebView success, and a local debug
 bundle is not signed or independently installed distribution evidence.
+
+For temporary execution goals, cover current-PC targets, persistent-breakpoint
+interruption, recursive returns to the same address, instruction budgets and REP
+continuation. Trace checks distinguish admission from retirement, verify the bounded
+chronological suffix and recording gaps, and reject obsolete success/failure replies
+after reset, reconnect or a newer refresh. Model recording intervals with an
+independent history; retain fixed cases at 511/512/513 starts. Enabling recording alone must not
+produce an entry, including in browser fixtures.
+
+Desktop acceptance includes F10/F11, source run-to-cursor, explicit address targets,
+record/refresh/clear and source navigation from history. Hidden trace panels must not
+request history, including in focus mode. Step-over decoding must use live bytes,
+accept complete instructions at mapping edges and across adjacent mappings, and
+leave machine state unchanged when decoding fails.
 
 ## Automation and release gates
 

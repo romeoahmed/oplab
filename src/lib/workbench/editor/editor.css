@@ -14,6 +14,7 @@
     overscroll-behavior: contain;
     font: var(--editor-size, 14px)/1.65 var(--mono);
     font-variant-ligatures: none;
+    font-variant-numeric: tabular-nums;
   }
 
   .cm-content {
@@ -33,7 +34,7 @@
 
   .cm-gutters {
     background: transparent;
-    color: var(--muted);
+    color: var(--data-padding);
     border: 0;
     padding-inline: 6px 4px;
     font-size: 11px;

@@ -4,6 +4,7 @@ import type { Capabilities } from './Capabilities.js';
 import type { Counter } from './Counter.js';
 import type { DecodedInstruction } from './DecodedInstruction.js';
 import type { Diagnostic } from './Diagnostic.js';
+import type { ExecutionTrace } from './ExecutionTrace.js';
 import type { InstructionAnalysis } from './InstructionAnalysis.js';
 import type { Observation } from './Observation.js';
 import type { SessionKey } from './SessionKey.js';
@@ -18,6 +19,7 @@ export type Reply =
   | { type: 'decoded'; data: Array<DecodedInstruction> }
   | { type: 'analyzed'; data: InstructionAnalysis }
   | { type: 'observed'; data: Observation }
+  | { type: 'trace'; data: ExecutionTrace }
   | { type: 'session_closed'; data: SessionKey }
   | { type: 'subscribed'; data: Counter }
   | { type: 'unsubscribed'; data: Counter }

@@ -323,6 +323,44 @@ an unmapped destination; the next step reports the fetch fault. Admitted-instruc
 data faults remain immediate. Native exceptions stay within C execution frames,
 with QEMU's instruction-boundary metadata restoring precise guest state.
 
+### Temporary execution goals and trace
+
+`run_until` accepts 1–256 aligned addresses and stops before the next instruction
+at any of them. Source controls use all addresses mapped to the current line;
+raw addresses need no source mapping. A current target stops without executing,
+except that an interrupted REP must first finish its admitted instruction.
+
+`step_over` reads the current machine bytes and uses XED/LLVM MC call metadata,
+not display text. Non-calls use architectural stepping. Calls run until the decoded
+fallthrough address is reached with the original stack pointer, avoiding premature
+stops on ordinary recursive visits. It does not infer an ABI, unwind frames or
+implement step-out. Nonstandard calls that do not restore SP can run until another
+stop or the instruction budget. Undecodable bytes reject the request before execution;
+ordinary step/run remain available to obtain the native fault.
+
+Temporary goals never enter the retained breakpoint set. Completion and instruction
+budget checks take precedence; a user breakpoint at the same address retains its
+breakpoint reason. Any pause, fault or termination ends the temporary operation;
+subsequent run/step commands choose a new goal. Reset and replacement discard it.
+The desktop uses `F10` for step-over, `F11` for architectural step and
+`Ctrl+F10` / `⌘+F10` for run-to-cursor, following familiar
+[debug controls](https://code.visualstudio.com/docs/debugtest/debugging).
+
+Trace recording is opt-in and owned by the machine. It retains the newest 512
+admitted instruction starts, oldest first, with their session instruction
+counter and PC. REP continuation adds no duplicate entry. A start may subsequently
+fault; a failed fetch with no admission adds none. Trace entries contain neither
+historical instruction bytes nor register/memory snapshots and cannot replay execution.
+Source links use the unchanged loaded build's mappings, not proof of historical bytes.
+
+Recording can be toggled while ready/paused and preserves existing entries. Disabled
+intervals produce gaps in counters. Overflow evicts the oldest entry and increments
+a discarded count. Clear resets that count and history, preserving execution counters
+and recording mode. Reset clears history and the discarded count while retaining
+recording mode. A new load starts with recording disabled. The visible trace panel fetches when execution
+is stopped, including on opening; running sessions use explicit refresh. Hidden panels,
+including focus mode, do not fetch automatically. History stays outside observation streams.
+
 ### Runtime and SIMD
 
 Each architecture uses its QEMU MAX runtime; there is no separate CPU selection.
@@ -394,9 +432,10 @@ tracks containment and distribution work.
 ### Live editing
 
 `Session::write_register`, `write_vector`, `set_rounding` and `write_memory` accept
-Ready and Paused sessions, including breakpoint/step pauses. Running, terminated and crashed
-sessions reject writes. Inputs are validated before native mutation. These are
-explicit debugger operations, independent of source, artifacts and initial setup.
+Ready and Paused sessions, including breakpoint, step and temporary-target pauses.
+Running, terminated and crashed sessions reject writes. Inputs are validated before
+native mutation. These debugger operations are independent of source, artifacts and
+initial setup.
 
 Register writes accept lowercase names and exact unsigned values that fit the
 selected width. Oversized values are rejected, never silently truncated.

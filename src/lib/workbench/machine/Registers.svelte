@@ -136,9 +136,10 @@
   {#if bank === null}<p class="muted-note">{m.no_registers({}, options)}</p>
   {:else}<dl class="register-grid">
       {#each values as register (register.name)}
-        <div>
+        {@const digits = BigInt(register.value).toString(16)}
+        <div class:program-counter={register.name === 'PC' || register.name === 'RIP'}>
           <dt>{register.name}</dt>
-          <dd>{BigInt(register.value).toString(16).padStart(16, '0')}</dd>
+          <dd><span class="numeric-padding">{'0'.repeat(16 - digits.length)}</span>{digits}</dd>
         </div>
       {/each}
     </dl>

@@ -11,5 +11,6 @@ export type Status =
   | { type: 'stepped' }
   | { type: 'paused' }
   | { type: 'breakpoint'; data: HexAddress }
+  | { type: 'target'; data: HexAddress }
   | { type: 'terminated'; data: Termination }
   | { type: 'crashed' };
