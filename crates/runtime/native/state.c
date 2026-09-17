@@ -149,7 +149,7 @@ bool oplab_state_read(OplabCpu *owner, OplabRegister bank, uint32_t index, uint8
   uint64_t value;
   switch (bank) {
   case OPLAB_GPR:
-    if (index > 31 || size != 8) {
+    if (index >= G_N_ELEMENTS(env->xregs) || size != 8) {
       return false;
     }
     value = env->xregs[index];
@@ -181,14 +181,15 @@ bool oplab_state_read(OplabCpu *owner, OplabRegister bank, uint32_t index, uint8
     stl_le_p(bytes + 4, arm_max_vq(ARM_CPU(owner->cpu)) * 16);
     return true;
   case OPLAB_PREDICATE:
-    if (index > 16 || size != (size_t)arm_max_vq(ARM_CPU(owner->cpu)) * 2) {
+    if (index >= G_N_ELEMENTS(env->vfp.pregs) ||
+        size != (size_t)arm_max_vq(ARM_CPU(owner->cpu)) * 2) {
       return false;
     }
     /* The SDK requires a little-endian host; predicate bit zero is byte zero's low bit. */
     memcpy(bytes, env->vfp.pregs[index].p, size);
     return true;
   case OPLAB_VECTOR:
-    if (index >= 32 || size == 0 || size % 16 != 0 ||
+    if (index >= G_N_ELEMENTS(env->vfp.zregs) || size == 0 || size % 16 != 0 ||
         size > (size_t)arm_max_vq(ARM_CPU(owner->cpu)) * 16) {
       return false;
     }
@@ -208,7 +209,7 @@ bool oplab_state_write(OplabCpu *owner, OplabRegister bank, uint32_t index, cons
   CPUARMState *env = cpu_env(owner->cpu);
   switch (bank) {
   case OPLAB_GPR:
-    if (index > 31 || size != 8) {
+    if (index >= G_N_ELEMENTS(env->xregs) || size != 8) {
       return false;
     }
     env->xregs[index] = ldq_le_p(bytes);
@@ -232,13 +233,14 @@ bool oplab_state_write(OplabCpu *owner, OplabRegister bank, uint32_t index, cons
     vfp_set_fpcr(env, ldl_le_p(bytes));
     return true;
   case OPLAB_PREDICATE:
-    if (index > 16 || size != (size_t)arm_max_vq(ARM_CPU(owner->cpu)) * 2) {
+    if (index >= G_N_ELEMENTS(env->vfp.pregs) ||
+        size != (size_t)arm_max_vq(ARM_CPU(owner->cpu)) * 2) {
       return false;
     }
     memcpy(env->vfp.pregs[index].p, bytes, size);
     return true;
   case OPLAB_VECTOR:
-    if (index >= 32 || size == 0 || size % 16 != 0 ||
+    if (index >= G_N_ELEMENTS(env->vfp.zregs) || size == 0 || size % 16 != 0 ||
         size > (size_t)arm_max_vq(ARM_CPU(owner->cpu)) * 16) {
       return false;
     }

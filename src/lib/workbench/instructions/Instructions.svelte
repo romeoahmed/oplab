@@ -4,11 +4,13 @@
   import type { Locale } from '$lib/paraglide/runtime';
   import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
   import type { InstructionAnalysis } from '$lib/protocol/generated/InstructionAnalysis';
+  import type { SourceLocation } from '$lib/protocol/generated/SourceLocation';
   import type { Target } from '$lib/protocol/generated/Target';
   import { normalizeAddress } from '$lib/protocol/scalars';
   import { ArrowRight, Circle, CornerDownRight, ListOrdered } from '@lucide/svelte';
   import { onDestroy, type Snippet } from 'svelte';
 
+  import { sourceIndex } from '../editor/source';
   import { problemLabel } from '../presentation';
   import Analysis from './Analysis.svelte';
   import { decodeWindow } from './bytes';
@@ -28,7 +30,11 @@
     editable = false,
     onbreakpoint,
     onsetpc,
+    locations = [],
+    onsource,
   }: {
+    locations?: readonly SourceLocation[];
+    onsource?: (line: number) => void;
     source?: Snippet;
     live?: boolean;
     pc?: string | undefined;
@@ -45,6 +51,7 @@
     decode: (bytes: Uint8Array, target: Target, base: string) => Promise<DecodedInstruction[]>;
   } = $props();
   const options = $derived({ locale });
+  const sourceLines = $derived(sourceIndex(locations).addresses);
   // Per-field memoization keeps unrelated prop updates out of the input identity.
   const [code, guest, origin, available] = $derived([bytes, target, base, connected] as const);
   const input = $derived({ bytes: code, target: guest, base: origin, connected: available });
@@ -67,22 +74,32 @@
   function select(row: DecodedInstruction) {
     selection = { row, request: analyze(new Uint8Array(row.bytes), target, row.address) };
   }
-  let busy = $state(false);
+  let pending = $state<symbol>();
+  const busy = $derived(pending !== undefined);
   let active = true;
   onDestroy(() => {
     active = false;
   });
 
+  /** Decode from an exact linked address inside the selected byte source. */
+  export async function reveal(address: string) {
+    if (bytes === undefined) return;
+    const relative = BigInt(address) - BigInt(base);
+    if (relative < 0n || relative >= BigInt(bytes.length)) return;
+    await inspect(Number(relative));
+  }
+
   async function inspect(start = offset) {
-    if (busy || bytes === undefined || !connected) return;
+    if (bytes === undefined || !connected) return;
     const current = input;
-    busy = true;
+    const request = Symbol();
+    pending = request;
     completed = null;
     selection = null;
     try {
       const window = decodeWindow(bytes, normalizeAddress(base), start);
       const rows = await decode(window.bytes, target, window.base);
-      if (!active || current !== input) return;
+      if (!active || current !== input || pending !== request) return;
       completed = {
         input: current,
         value: {
@@ -93,7 +110,7 @@
       };
       query = { input: current, offset: start };
     } catch (failure) {
-      if (!active || current !== input) return;
+      if (!active || current !== input || pending !== request) return;
       const code =
         typeof failure === 'object' &&
         failure !== null &&
@@ -113,7 +130,7 @@
         address = failure.address;
       completed = { input: current, value: { type: 'error', code, address } };
     } finally {
-      busy = false;
+      if (pending === request) pending = undefined;
     }
   }
 </script>
@@ -216,7 +233,16 @@
                         if (selected?.row === row) selection = null;
                         else select(row);
                       }}>{row.text}</button
-                    ></td
+                    >
+                    {#each [...(sourceLines.get(row.address) ?? [])] as line (line)}
+                      <button
+                        type="button"
+                        class="source-location"
+                        title={m.reveal_source({ line }, options)}
+                        aria-label={m.reveal_source({ line }, options)}
+                        onclick={() => onsource?.(line)}>:{line}</button
+                      >
+                    {/each}</td
                   ></tr
                 >{/each}</tbody
             >

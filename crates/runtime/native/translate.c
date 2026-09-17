@@ -16,7 +16,7 @@
 static OplabAbiType abi_type(unsigned code) {
   switch (code) {
   case dh_typecode_void:
-    return (OplabAbiType){0};
+    return (OplabAbiType){};
   case dh_typecode_i32:
     return (OplabAbiType){.bits = 32};
   case dh_typecode_s32:
@@ -62,7 +62,7 @@ static const char *condition(TCGCond value) {
 void oplab_block_free(OplabBlock *block) {
   g_free((void *)block->temps);
   g_free((void *)block->ops);
-  *block = (OplabBlock){0};
+  *block = (OplabBlock){};
 }
 
 static OplabTemp export_temp(const TCGTemp *source) {
@@ -218,7 +218,7 @@ static OplabExit exec_leave(OplabCpu *owner) {
 
 static OplabExit translate_cpu(OplabCpu *owner, OplabBlock *block) {
   exec_enter(owner);
-  *block = (OplabBlock){0};
+  *block = (OplabBlock){};
   const TCGCPUOps *ops = owner->cpu->cc->tcg_ops;
   TCGTBCPUState state = ops->get_tb_cpu_state(owner->cpu);
   owner->block = (TranslationBlock){

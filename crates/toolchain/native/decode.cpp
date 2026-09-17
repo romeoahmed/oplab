@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace oplab::decode {
@@ -67,8 +68,10 @@ void add_register(Instruction &instruction, const std::string &name, Access acce
   if (name.empty()) {
     return;
   }
-  const auto reg = std::ranges::find_if(
-      instruction.registers, [&name](const Register &item) { return item.name == name; });
+  const auto reg =
+      std::ranges::find(instruction.registers, std::string_view{name}, [](const Register &item) {
+        return std::string_view{item.name.data(), item.name.size()};
+      });
   if (reg != instruction.registers.end()) {
     reg->access = merge_access(reg->access, access);
   } else {

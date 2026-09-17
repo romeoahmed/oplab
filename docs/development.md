@@ -69,19 +69,19 @@ export XED_PREFIX="$PWD/target/native-sdk/xed"
 export OPLAB_QEMU_DIR="$PWD/target/native-sdk/lib"
 ```
 
-These commands build the native SDK, not the worker. Next install frontend
-dependencies and run `pnpm tauri dev`, or use `cargo xtask sidecar` for staging alone.
+Next install frontend dependencies and run `pnpm tauri dev` to build and stage
+the worker, or use `cargo xtask sidecar` for staging alone.
 The default uses Cargo's target directory; adjust the two exports when using
 `CARGO_TARGET_DIR` or `--prefix`. `--qemu-source`, `--xed-source` and
 `--mbuild-source` optionally clone local Git repositories instead of downloading
 upstream sources. Exact release tags are verified. User source checkouts are never
 modified. Incremental QEMU builds reconfigure Meson and clear its dependency
 cache so package upgrades do not retain stale library paths; unchanged compilation
-outputs remain incremental. Use a fresh prefix
-when changing compilers, host targets or SDK release tags. Stop workers before
-rebuilding an SDK, and restart them after staging. XED uses mbuild v2026.08.23
-and installs static headers/libraries independently of QEMU. XED and mbuild have
-independent releases; their selected tags currently share the same date.
+outputs remain incremental. Use a fresh prefix when changing compilers, host
+targets or SDK release tags. Stop workers before rebuilding an SDK and restart
+them after staging. XED uses mbuild v2026.08.23
+and installs headers and a static library independently of QEMU. XED and mbuild
+are independently versioned; both selected tags are v2026.08.23.
 
 The owned QEMU checkout receives two build-only integrations: an additional Meson
 shared-library target and the minimal ARM GICv5 CPU-interface configuration required
@@ -90,8 +90,8 @@ patched. The project adapter uses GNU C23 with warnings treated as errors;
 upstream QEMU retains its own language standard and warning policy. Per-target
 compiler arguments, source selection and dependencies come from QEMU's build graph.
 Unchanged adapter files retain their timestamps for incremental builds.
-Re-run SDK construction after adapter changes;
-Cargo only generates bindings for the private boundary header.
+Rebuild the SDK after adapter changes; Cargo only generates bindings for the
+private boundary header.
 
 `--asan` builds an instrumented QEMU SDK for native memory checks. Load the selected
 Clang AddressSanitizer runtime when running it inside an uninstrumented Rust test
@@ -184,9 +184,10 @@ pkg-config --version
 ```
 
 These commands assume explicit LLVM/LLD prefixes. Shell examples are POSIX; use
-PowerShell environment syntax and its call operator on Windows. A missing-header or missing-library error calls for a complete development
-installation. Keep compiler, SDK, deployment minimum and library settings consistent
-across the dependency SDK and Cargo build; do not patch generated headers to hide
+PowerShell environment syntax and its call operator on Windows. Missing headers
+or libraries require a complete development installation. Keep compiler, SDK,
+deployment minimum and library settings consistent across the dependency SDK and
+Cargo build; do not patch generated headers to hide
 configuration errors.
 
 ## Commands and ownership
@@ -257,8 +258,8 @@ cargo xtask codegen --check
 
 README introduces the product and first workflow; AGENTS gives repository rules.
 Each reference owns one subject. Keep dated acceptance in the roadmap, not inline
-comments or repeated audit histories. These roles follow [AGENTS.md](https://agents.md/)
-and the structure examples in [Awesome README](https://github.com/matiassingers/awesome-readme).
+comments or repeated audit histories. See [AGENTS.md guidance](https://agents.md/)
+and [README examples](https://github.com/matiassingers/awesome-readme).
 
 ## Outputs and distribution
 
@@ -284,7 +285,8 @@ pnpm tauri build --debug --bundles app
 ```
 
 `pnpm tauri build` selects release builds and configured platform bundle targets.
-The worker and private QEMU libraries are staged by Tauri hooks. Declaring
+Both debug and release bundles embed a static frontend; this does not imply static
+native linkage. Tauri hooks stage the worker and private QEMU libraries. Declaring
 `externalBin` does not bundle transitive LLVM/LLD/GLib libraries. Development bundles
 can depend on locally installed libraries; inspect loader paths and dependencies
 before distributing. [Runtime](runtime.md#distribution-design) describes the planned
@@ -335,11 +337,16 @@ The CXX bridge's `OUT_DIR` holds compilation metadata. xtask obtains it from
 Cargo and runs clang-tidy against the cc-rs/CXX compiler arguments, carrying over
 cc-rs's tool environment for SDK/MSVC headers. The JSON database uses argument
 arrays without shell escaping; paths and arguments must be UTF-8.
-C and C++ formatting inherit LLVM style with a 100-column limit; C++ uses C++23. clang-tidy
-owns brace enforcement, correctness, modernization and direct-include checks;
-formatting does not insert control-flow syntax. Both tools come from the selected
-LLVM installation. The QEMU adapter uses a separate C-only clang-tidy policy and
-QEMU's Meson compilation database; checks reject stale staged adapter sources. Knip declares the dynamically imported Svelte editor as an
+C and C++ formatting inherit LLVM style with a 100-column limit; C++ uses C++23.
+clang-tidy checks correctness, concurrency, modernization, direct includes and
+selected C++ Core Guidelines; clang-format owns formatting. Both tools come from
+the selected LLVM installation, and compiler diagnostics remain authoritative.
+The GNU C23 adapter uses QEMU's Meson compilation database and a self-contained
+clang-tidy policy because its SDK can live outside the repository. It preserves
+QEMU's ordered umbrella headers, fixed callback signatures and native mask types;
+`nullptr` modernization also applies to C23. Checks reject stale staged adapter
+sources and report only owned headers, without rewriting dependency headers.
+Knip declares the dynamically imported Svelte editor as an
 entry so its dependency tree remains checked. Its two dependency exceptions cover Oxfmt invoked
 by Rust and the inlang-owned message-format plugin.
 

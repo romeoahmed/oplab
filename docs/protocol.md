@@ -73,6 +73,13 @@ The bounded image view exposes named address symbols, excluding undefined, file,
 section and TLS entries. TLS offsets remain in the complete ELF; they are not
 virtual addresses or desktop stop positions.
 
+The artifact also carries `source_map: {locations: [{address, line}], truncated}`.
+Addresses use canonical hexadecimal; line numbers start at one. Each sorted, unique
+pair belongs to the artifact's build identity. The view contains at most 4,096
+entries and omits any line whose locations would be incomplete at that limit.
+An empty view means no verified document mapping is available. See the
+[source contract](engine.md#source-locations-and-breakpoints) for eligibility.
+
 `load` declares `image`, target, completion, instruction budget, image length,
 `initial` and `replace`, followed by a binary payload of 1 byte to 1 MiB.
 `image: {type: "elf"}` uses standard ELF addresses, entry and permissions.
@@ -86,8 +93,9 @@ Success uses the load request ID as session ID and starts generation zero.
 `initial` contains `registers: [{name, value}]` and
 `mappings: [{address, length, flags}]`. Register values are canonical decimal strings;
 names must be distinct lowercase canonical GPRs for the selected target. Omitted
-GPRs are zero. Both arrays are required, including when empty. The target selects its fixed MAX runtime. Mapping addresses use canonical hexadecimal;
-lengths are byte counts. Flags use ELF `PF_R=4`,
+GPRs are zero. Both arrays are required, including when empty. The target selects
+its fixed MAX runtime. Mapping addresses use canonical hexadecimal; lengths are
+byte counts. Flags use ELF `PF_R=4`,
 `PF_W=2`, `PF_X=1`; zero describes a guard region. Extra regions are zero-filled.
 The [loader](engine.md#raw-code-and-initial-conditions) checks page geometry,
 overlap, target and aggregate limits before native mapping.
@@ -95,11 +103,16 @@ These values are load inputs, not live patches, and reset reapplies them.
 
 `execute` carries a session key and `run`, `step`, `pause`, `cancel`, `reset`,
 `breakpoint`, `write_register`, `write_vector`, `set_rounding`, `write_memory`,
-`observe` or `close`. Keys contain
-decimal `session` and `generation`.
-Stale keys fail before mutation. Reset advances generation; close drops the owner,
+`observe` or `close`. Keys contain decimal `session` and `generation`. Stale keys
+fail before mutation. Reset advances generation; close drops the owner,
 even when running, and returns `session_closed`. IDs must also be qualified by the
 worker connection, because they can recur after restart.
+
+`breakpoint` carries `{addresses, enabled}`. At most 256 canonical addresses are
+accepted per request. Duplicate addresses have no additional effect. Alignment and
+the resulting set size are validated before any change. Address controls submit
+one address; source controls submit all addresses mapped to the selected line.
+Other breakpoints remain unchanged. The worker operates on addresses, not source lines.
 
 `write_register` carries `{name, value}`. Names accept canonical GPRs, subregisters,
 RIP/PC and individual application flags; values use exact decimal strings, including
@@ -147,8 +160,8 @@ AArch64 includes `z` (32 vectors), `p` (16 predicates), `ffr`, `vl`, `max_vl`,
 `vl <= max_vl`. Each Z value contains `max_vl` bytes; each P/FFR contains
 `max_vl / 8` bytes. Capturing maximum storage preserves inactive bits when the
 active length changes; views and writes use `vl`. Control/status values are
-unsigned 32-bit JSON numbers. The adapter
-synchronizes native exception flags before reading MXCSR; see the [SIMD contract](engine.md#runtime-and-simd).
+unsigned 32-bit JSON numbers. The adapter synchronizes native exception flags
+before reading MXCSR; see the [SIMD contract](engine.md#runtime-and-simd).
 Raw flags carry no definedness claim. Fault PC names the failed instruction; the
 register PC reflects observed CPU state. Crashed snapshots have null registers and
 cannot supply fresh memory. Publish only after the entire transfer validates.

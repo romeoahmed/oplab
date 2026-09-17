@@ -277,7 +277,7 @@ fn running_observations_are_coherent_and_controls_do_not_wait_for_completion() -
                 client,
                 key,
                 SessionAction::Breakpoint {
-                    address: store_address,
+                    addresses: vec![store_address],
                     enabled: true,
                 },
             )?;
@@ -298,7 +298,7 @@ fn running_observations_are_coherent_and_controls_do_not_wait_for_completion() -
                 client,
                 key,
                 SessionAction::Breakpoint {
-                    address: store_address,
+                    addresses: vec![store_address],
                     enabled: false,
                 },
             )?;
@@ -646,18 +646,20 @@ fn verify_raw_session(
         let loaded = client.request(command(entry, None), Some(bytes.to_vec()))?;
         let initial = observed(&loaded)?;
         let key = initial.key;
-        for (location, enabled, expected) in [
-            (completion, true, vec![completion]),
-            (entry, true, vec![entry, completion]),
-            (entry, true, vec![entry, completion]),
-            (completion, false, vec![entry]),
-            (completion, false, vec![entry]),
+        for (locations, enabled, expected) in [
+            (
+                vec![completion, entry, entry],
+                true,
+                vec![entry, completion],
+            ),
+            (vec![entry, completion], false, vec![]),
+            (vec![entry], true, vec![entry]),
         ] {
             let reply = execute(
                 client,
                 key,
                 SessionAction::Breakpoint {
-                    address: address(location),
+                    addresses: locations.into_iter().map(address).collect(),
                     enabled,
                 },
             )?;

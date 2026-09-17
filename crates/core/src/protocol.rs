@@ -222,6 +222,8 @@ pub struct Artifact {
     pub image_bytes: u32,
     /// Validated entry, segments, and bounded symbol view of the linked ELF.
     pub image: image::ImageInfo,
+    /// Build-scoped source locations from LLVM-generated DWARF.
+    pub source_map: image::SourceMap,
 }
 
 /// A decoded instruction with its original bytes and display text.

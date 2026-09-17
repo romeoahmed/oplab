@@ -90,14 +90,6 @@ private:
   [[nodiscard]] std::uint64_t current_pos() const override { return position_; }
 };
 
-// Adopt owning factory pointers immediately; CXX translates failures to Rust errors.
-template <typename T> [[nodiscard]] std::unique_ptr<T> own(T *value) {
-  if (!value) {
-    throw std::runtime_error("LLVM MC initialization failed");
-  }
-  return std::unique_ptr<T>{value};
-}
-
 // Reject .print through LLVM's directive parser: stdout carries the worker protocol.
 class JobDirectives final : public llvm::MCAsmParserExtension {
 public:
@@ -229,6 +221,7 @@ ObjectResult assemble_object(rust::Str source, Architecture architecture) {
     result.status = Status::Assembly;
   } else {
     result.object = std::move(output).take();
+    result.automatic_dwarf = context.getGenDwarfForAssembly();
   }
   return result;
 }

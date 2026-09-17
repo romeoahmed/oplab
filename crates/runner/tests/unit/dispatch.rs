@@ -70,7 +70,7 @@ fn pending_builds_resume_on_output_credit_without_another_request()
         events.send(Event::Writable)?;
         let job = pending.recv_timeout(Duration::from_secs(5))?;
         assert_eq!(job.id.get(), 2);
-        events.send(Event::Build(builds::run(job)))?;
+        events.send(Event::Build(Box::new(builds::run(job))))?;
         events.send(Event::Request(Box::new(
             Request {
                 id: Counter::new(4),
@@ -180,7 +180,7 @@ fn controls_and_cancellation_settle_while_the_native_job_is_outstanding()
             Some(&Reply::AssemblyCancelled(Counter::new(2)))
         );
         send_request(5, Command::Shutdown)?;
-        events.send(Event::Build(builds::run(native_job)))?;
+        events.send(Event::Build(Box::new(builds::run(native_job))))?;
         let closed = replies.recv_timeout(Duration::from_secs(2))?;
         assert_eq!(closed.response.id.get(), 5);
         assert_eq!(closed.response.result, Reply::Closed);

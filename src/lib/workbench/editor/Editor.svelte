@@ -3,6 +3,7 @@
 
   import './editor.css';
   import type { Locale } from '$lib/paraglide/runtime.js';
+  import type { SourceLocation } from '$lib/protocol/generated/SourceLocation';
   import type { Target } from '$lib/protocol/generated/Target';
   import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
   import {
@@ -48,6 +49,8 @@
   import type { Command } from '@codemirror/view';
   import {
     Search,
+    Circle,
+    ArrowRight,
     ListStart,
     Ellipsis,
     Undo2,
@@ -60,9 +63,11 @@
   import { DropdownMenu } from 'bits-ui';
   import { untrack } from 'svelte';
 
+  import { debugGutter, executionLine } from './debug';
   import { goToLine, retainLineDialog } from './goto-line';
   import { assembly, assemblyHighlighting } from './language';
   import { searchPanel } from './search-panel.svelte';
+  import { sourceIndex } from './source';
   import { jumpToLabel } from './structure';
 
   const {
@@ -74,6 +79,12 @@
     oncursor,
     onchange,
     onassemble,
+    locations = [],
+    breakpoints = [],
+    currentLine,
+    editable = false,
+    onbreakpoint,
+    onreveal,
   }: {
     value: string;
     locale: Locale;
@@ -83,11 +94,23 @@
     oncursor: (line: number, column: number) => void;
     onchange: (source: string) => void;
     onassemble?: () => void;
+    locations?: readonly SourceLocation[];
+    breakpoints?: readonly string[];
+    currentLine?: number | undefined;
+    editable?: boolean;
+    onbreakpoint?: (line: number) => void;
+    onreveal?: (line: number) => void;
   } = $props();
 
+  const mapped = $derived(sourceIndex(locations));
   let currentView: EditorView | undefined;
   let editorState = $state.raw<EditorState>();
   const options = $derived({ locale });
+  const cursorLine = $derived(editorState?.doc.lineAt(editorState.selection.main.head).number ?? 1);
+  const cursorAddresses = $derived([...(mapped.lines.get(cursorLine) ?? [])]);
+  const activeBreakpoints = $derived(
+    cursorAddresses.filter((address) => breakpoints.includes(address)).length,
+  );
   let pendingCommand: Command | undefined;
   const commands = $derived([
     {
@@ -120,6 +143,17 @@
     nextDiagnostic(currentView);
     currentView.dispatch({
       effects: EditorView.scrollIntoView(currentView.state.selection.main.head),
+    });
+    currentView.focus();
+  }
+
+  /** Navigate without altering text, undo history or the current search. */
+  export function revealLine(line: number) {
+    if (currentView === undefined || line < 1 || line > currentView.state.doc.lines) return;
+    const position = currentView.state.doc.line(line).from;
+    currentView.dispatch({
+      selection: { anchor: position },
+      effects: EditorView.scrollIntoView(position, { y: 'center' }),
     });
     currentView.focus();
   }
@@ -168,12 +202,16 @@
     const syntax = new Compartment();
     const wrapping = new Compartment();
     const accessibility = new Compartment();
+    const debugging = new Compartment();
+    const execution = new Compartment();
     const view = new EditorView({
       parent: element,
       state: EditorState.create({
         doc: untrack(() => value),
         extensions: [
+          debugging.of([]),
           lineNumbers(),
+          execution.of([]),
           lintGutter(),
           foldGutter(),
           history(),
@@ -203,6 +241,16 @@
             ...foldKeymap,
             { key: 'F12', run: jumpToLabel, preventDefault: true },
             { key: 'F8', run: nextDiagnostic },
+            {
+              key: 'F9',
+              run: (view) => {
+                const line = view.state.doc.lineAt(view.state.selection.main.head).number;
+                if (!editable || !mapped.lines.has(line) || onbreakpoint === undefined)
+                  return false;
+                onbreakpoint(line);
+                return true;
+              },
+            },
           ]),
           bracketMatching(),
           closeBrackets(),
@@ -236,6 +284,26 @@
       }),
     });
     currentView = view;
+    $effect(() => {
+      const options = { locale };
+      view.dispatch({
+        effects: debugging.reconfigure(
+          debugGutter(
+            mapped.lines,
+            breakpoints,
+            editable,
+            (enabled) =>
+              enabled
+                ? m.remove_source_breakpoint({}, options)
+                : m.add_source_breakpoint({}, options),
+            (line) => onbreakpoint?.(line),
+          ),
+        ),
+      });
+    });
+    $effect(() => {
+      view.dispatch({ effects: execution.reconfigure(executionLine(view, currentLine)) });
+    });
     $effect(() => {
       view.dispatch({ effects: syntax.reconfigure(assembly(target)) });
     });
@@ -282,6 +350,43 @@
 <div class="editor-toolbar">
   <span>{m.assembly_syntax({}, options)}</span>
   <div>
+    {#if onbreakpoint !== undefined && cursorAddresses.length > 0}
+      <button
+        class="icon-button source-toggle"
+        disabled={!editable}
+        aria-label={m.source_breakpoint({ line: cursorLine }, options)}
+        title={`${m.source_breakpoint({ line: cursorLine }, options)} · F9`}
+        aria-pressed={activeBreakpoints === 0
+          ? false
+          : activeBreakpoints === cursorAddresses.length
+            ? true
+            : 'mixed'}
+        onclick={() => {
+          onbreakpoint(cursorLine);
+        }}><Circle size={14} aria-hidden="true" /></button
+      >
+    {/if}
+    {#if onreveal !== undefined}
+      <button
+        class="icon-button"
+        disabled={editorState === undefined || !mapped.lines.has(cursorLine)}
+        aria-label={m.reveal_instruction({}, options)}
+        title={m.reveal_instruction({}, options)}
+        onclick={() => {
+          onreveal(cursorLine);
+        }}><CornerDownRight size={15} aria-hidden="true" /></button
+      >
+    {/if}
+    {#if currentLine !== undefined}
+      <button
+        class="icon-button"
+        aria-label={m.reveal_execution({}, options)}
+        title={m.reveal_execution({}, options)}
+        onclick={() => {
+          revealLine(currentLine);
+        }}><ArrowRight size={15} aria-hidden="true" /></button
+      >
+    {/if}
     <button
       class="icon-button"
       aria-label={m.find({}, options)}

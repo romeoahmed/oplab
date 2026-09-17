@@ -124,9 +124,9 @@ and editor suggestions do not imply execution support.
 
 A Svelte await block loads CodeMirror; an [attachment](https://svelte.dev/docs/svelte/@attach)
 owns cleanup. [Compartments](https://codemirror.net/examples/config/) reconfigure
-language, locale and wrapping without replacing history. Documents start blank or
-restore their last valid draft, including an intentionally empty one. Examples load
-explicitly through Vite raw imports and Rust `include_str!`.
+language, locale, wrapping and debugger markers without replacing history. Documents
+start blank or restore their last valid draft, including an intentionally empty one.
+Examples load explicitly through Vite raw imports and Rust `include_str!`.
 
 Target-specific StreamLanguage tokens and Lezer tags distinguish GNU symbols,
 numeric references, macro parameters, directives, operands and SIMD arrangements.
@@ -145,7 +145,14 @@ return focus to the editor; Tab leaves it. Assembly shortcuts do not insert text
 Diagnostics belong to one build. Original UTF-8 offsets become validated UTF-16
 points, accounting for BOM, supplementary characters and normalized newlines.
 CodeMirror lint owns markers/navigation. Edits clear diagnostics; absent or invalid
-offsets never become fabricated locations. Points are not source maps.
+offsets never become fabricated locations. Diagnostic offsets do not establish
+instruction provenance.
+
+The toolchain reads linked DWARF with LLVM and exports a bounded set of address/line
+pairs. The controller retains separate maps for the current artifact and loaded
+build. Bidirectional indexes drive source navigation, CodeMirror line decorations
+and gutter markers. Gutter events, `F9` and a toolbar button share the same breakpoint
+action. Editing source invalidates its mappings; markers are not moved to new text.
 
 ### Controls and layout
 
@@ -172,7 +179,8 @@ required for Newly Baseline features.
 ### Inspection and editing
 
 Disassembly identity includes bytes, target, base and connection. Changes invalidate
-rows and selection even when reverted; locale changes retain results. Selection
+rows and selection even when reverted; locale changes retain results. Only the
+latest decode request can publish results or clear its busy state. Selection
 requests static analysis. Narrow views return from analysis without decoding again.
 
 Captured memory retains its session, generation, address and register snapshot.

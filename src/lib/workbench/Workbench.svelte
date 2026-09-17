@@ -31,11 +31,11 @@
     RefreshCw,
   } from '@lucide/svelte';
   import { Toolbar, Tooltip, Popover, Tabs, Toggle } from 'bits-ui';
-  import { onMount, untrack } from 'svelte';
+  import { onMount, untrack, tick } from 'svelte';
 
   import Appearance from './Appearance.svelte';
   import { createWorkbench, examples } from './controller.svelte';
-  import { sourceInfo, sourceLocation } from './editor/source';
+  import { sourceInfo, sourceLocation, sourceIndex } from './editor/source';
   import FileMenu from './FileMenu.svelte';
   import { segmentBytes } from './instructions/bytes';
   import Instructions from './instructions/Instructions.svelte';
@@ -56,7 +56,8 @@
   }: { portFactory?: Parameters<typeof createWorkbench>[0]; filePort?: FilePort | null } = $props();
   const language = createLocaleController();
   const work = createWorkbench(untrack(() => portFactory));
-  let editor = $state<{ revealDiagnostic: () => void }>();
+  let editor = $state<{ revealDiagnostic: () => void; revealLine: (line: number) => void }>();
+  let instructions = $state<{ reveal: (address: string) => Promise<void> }>();
   const options = $derived({ locale: language.current });
   let byteSource = $state('');
   let observationTab = $state('memory');
@@ -137,6 +138,25 @@
       ? observation.registers.data.rip
       : observation?.registers?.data.pc,
   );
+  const mapped = $derived(sourceIndex(work.sourceMap?.locations ?? []));
+  const loadedIndex = $derived(sourceIndex(work.loadedSourceMap?.locations ?? []));
+  const executionLines = $derived(loadedIndex.addresses.get(pc ?? ''));
+  const currentLine = $derived(executionLines?.size === 1 ? [...executionLines][0] : undefined);
+  async function revealInstructions(line: number) {
+    const address = mapped.lines.get(line)?.values().next().value;
+    if (address === undefined) return;
+    const segment = artifactSources.find(
+      (item) =>
+        BigInt(address) >= BigInt(item.base) &&
+        BigInt(address) - BigInt(item.base) < BigInt(item.bytes.length),
+    );
+    if (segment === undefined) return;
+    byteSource = segment.id;
+    observationTab = 'instructions';
+    panelOpen = true;
+    await tick();
+    await instructions?.reveal(address);
+  }
   const running = $derived(observation?.status.type === 'running');
   const resumable = $derived(
     observation !== undefined &&
@@ -438,6 +458,19 @@
               <Editor
                 bind:this={editor}
                 {diagnostic}
+                locations={work.sourceMap?.locations ?? []}
+                breakpoints={work.loadedSourceMap === null ? [] : (observation?.breakpoints ?? [])}
+                {currentLine}
+                editable={work.loadedSourceMap !== null &&
+                  work.connected &&
+                  resumable &&
+                  !work.controlling}
+                onbreakpoint={(line: number) => {
+                  void work.sourceBreakpoint(line);
+                }}
+                onreveal={(line: number) => {
+                  void revealInstructions(line);
+                }}
                 value={work.source}
                 locale={language.current}
                 target={work.target}
@@ -465,6 +498,9 @@
                     options,
                   )}</span
             >
+            {#if work.sourceMap?.truncated}<span class="stale"
+                >{m.source_map_truncated({}, options)}</span
+              >{/if}
             {#if work.candidate !== null}<span>{work.candidate.artifact.image_bytes} B · ELF</span
               >{/if}
             <span class="cursor-position"
@@ -575,6 +611,13 @@
           </Tabs.Content>
           <Tabs.Content value="instructions" class="instructions-content">
             <Instructions
+              bind:this={instructions}
+              locations={selectedBytes?.id.startsWith('segment-')
+                ? (work.sourceMap?.locations ?? [])
+                : []}
+              onsource={(line: number) => {
+                editor?.revealLine(line);
+              }}
               bytes={selectedBytes?.bytes}
               target={selectedBytes?.target ?? work.target}
               base={selectedBytes?.base ?? work.base}

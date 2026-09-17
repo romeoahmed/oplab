@@ -147,6 +147,7 @@ fn binary_artifacts_require_complete_bounded_ordered_transfers()
                         version: "1".into(),
                     },
                 },
+                source_map: oplab_core::protocol::image::SourceMap::default(),
                 object_bytes: 65_537,
                 image_bytes: 1,
                 image: oplab_core::protocol::image::ImageInfo {

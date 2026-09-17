@@ -38,6 +38,49 @@ const addAnalysis: InstructionAnalysis = {
   },
 };
 
+test.each(
+  (['success', 'failure'] as const).flatMap((outcome) =>
+    (['older', 'newer'] as const).map((first) => ({ outcome, first })),
+  ),
+)(
+  'source navigation ignores an older $outcome when $first decode settles first',
+  async ({ outcome, first }) => {
+    const older = Promise.withResolvers<DecodedInstruction[]>();
+    const newer = Promise.withResolvers<DecodedInstruction[]>();
+    const decode = vi
+      .fn<Props['decode']>()
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const view = await render(Instructions, { props: { ...initial, decode } });
+    const component = view.component as { reveal: (address: string) => Promise<void> };
+    const previous = component.reveal(add.address);
+    const latest = component.reveal(ret.address);
+    expect(decode).toHaveBeenLastCalledWith(new Uint8Array(ret.bytes), initial.target, ret.address);
+    const disassemble = page.getByRole('button', { name: en.disassemble, exact: true });
+    const table = page.getByRole('table', { name: en.instructions, exact: true });
+    if (first === 'newer') {
+      newer.resolve([ret]);
+      await latest;
+      await expect.element(table).toMatchTextContent(ret.text);
+    }
+    if (outcome === 'failure') older.reject(new Error('Superseded decode'));
+    else older.resolve([add]);
+    await previous;
+    await settled();
+    if (first === 'older') {
+      await expect.element(disassemble).toBeDisabled();
+      await expect.element(table).not.toBeInTheDocument();
+      await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+      newer.resolve([ret]);
+      await latest;
+    }
+    await expect.element(table).toMatchTextContent(ret.text);
+    await expect.element(table).not.toMatchTextContent(add.text);
+    await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+    await expect.element(disassemble).toBeEnabled();
+  },
+);
+
 test('analysis survives locale changes but expires when its input is replaced', async () => {
   const analyze = vi.fn<Props['analyze']>().mockResolvedValue(addAnalysis);
   const view = await render(Instructions, {

@@ -99,7 +99,7 @@ export function connection(session: Observation | null = null): ConnectionInfo {
       version: 1,
       targets: ['x86_64', 'aarch64'],
       assembler: { name: 'LLVM MC', version: '23' },
-      source_mapping: false,
+      source_mapping: true,
       execution: true,
     },
   };
@@ -113,6 +113,7 @@ export function assembled(identity: BuildIdentity): Awaited<ReturnType<WorkerPor
         type: 'assembled',
         data: {
           identity,
+          source_map: { locations: [], truncated: false },
           object_bytes: 1,
           image_bytes: 1,
           image: {

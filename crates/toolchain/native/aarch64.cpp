@@ -20,20 +20,12 @@
 #include <llvm/MC/TargetRegistry.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/TargetParser/Triple.h>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
 
 namespace oplab::decode {
 namespace {
-template <typename T> std::unique_ptr<T> own(T *pointer) {
-  if (!pointer) {
-    throw std::runtime_error("LLVM decoder initialization failed");
-  }
-  return std::unique_ptr<T>{pointer};
-}
-
 void analyze(const llvm::MCInst &inst, const llvm::MCInstrInfo &info,
              const llvm::MCRegisterInfo &registers, const llvm::MCInstrAnalysis &analysis,
              std::uint64_t pc, Instruction &out) {

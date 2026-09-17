@@ -13,6 +13,7 @@ fn main() -> Result<()> {
     build
         .file("native/assembly.cpp")
         .file("native/link.cpp")
+        .file("native/source.cpp")
         .file("native/target.cpp")
         .file("native/decode.cpp")
         .file("native/x86.cpp")

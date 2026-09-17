@@ -518,3 +518,78 @@ fn canonical_banks_preserve_every_integer_register_and_distinct_stack_storage() 
     }
     Ok(())
 }
+
+#[test]
+fn grouped_breakpoints_stop_before_each_effect_and_survive_reset() -> TestResult {
+    for (target, source) in [
+        (
+            Target::X86_64,
+            "first: add rax, 1\nsecond: add rax, 2\ndone: nop",
+        ),
+        (
+            Target::Aarch64,
+            "first: add x0, x0, 1\nsecond: add x0, x0, 2\ndone: nop",
+        ),
+    ] {
+        let (mut session, image) = fixture(target, source, 100)?;
+        let first = symbol(&image, "first")?;
+        let second = symbol(&image, "second")?;
+        session.set_breakpoints(&[second, first, first], true)?;
+        for (address, value) in [(first, 0), (second, 1)] {
+            session.start()?;
+            settle(&mut session)?;
+            assert_eq!(
+                session.state(),
+                ExecutionState::Paused(PauseReason::Breakpoint(address))
+            );
+            assert_eq!(first_integer(&session)?, value);
+        }
+        session.reset()?;
+        assert_eq!(session.breakpoints().collect::<Vec<_>>(), [first, second]);
+        session.set_breakpoints(&[first, second], false)?;
+        assert_eq!(session.breakpoints().count(), 0);
+        session.start()?;
+        settle(&mut session)?;
+        assert_eq!(
+            session.state(),
+            ExecutionState::Terminated(Termination::Completed)
+        );
+        assert_eq!(first_integer(&session)?, 3);
+    }
+    Ok(())
+}
+
+#[test]
+fn grouped_breakpoint_limits_and_alignment_fail_without_partial_updates() -> TestResult {
+    for target in [Target::X86_64, Target::Aarch64] {
+        let (mut session, _) = fixture(target, "nop\ndone: nop", 100)?;
+        let addresses = (0..257)
+            .map(|index| Address::new(0x1000 + index * 4))
+            .collect::<Vec<_>>();
+        session.set_breakpoints(&addresses[..255], true)?;
+        session.set_breakpoints(&[addresses[254], addresses[255]], true)?;
+        assert_eq!(session.breakpoints().collect::<Vec<_>>(), addresses[..256]);
+        // Existing entries and empty groups remain valid at capacity.
+        session.set_breakpoints(&[addresses[0]; 256], true)?;
+        session.set_breakpoints(&[], true)?;
+        for enabled in [false, true] {
+            assert!(session.set_breakpoints(&addresses, enabled).is_err());
+            assert_eq!(session.breakpoints().collect::<Vec<_>>(), addresses[..256]);
+            if target == Target::Aarch64 {
+                assert!(
+                    session
+                        .set_breakpoints(&[addresses[0], Address::new(0x1001)], enabled)
+                        .is_err()
+                );
+                assert_eq!(session.breakpoints().collect::<Vec<_>>(), addresses[..256]);
+            }
+        }
+        assert!(session.set_breakpoints(&addresses[255..], true).is_err());
+        assert_eq!(session.breakpoints().collect::<Vec<_>>(), addresses[..256]);
+        session.set_breakpoints(&addresses[128..256], false)?;
+        assert_eq!(session.breakpoints().collect::<Vec<_>>(), addresses[..128]);
+        session.set_breakpoints(&addresses[128..256], true)?;
+        assert_eq!(session.breakpoints().collect::<Vec<_>>(), addresses[..256]);
+    }
+    Ok(())
+}

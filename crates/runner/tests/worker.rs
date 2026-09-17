@@ -152,7 +152,7 @@ fn real_worker_process_handshakes_and_exits_on_shutdown() -> Result<(), Box<dyn 
     let hello = transport::read_message(&mut replies)?
         .ok_or("missing handshake")?
         .response;
-    assert!(matches!(hello.result, Reply::Hello(_)));
+    assert!(matches!(hello.result, Reply::Hello(ref caps) if caps.source_mapping));
     let mut received = std::collections::BTreeSet::new();
     for _ in 0..2 {
         let message = transport::read_message(&mut replies)?.ok_or("missing assembly reply")?;
@@ -167,6 +167,14 @@ fn real_worker_process_handshakes_and_exits_on_shutdown() -> Result<(), Box<dyn 
         let Reply::Assembled(artifact) = response.result else {
             return Err("missing worker artifact".into());
         };
+        let points = artifact
+            .source_map
+            .locations
+            .iter()
+            .map(|point| (point.address.address().get(), point.line))
+            .collect::<Vec<_>>();
+        assert_eq!(points, [(0x1000, if id == 2 { 4 } else { 1 })]);
+        assert!(!artifact.source_map.truncated);
         assert_eq!(message.payloads[0].len(), artifact.object_bytes as usize);
         if id == 2 {
             let object = object::File::parse(message.payloads[0].as_slice())?;

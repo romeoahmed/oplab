@@ -1,8 +1,8 @@
 # AGENTS.md
 
 Oplab is a Tauri 2 / Svelte 5 assembly workbench for x86_64 and AArch64.
-Read [roadmap](docs/roadmap.md) before choosing work and
-[development](docs/development.md) before native builds. Distinguish implemented
+Read the [roadmap](docs/roadmap.md) before choosing work and the
+[development guide](docs/development.md) before native builds. Distinguish implemented
 behavior, planned capabilities and verified platforms.
 
 ## Commands
@@ -99,12 +99,12 @@ Use Playwright Chromium in new headless mode only:
 `pnpm exec playwright install --with-deps --no-shell chromium`.
 UI acceptance covers both languages, keyboard flows, realistic sizes and retained
 editor state. Native changes need real worker/guest evidence; relevant UI/native
-changes also need a fresh static desktop bundle. Follow [testing](docs/testing.md).
+changes also need a fresh desktop bundle. Follow [testing](docs/testing.md).
 
 Run checks proportionate to the change: actual xtask flows for orchestration,
 codegen verification for contracts, workspace checks/tests for broad changes.
 Report what ran and what remains unverified. Local debug success does not establish
-distribution readiness. Keep setup in development docs, contracts in their owning
+distribution readiness. Keep setup in the development guide, contracts in their owning
 references and dated evidence in the roadmap.
 
 Inspect staged and unstaged changes; preserve user work. Do not stage, commit,

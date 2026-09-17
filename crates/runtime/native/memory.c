@@ -21,13 +21,11 @@ OplabMap *oplab_mapping(OplabCpu *owner, uint64_t address, uint64_t size) {
       return map;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
-bool oplab_tlb_fill(CPUState *cpu, CPUTLBEntryFull *out, vaddr address, MMUAccessType access,
-                    int mmu, MemOp op, int size, bool probe, uintptr_t ra) {
-  (void)mmu;
-  (void)ra;
+bool oplab_tlb_fill(CPUState *cpu, CPUTLBEntryFull *out, vaddr address, MMUAccessType access, int,
+                    MemOp op, int size, bool probe, uintptr_t) {
   OplabCpu *owner = cpu->opaque;
   OplabMap *map = oplab_mapping(owner, address, 1);
   uint32_t permission = access == MMU_DATA_STORE ? 2 : access == MMU_INST_FETCH ? 4 : 1;

@@ -135,10 +135,10 @@ pub enum SessionAction {
     ///
     /// Guest permissions remain unchanged; executable translations are invalidated.
     WriteMemory(MemoryWindow),
-    /// Set or remove a session address breakpoint; source provenance is not checked.
+    /// Set or remove up to 256 address breakpoints as one atomic operation.
     Breakpoint {
-        /// Guest address to test before instruction effects; target alignment is required.
-        address: HexAddress,
+        /// Pause before executing these addresses. Each must satisfy the target's instruction alignment.
+        addresses: Vec<HexAddress>,
         /// Whether the breakpoint should be retained.
         enabled: bool,
     },

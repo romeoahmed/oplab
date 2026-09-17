@@ -35,6 +35,9 @@ and instruction budget; stacks and operating-system services are not implicit.
 
 - **Edit GNU-style assembly:** CodeMirror highlighting, completion, folding,
   label navigation, search/replacement, history and source diagnostics.
+- **Debug source:** set line breakpoints (`F9`), navigate between source and
+  instructions, and highlight the current execution line. Debug links belong to
+  the assembled revision and are cleared when the source changes.
 - **Run ELF or raw code:** step, run, pause, stop, reset and set address breakpoints.
   Configure initial GPRs and additional memory before loading.
 - **Inspect effects:** integer registers, flags, memory, disassembly and on-demand
@@ -55,8 +58,8 @@ in **Instructions**.
 
 Both guests use a fixed QEMU MAX runtime. AVX2 and SVE/SVE2 samples execute;
 recognizing an instruction does not guarantee execution support. AVX-512 execution
-is unavailable; x87 and SME matrix state are not exposed. Complete extension
-coverage, source mapping and multiple documents remain [planned](docs/roadmap.md#next-product-work).
+is unavailable; x87 and SME matrix state are not exposed. Broader instruction
+coverage and multiple documents remain [planned](docs/roadmap.md#next-product-work).
 
 ## Build from source
 
@@ -72,8 +75,8 @@ pnpm tauri dev
 ```
 
 Tauri stages the worker and starts Vite. Native changes require rebuilding the
-worker and restarting the app. For frontend-only HMR, use `pnpm dev`; browser
-preview cannot assemble or execute.
+worker and restarting the app; QEMU adapter changes also require rebuilding the SDK.
+For frontend-only HMR, use `pnpm dev`; browser preview cannot assemble or execute.
 
 With the same native environment, run the bundled example from the terminal:
 

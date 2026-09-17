@@ -74,7 +74,7 @@ The desktop converts valid offsets to CodeMirror UTF-16 positions, marks the poi
 and offers navigation. Invalid/missing offsets produce a general error without a
 fabricated location. Macro expansion buffers can lack an original-source offset;
 link failures have no source point. An offset is not an instruction range or source
-map. DWARF is retained; macro provenance and source breakpoints remain planned.
+map. Instruction provenance is derived separately from linked DWARF.
 
 The C++23/CXX adapter uses RAII ownership and call-scoped borrows. A guest enum
 selects MC; named borrowed paths form one LLD request. Assembly and linking use
@@ -86,6 +86,43 @@ errors remain independent of LLVM's wording. LLD calls are serialized to protect
 its process-wide context; each call retains LLD's default internal parallelism.
 An unrecoverable `lldMain` result exits through LLD's own cleanup API. Native aborts
 and hangs still require process supervision.
+
+### Source locations and breakpoints
+
+LLVM's [DWARF line tables](https://llvm.org/docs/SourceLevelDebugging.html) associate
+linked addresses with source lines. The reader accepts automatically generated
+assembly tables when the `source.s` MD5 matches the original input. User-authored
+tables from numbered `.file`/`.loc` directives remain in ELF but are excluded from
+editor mappings. Unreadable or compressed debug metadata leaves the source view
+empty without preventing assembly. The reader never opens host source files.
+
+The view contains at most 4,096 unique address/line pairs. If the limit cuts through
+a line's expansion, all locations for that line are omitted and the view is marked
+truncated. This prevents partially mapped line breakpoints. Addresses must fall
+within file-backed executable segments. End-of-sequence rows, line zero and lines
+outside the document are excluded. No columns or address ranges are inferred.
+
+Macros and repetitions may map one invocation line to several addresses. An address
+may also map to several lines; in that case, no current execution line is selected.
+LLVM counts LF, while the editor also treats bare CR as a line break. Rows containing
+ambiguous bare CR are omitted, and subsequent line numbers are adjusted to match
+the editor. The assembly text remains unchanged.
+
+The breakpoint gutter sits before line numbers. An unset marker appears pale red
+on hover; a set marker stays solid red. Native tooltips describe the click action.
+Clicking a marker or pressing `F9` toggles every mapped address on that line. The
+worker accepts at most 256 input addresses and validates alignment and the
+256-address session limit before applying any change. Toggling a partially enabled
+group sets all its breakpoints. Address breakpoints also work without source mappings.
+
+Source navigation opens the first mapped instruction for a line; instruction rows
+link back to all their mapped lines. The current execution marker uses the loaded
+build. A separate action reveals that line without moving the cursor on every step.
+Mappings describe the original artifact, so the marker does not establish that
+guest bytes are unchanged. Captured memory and imported raw code have no source links.
+Changing the document revision, architecture or link address invalidates source
+controls. Rebuilding does not reconnect an older session to the edited source,
+and reconnecting to a worker does not restore source ownership.
 
 ### Job boundaries and limits
 
@@ -131,8 +168,8 @@ the visible decode result, even if the previous values are restored.
 File bytes remain separate from the loaded machine. Captured memory is another
 input, bound to its session, generation, address and register snapshot. Controls
 without memory retain that capture; reset or replacement invalidates it. Refresh
-memory and disassemble again to inspect changed bytes. Neither input provides
-verified source mapping.
+memory and disassemble again to inspect changed bytes. Only current build segments
+provide source links; captured memory does not inherit them.
 Select an instruction for a separate, bounded analysis request. Lists remain
 lightweight; changing the input or page removes the selection and its pending
 result. Locale and panel changes retain the current analysis.
@@ -233,9 +270,8 @@ bytes alone never starts or replaces a session.
 `MachineSetup` supplies an optional architecture-shaped
 `InitialRegisters` bank and additional `InitialMapping` regions. Canonical names are
 lowercase: the 16 x86 GPRs (including `rsp`), or `x0`–`x30` and separate `sp`.
-Unspecified GPRs in an explicit bank are zero. Aliases, duplicate names, PC, flags and wrong-target banks
-are rejected.
-GPR values are arbitrary unsigned 64-bit bit patterns; a pointer value is not proof
+Unspecified GPRs in an explicit bank are zero. Aliases, duplicate names, PC, flags
+and wrong-target banks are rejected. GPR values are unsigned 64-bit bit patterns; a pointer value is not proof
 of a mapping or valid alignment for a later guest access. PC comes from the image;
 integer flags retain backend defaults. The SIMD environment below is explicit.
 
@@ -318,13 +354,13 @@ breakpoint does not establish instruction-boundary or source-location validity.
 Breakpoints can be edited in ready/paused states. The desktop adds/removes addresses
 in the machine panel or toggles decoded rows from captured memory. Successful
 observations carry the authoritative sorted set; repeated adds/removals are
-idempotent, and rejected changes leave it intact. Source breakpoints and watchpoints
-remain planned.
+idempotent, and rejected changes leave it intact. Source controls use atomic address
+groups from the loaded build; watchpoints remain planned.
 
 Observations capture canonical x86_64 GPRs/RIP/RFLAGS and
 YMM0–YMM15/MXCSR, or AArch64 X0–X30/SP/PC/NZCV, Z0–Z31, P0–P15, FFR,
-current/max vector lengths and FPCR/FPSR, together
-with status, counters, faults and optional memory at one owner boundary.
+current/max vector lengths and FPCR/FPSR, together with status, counters, faults
+and optional memory at one owner boundary.
 Array order is defined in `oplab-core::registers`. Subregister effects appear in
 canonical storage, including effects of live alias writes. Raw flags make no
 architectural-definedness claim. SIMD values preserve all 256 YMM bits or all
@@ -357,8 +393,8 @@ tracks containment and distribution work.
 
 ### Live editing
 
-`Session::write_register`, `write_vector`, `set_rounding` and `write_memory` accept Ready and Paused
-sessions, including breakpoint/step pauses. Running, terminated and crashed
+`Session::write_register`, `write_vector`, `set_rounding` and `write_memory` accept
+Ready and Paused sessions, including breakpoint/step pauses. Running, terminated and crashed
 sessions reject writes. Inputs are validated before native mutation. These are
 explicit debugger operations, independent of source, artifacts and initial setup.
 

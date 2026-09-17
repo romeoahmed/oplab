@@ -28,6 +28,17 @@ pub(super) mod bridge {
         status: Status,
         source_offset: u32,
         has_source_offset: bool,
+        automatic_dwarf: bool,
+    }
+
+    struct SourcePoint {
+        address: u64,
+        line: u32,
+    }
+
+    struct SourcePoints {
+        locations: Vec<SourcePoint>,
+        truncated: bool,
     }
 
     /// Paths are owned by the calling Rust frame and borrowed for one LLD call.
@@ -43,6 +54,7 @@ pub(super) mod bridge {
     unsafe extern "C++" {
         include!("oplab-toolchain/native/assembly.hpp");
         fn assemble_object(source: &str, architecture: Architecture) -> Result<ObjectResult>;
+        fn source_points(image: &[u8], source: &str) -> Result<SourcePoints>;
         fn link_object(request: &LinkRequest) -> Result<bool>;
     }
 }

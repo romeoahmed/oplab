@@ -13,6 +13,7 @@ import type { MemoryWindow } from '$lib/protocol/generated/MemoryWindow';
 import type { Observation } from '$lib/protocol/generated/Observation';
 import type { RoundingMode } from '$lib/protocol/generated/RoundingMode';
 import type { SessionAction } from '$lib/protocol/generated/SessionAction';
+import type { SourceMap } from '$lib/protocol/generated/SourceMap';
 import type { StreamEvent } from '$lib/protocol/generated/StreamEvent';
 import type { Target } from '$lib/protocol/generated/Target';
 import type { VectorWrite } from '$lib/protocol/generated/VectorWrite';
@@ -87,7 +88,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     completion: '',
   });
   type Loaded =
-    | { type: 'source'; identity: BuildIdentity }
+    | { type: 'source'; identity: BuildIdentity; sourceMap: SourceMap }
     | { type: 'raw'; bytes: Uint8Array; target: Target; base: string; entry: string };
   let loaded = $state.raw<Loaded | null>(null);
   let snapshot = $state.raw<Snapshot | null>(null);
@@ -438,7 +439,11 @@ export function createWorkbench(factory: Factory = desktopWorker) {
         image: { type: 'elf' },
         target: candidate.artifact.identity.target,
         completion: completionAddress(candidate.artifact),
-        identity: { type: 'source', identity: candidate.artifact.identity },
+        identity: {
+          type: 'source',
+          identity: candidate.artifact.identity,
+          sourceMap: candidate.artifact.source_map,
+        },
         memory: initialMemory(candidate.artifact.image),
       };
     });
@@ -647,6 +652,14 @@ export function createWorkbench(factory: Factory = desktopWorker) {
         return false;
       }
     },
+    get sourceMap() {
+      return candidate !== null && matches(candidate.artifact.identity)
+        ? candidate.artifact.source_map
+        : null;
+    },
+    get loadedSourceMap() {
+      return loaded?.type === 'source' && matches(loaded.identity) ? loaded.sourceMap : null;
+    },
     get loadedRevision() {
       return loaded?.type === 'source' ? loaded.identity.revision : null;
     },
@@ -707,11 +720,23 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       try {
         await execute({
           type: 'breakpoint',
-          data: { address: normalizeAddress(address), enabled },
+          data: { addresses: [normalizeAddress(address)], enabled },
         });
       } catch (error) {
         report(error);
       }
+    },
+    async sourceBreakpoint(line: number) {
+      if (loaded?.type !== 'source' || !matches(loaded.identity) || snapshot === null) return;
+      const addresses = loaded.sourceMap.locations
+        .filter((point) => point.line === line)
+        .map((point) => point.address);
+      if (addresses.length === 0) return;
+      const active = snapshot.observation.breakpoints;
+      await execute({
+        type: 'breakpoint',
+        data: { addresses, enabled: !addresses.every((address) => active.includes(address)) },
+      });
     },
     get inspected() {
       const key = snapshot?.observation.key;

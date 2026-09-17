@@ -45,3 +45,24 @@ pub struct ImageSymbol {
     /// ELF symbol size in bytes, which may be zero for assembly labels.
     pub size: Counter,
 }
+
+/// Bounded source locations read from LLVM-generated DWARF.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SourceMap {
+    /// Sorted unique address/line pairs, limited to 4,096 entries.
+    /// A line may have several addresses. If the limit cuts through a line, all its entries are omitted.
+    pub locations: Vec<SourceLocation>,
+    /// Locations were omitted to fit the limit. Complete debug sections remain in ELF.
+    pub truncated: bool,
+}
+
+/// An exact linked address and its source line, as reported by LLVM.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SourceLocation {
+    /// Linked instruction address. This entry does not describe an address range.
+    pub address: HexAddress,
+    /// One-based line in the editor's normalized document. Ambiguous bare-CR rows are omitted.
+    pub line: u32,
+}

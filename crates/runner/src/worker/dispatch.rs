@@ -18,7 +18,7 @@ enum Event {
     Request(Box<RequestMessage>),
     InputClosed,
     Writable,
-    Build(Message),
+    Build(Box<Message>),
     Failed(WorkerError),
 }
 
@@ -119,7 +119,7 @@ fn compile(jobs: &Receiver<builds::Job>, events: &SyncSender<Event>) {
             let _ = events.send(Event::Failed(WorkerError::BuildLost));
             return;
         };
-        let event = Event::Build(message);
+        let event = Event::Build(Box::new(message));
         if events.send(event).is_err() {
             return;
         }
@@ -171,7 +171,7 @@ impl Dispatcher {
                 Event::Writable => {}
                 Event::Build(message) => {
                     if self.builds.finish(message.response.id)? {
-                        send(output, message)?;
+                        send(output, *message)?;
                     }
                 }
             }

@@ -350,8 +350,12 @@ fn apply(
                 payload.ok_or(ValidationError::Length)?,
             )?;
         }
-        SessionAction::Breakpoint { address, enabled } => {
-            session.set_breakpoint(address.address(), *enabled)?;
+        SessionAction::Breakpoint { addresses, enabled } => {
+            let addresses = addresses
+                .iter()
+                .map(|address| address.address())
+                .collect::<Vec<_>>();
+            session.set_breakpoints(&addresses, *enabled)?;
         }
         SessionAction::Observe { memory } => return Ok(*memory),
         SessionAction::Close => return Err(ValidationError::Transition.into()),

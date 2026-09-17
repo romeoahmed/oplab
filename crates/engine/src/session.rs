@@ -259,8 +259,22 @@ impl Session {
     ///
     /// Rejects running, terminal or crashed sessions, target misalignment and excess breakpoints.
     pub fn set_breakpoint(&mut self, address: Address, enabled: bool) -> Result<(), MachineError> {
+        self.set_breakpoints(&[address], enabled)
+    }
+
+    /// Atomically update a group of address breakpoints, preserving unrelated entries.
+    ///
+    /// # Errors
+    ///
+    /// Rejects running, terminal or crashed sessions, more than 256 input addresses,
+    /// target misalignment or a resulting set over 256 entries. Failure preserves all breakpoints.
+    pub fn set_breakpoints(
+        &mut self,
+        addresses: &[Address],
+        enabled: bool,
+    ) -> Result<(), MachineError> {
         self.state.require_patchable()?;
-        self.machine.set_breakpoint(address, enabled)
+        self.machine.set_breakpoints(addresses, enabled)
     }
 
     /// Sorted address breakpoints, retained across reset and cleared by a new load.

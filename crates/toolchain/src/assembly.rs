@@ -5,6 +5,7 @@ mod ffi;
 mod image;
 pub use image::describe;
 mod link;
+mod source;
 
 use oplab_core::{
     protocol::{AssemblerIdentity, BuildIdentity, Diagnostic, DiagnosticCode, MAX_SOURCE_BYTES},
@@ -16,6 +17,7 @@ use oplab_core::{
 pub struct ObjectArtifact {
     target: Target,
     bytes: Vec<u8>,
+    automatic_dwarf: bool,
 }
 
 impl ObjectArtifact {
@@ -35,6 +37,8 @@ pub struct BuildArtifact {
     pub object: Vec<u8>,
     /// Executable ELF describing file-backed bytes and zero-filled load regions.
     pub image: Vec<u8>,
+    /// Exact linked DWARF points for this build, without inferred address ranges.
+    pub source_map: oplab_core::protocol::image::SourceMap,
 }
 
 /// Assembler name and exact LLVM release used by this process.
@@ -55,9 +59,13 @@ pub fn identity() -> AssemblerIdentity {
 /// Rejects empty or oversized source, MC warnings/errors, native failures and invalid output.
 pub fn compile(target: Target, source: &str) -> Result<ObjectArtifact, Diagnostic> {
     validate_source(source)?;
-    let bytes = assemble_object(source, target)?;
+    let (bytes, automatic_dwarf) = assemble_object(source, target)?;
     elf::validate(&bytes, target, object::ObjectKind::Relocatable)?;
-    Ok(ObjectArtifact { target, bytes })
+    Ok(ObjectArtifact {
+        target,
+        bytes,
+        automatic_dwarf,
+    })
 }
 
 /// Link an object at the exact requested `.text` address without modifying the object.
@@ -123,10 +131,17 @@ pub fn assemble_cancellable(
     checkpoint()?;
     let image = link(&object, build.base.address())?;
     checkpoint()?;
+    let source_map = if object.automatic_dwarf {
+        source::describe(&image, source)?
+    } else {
+        oplab_core::protocol::image::SourceMap::default()
+    };
+    checkpoint()?;
     Ok(BuildArtifact {
         identity: build,
         object: object.bytes,
         image,
+        source_map,
     })
 }
 
@@ -150,7 +165,7 @@ const fn validate_source(source: &str) -> Result<(), Diagnostic> {
     Ok(())
 }
 
-fn assemble_object(source: &str, target: Target) -> Result<Vec<u8>, Diagnostic> {
+fn assemble_object(source: &str, target: Target) -> Result<(Vec<u8>, bool), Diagnostic> {
     let architecture = match target {
         Target::X86_64 => ffi::bridge::Architecture::X86_64,
         Target::Aarch64 => ffi::bridge::Architecture::Aarch64,
@@ -158,7 +173,7 @@ fn assemble_object(source: &str, target: Target) -> Result<Vec<u8>, Diagnostic> 
     let result = ffi::bridge::assemble_object(source, architecture)
         .map_err(|_| Diagnostic::new(DiagnosticCode::BackendFailure))?;
     match result.status {
-        ffi::bridge::Status::Success => Ok(result.object),
+        ffi::bridge::Status::Success => Ok((result.object, result.automatic_dwarf)),
         ffi::bridge::Status::Assembly => {
             let mut diagnostic = Diagnostic::new(DiagnosticCode::Assembly);
             if result.has_source_offset && source.get(..result.source_offset as usize).is_some() {

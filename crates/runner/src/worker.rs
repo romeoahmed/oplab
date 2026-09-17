@@ -91,7 +91,7 @@ impl Worker {
                 version: VERSION,
                 targets: vec![Target::X86_64, Target::Aarch64],
                 assembler: assembly::identity(),
-                source_mapping: false,
+                source_mapping: true,
                 execution: true,
             })
         } else {

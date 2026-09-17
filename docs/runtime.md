@@ -43,9 +43,8 @@ remains future optimization work.
 
 The adapter uses QOM type registration and instance initialization/finalization,
 non-migrating RAM, native vCPU threads and `run_on_cpu`. A per-library lock serializes
-QEMU operations. The vCPU remains the
-owner of instruction execution; QEMU's BQL and RCU protect internal readers and
-retirement. Host callers use call-scoped RCU registration so Rust thread teardown
+QEMU operations. The vCPU owns instruction execution; QEMU's BQL and RCU protect
+internal readers and retirement. Host callers use call-scoped RCU registration so Rust thread teardown
 cannot leave QEMU registry entries pointing at released TLS.
 `adapter.c` owns this lifecycle and the ABI table; `translate.c` owns TCG export,
 dispatch and exception recovery. Memory helpers and architectural state each have
@@ -62,9 +61,9 @@ Guest memory uses exact 4-KiB mappings, permissions and bounded buffers. Native
 MMU helpers retain endianness, access width, alignment and atomic operations.
 The private SDK uses R=1, W=2, X=4; the engine converts ELF permission bits at
 the boundary. Debugger access is independent of guest permissions. C `sigsetjmp`
-and QEMU exit boundaries contain native exceptions below Rust frames; instruction-start metadata restores
-faulting CPU state. This is an experiment memory model, not a full OS page-table,
-firmware or syscall environment.
+and QEMU exit boundaries contain native exceptions below Rust frames;
+instruction-start metadata restores faulting CPU state. This experiment memory
+model does not implement an OS page table, firmware or syscall environment.
 
 `invalid_instruction` preserves QEMU's invalid/undefined-instruction outcome;
 it does not prove malformed bytes, because CPU features and execution state can
@@ -97,8 +96,8 @@ The private ABI stays at version 1; rebuild libraries, worker and desktop togeth
 
 ## Coverage and limits
 
-Each architecture selects one fixed MAX runtime. MAX means QEMU's available TCG features,
-subject to implemented lowering and verified behavior. QEMU 11.1.1 TCG has AVX2,
+Each architecture selects one fixed MAX runtime, bounded by QEMU's TCG features,
+Oplab's implemented lowering and verified behavior. QEMU 11.1.1 TCG has AVX2,
 but does not provide AVX-512 execution. AArch64 enables FP/NEON and SVE access
 using native architectural controls. Broader instruction samples must be verified,
 not inferred from decoder recognition or feature names.

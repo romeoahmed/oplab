@@ -1,4 +1,4 @@
-import { sourceInfo, sourceLocation } from '$lib/workbench/editor/source';
+import { sourceInfo, sourceLocation, sourceIndex } from '$lib/workbench/editor/source';
 import { EditorState } from '@codemirror/state';
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
@@ -60,4 +60,33 @@ test('locations preserve BOM, supplementary characters, combining marks and EOF'
   for (const offset of [null, -1, 0.5, NaN, Infinity, 4])
     expect(sourceLocation('nop', offset)).toBeNull();
   expect(sourceLocation('\uD800', 0)).toBeNull();
+});
+
+test('source indexes contain exactly the input relation in both directions', () => {
+  fc.assert(
+    fc.property(
+      fc.array(
+        fc.record({
+          line: fc.integer({ min: 1, max: 16 }),
+          address: fc.integer({ min: 0, max: 15 }).map((n) => `0x${n.toString(16)}`),
+        }),
+        { maxLength: 80 },
+      ),
+      (points) => {
+        const index = sourceIndex(points);
+        expect(new Set(index.lines.keys())).toEqual(new Set(points.map((point) => point.line)));
+        expect(new Set(index.addresses.keys())).toEqual(
+          new Set(points.map((point) => point.address)),
+        );
+        for (const [line, addresses] of index.lines)
+          expect(addresses).toEqual(
+            new Set(points.filter((point) => point.line === line).map((point) => point.address)),
+          );
+        for (const [address, lines] of index.addresses)
+          expect(lines).toEqual(
+            new Set(points.filter((point) => point.address === address).map((point) => point.line)),
+          );
+      },
+    ),
+  );
 });

@@ -73,25 +73,33 @@ impl Machine {
     pub(crate) fn breakpoints(&self) -> impl Iterator<Item = Address> + '_ {
         self.breakpoints.iter().copied()
     }
-    pub(crate) fn set_breakpoint(
+    pub(crate) fn set_breakpoints(
         &mut self,
-        address: Address,
+        addresses: &[Address],
         enabled: bool,
     ) -> Result<(), MachineError> {
-        if !address
-            .get()
-            .is_multiple_of(self.initial.target().instruction_alignment())
-        {
+        if addresses.len() > 256 {
+            return Err(ValidationError::Length.into());
+        }
+        if addresses.iter().any(|address| {
+            !address
+                .get()
+                .is_multiple_of(self.initial.target().instruction_alignment())
+        }) {
             return Err(ValidationError::Target.into());
         }
-        if enabled {
-            if self.breakpoints.len() >= 256 && !self.breakpoints.contains(&address) {
-                return Err(ValidationError::Length.into());
+        let mut next = self.breakpoints.clone();
+        for address in addresses {
+            if enabled {
+                next.insert(*address);
+            } else {
+                next.remove(address);
             }
-            self.breakpoints.insert(address);
-        } else {
-            self.breakpoints.remove(&address);
         }
+        if next.len() > 256 {
+            return Err(ValidationError::Length.into());
+        }
+        self.breakpoints = next;
         Ok(())
     }
     /// Initial memory, registers and permissions retained for reset.

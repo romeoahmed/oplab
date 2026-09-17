@@ -291,14 +291,14 @@ test('controls preserve captures; changed bytes and reset invalidate decoded ins
       type: 'execute',
       data: {
         session: machine.key,
-        action: { type: 'breakpoint', data: { address: '0x0000000000001000', enabled: false } },
+        action: { type: 'breakpoint', data: { addresses: ['0x0000000000001000'], enabled: false } },
       },
     })),
     {
       type: 'execute',
       data: {
         session: machine.key,
-        action: { type: 'breakpoint', data: { address: '0x0000000000001001', enabled: true } },
+        action: { type: 'breakpoint', data: { addresses: ['0x0000000000001001'], enabled: true } },
       },
     },
     ...Array.from({ length: 2 }, () => ({

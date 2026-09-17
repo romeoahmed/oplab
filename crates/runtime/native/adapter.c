@@ -11,6 +11,7 @@
 #include "hw/core/cpu.h"
 #include "hw/core/qdev.h"
 #include "qapi/error.h"
+#include "qemu-main.h"
 #include "qemu-version.h"
 #include "qemu/guest-random.h"
 #include "qemu/main-loop.h"
@@ -41,10 +42,10 @@ static void *cpu_thread(void *argument) {
     qemu_process_cpu_events(cpu);
   } while (!cpu->unplug);
   cpu_thread_signal_destroyed(cpu);
-  current_cpu = NULL;
+  current_cpu = nullptr;
   bql_unlock();
   rcu_unregister_thread();
-  return NULL;
+  return nullptr;
 }
 
 static void attach_cpu(CPUState *cpu) {
@@ -75,7 +76,7 @@ DEFINE_TYPES(types)
 static void initialize(void) {
   const char *options[] = {"oplab", "-machine", "none", "-accel",      "tcg,thread=single",
                            "-S",    "-display", "none", "-nodefaults", "-monitor",
-                           "none",  "-serial",  "none", NULL};
+                           "none",  "-serial",  "none", nullptr};
   g_auto(GStrv) arguments = g_new0(char *, G_N_ELEMENTS(options));
   for (size_t i = 0; options[i]; ++i) {
     arguments[i] = g_strdup(options[i]);
@@ -101,11 +102,11 @@ void oplab_enter(void) {
   if (context) {
     tcg_ctx = context;
   }
-  current_cpu = NULL;
+  current_cpu = nullptr;
 }
 
 void oplab_leave(void) {
-  current_cpu = NULL;
+  current_cpu = nullptr;
   bql_unlock();
   rcu_unregister_thread();
   g_mutex_unlock(&lock);
@@ -132,7 +133,7 @@ static OplabCpu *create(void) {
                            &error_abort);
 #endif
   object_property_add_child(OBJECT(owner), "cpu", OBJECT(owner->cpu));
-  qdev_realize_and_unref(DEVICE(owner->cpu), NULL, &error_abort);
+  qdev_realize_and_unref(DEVICE(owner->cpu), nullptr, &error_abort);
   static TCGCPUOps operations;
   operations = *owner->cpu->cc->tcg_ops;
   operations.tlb_fill_align = oplab_tlb_fill;
@@ -158,9 +159,9 @@ static void destroy(OplabCpu *owner) {
   qdev_unrealize(DEVICE(owner->cpu));
   /* CPU finalization may be deferred by RCU-owned address spaces. Release
    * links to embedded memory while its owner is still retained here. */
-  object_property_set_link(OBJECT(owner->cpu), "memory", NULL, &error_abort);
+  object_property_set_link(OBJECT(owner->cpu), "memory", nullptr, &error_abort);
 #if defined(TARGET_AARCH64)
-  object_property_set_link(OBJECT(owner->cpu), "secure-memory", NULL, &error_abort);
+  object_property_set_link(OBJECT(owner->cpu), "secure-memory", nullptr, &error_abort);
 #endif
   object_unparent(OBJECT(owner->cpu));
   for (unsigned i = 0; i < owner->maps->len; ++i) {
@@ -189,15 +190,13 @@ static bool map_memory(OplabCpu *owner, uint64_t base, uint64_t size, uint32_t p
     map->base = base;
     map->size = size;
     map->permissions = permissions;
-    Error *error = NULL;
     g_autofree char *name = g_strdup_printf("oplab-memory-%u", owner->maps->len);
     /* Sandbox RAM has QOM ownership but does not participate in VM migration. */
-    memory_region_init_ram_flags_nomigrate(&map->memory, OBJECT(owner), name, size, 0, &error);
-    if (error) {
-      error_free(error);
-      object_unparent(OBJECT(&map->memory));
+    valid =
+        memory_region_init_ram_flags_nomigrate(&map->memory, OBJECT(owner), name, size, 0, nullptr);
+    if (!valid) {
+      /* QEMU already unparents the memory region on allocation failure. */
       g_free(map);
-      valid = false;
     } else {
       if (length) {
         memcpy(memory_region_get_ram_ptr(&map->memory), bytes, length);
@@ -221,7 +220,7 @@ static bool read_memory(OplabCpu *owner, uint64_t address, uint8_t *bytes, size_
     memcpy(bytes, memory_region_get_ram_ptr(&map->memory) + address - map->base, size);
   }
   oplab_leave();
-  return map != NULL;
+  return map != nullptr;
 }
 
 static bool write_memory(OplabCpu *owner, uint64_t address, const uint8_t *bytes, size_t size) {
@@ -234,7 +233,7 @@ static bool write_memory(OplabCpu *owner, uint64_t address, const uint8_t *bytes
     memcpy(memory_region_get_ram_ptr(&map->memory) + address - map->base, bytes, size);
   }
   oplab_leave();
-  return map != NULL;
+  return map != nullptr;
 }
 
 static bool read_register(OplabCpu *owner, OplabRegister bank, uint32_t index, uint8_t *bytes,

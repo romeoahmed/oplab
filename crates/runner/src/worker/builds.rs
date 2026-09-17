@@ -137,6 +137,7 @@ pub(super) fn build_message(
                         object_bytes,
                         image_bytes,
                         image,
+                        source_map: build.source_map,
                     }),
                 },
                 payloads: vec![build.object, build.image],

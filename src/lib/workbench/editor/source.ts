@@ -1,3 +1,5 @@
+import type { SourceLocation } from '$lib/protocol/generated/SourceLocation';
+
 /**
  * Map a source byte offset to a CodeMirror position and line/column.
  *
@@ -43,4 +45,19 @@ export function sourceInfo(source: string) {
     ending:
       endings.size > 1 ? 'mixed' : endings.has('\r\n') ? 'CRLF' : endings.has('\r') ? 'CR' : 'LF',
   };
+}
+
+/** Index every address/line pair, preserving multiple locations in either direction. */
+export function sourceIndex(locations: readonly SourceLocation[]) {
+  const lines = new Map<number, Set<string>>();
+  const addresses = new Map<string, Set<number>>();
+  for (const point of locations) {
+    const atLine = lines.get(point.line) ?? new Set<string>();
+    atLine.add(point.address);
+    lines.set(point.line, atLine);
+    const atAddress = addresses.get(point.address) ?? new Set<number>();
+    atAddress.add(point.line);
+    addresses.set(point.address, atAddress);
+  }
+  return { lines, addresses };
 }

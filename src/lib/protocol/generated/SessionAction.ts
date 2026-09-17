@@ -24,9 +24,9 @@ export type SessionAction =
       type: 'breakpoint';
       data: {
         /**
-         * Guest address to test before instruction effects; target alignment is required.
+         * Pause before executing these addresses. Each must satisfy the target's instruction alignment.
          */
-        address: HexAddress;
+        addresses: Array<HexAddress>;
         /**
          * Whether the breakpoint should be retained.
          */

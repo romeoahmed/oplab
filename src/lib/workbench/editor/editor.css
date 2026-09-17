@@ -334,3 +334,54 @@
 .editor .cm-searchMatch-selected {
   background: color-mix(in oklch, var(--warning), transparent 65%);
 }
+
+.editor .cm-execution-line {
+  background: color-mix(in oklch, var(--accent), transparent 86%);
+  box-shadow: inset 2px 0 var(--accent);
+}
+
+.cm-source-gutter {
+  min-inline-size: 22px;
+}
+
+.source-breakpoint {
+  display: grid;
+  place-items: center;
+  inline-size: 22px;
+  block-size: 22px;
+  color: oklch(62% 0.2 25deg);
+  opacity: 0;
+
+  &::before {
+    content: '';
+    inline-size: 10px;
+    block-size: 10px;
+    border-radius: 50%;
+    background: currentcolor;
+  }
+
+  &[data-state='mixed'] {
+    opacity: 0.45;
+  }
+
+  &[data-state='true'] {
+    opacity: 1;
+  }
+
+  &[data-editable='true'] {
+    cursor: pointer;
+
+    &:hover:not([data-state='true']) {
+      opacity: 0.45;
+    }
+  }
+}
+
+.source-toggle[aria-pressed='true'],
+.source-toggle[aria-pressed='mixed'] {
+  color: var(--error);
+}
+
+.source-toggle[aria-pressed='true'] svg {
+  fill: currentcolor;
+}

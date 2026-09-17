@@ -8,15 +8,15 @@ owns commands; [roadmap](roadmap.md#verification) records dated results and gaps
 
 ## Suites
 
-| Location                 | Evidence                                                        |
-| ------------------------ | --------------------------------------------------------------- |
-| `crates/core/tests`      | Scalar/schema validity, address/permission rules and framing    |
-| `crates/toolchain/tests` | Exact encodings, ELF geometry, relocations and static metadata  |
-| `crates/runtime/tests`   | CPU lifecycle, memory permissions, REP and self-modifying code  |
-| `crates/engine/tests`    | Loading, session policy, live edits and real guest/SIMD effects |
-| `crates/runner/tests`    | CLI/worker processes and private concurrency boundaries         |
-| `src-tauri/tests/unit`   | Supervision, leases, stream reconstruction and native file I/O  |
-| Root `tests/`            | Frontend properties, recovery, catalogs and browser interaction |
+| Location                 | Evidence                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `crates/core/tests`      | Scalar/schema validity, address/permission rules and framing                 |
+| `crates/toolchain/tests` | Exact encodings, ELF geometry, DWARF points, relocations and static metadata |
+| `crates/runtime/tests`   | CPU lifecycle, memory permissions, REP and self-modifying code               |
+| `crates/engine/tests`    | Loading, session policy, live edits and real guest/SIMD effects              |
+| `crates/runner/tests`    | CLI/worker processes and private concurrency boundaries                      |
+| `src-tauri/tests/unit`   | Supervision, leases, stream reconstruction and native file I/O               |
+| Root `tests/`            | Frontend properties, recovery, catalogs and browser interaction              |
 
 Rust public tests use package `tests/`; private `#[cfg(test)]` path modules use
 `tests/unit` without widening APIs. See [Rust test organization](https://doc.rust-lang.org/book/ch11-03-test-organization.html).
@@ -35,20 +35,21 @@ only round-trip two production helpers. Compare serialized vector bytes with an
 independent hexadecimal representation; combine mixed instruction lengths when
 checking disassembly boundaries.
 
-| Boundary            | Independent evidence                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------------------- |
-| Addresses/scalars   | Standard formatting, wider arithmetic and the final address-space page                            |
-| Memory              | Complete containment in one mapping, bit-set permissions and observed faults                      |
-| Framing             | Published headers, fragmentation/truncation and rejection before body reads                       |
-| Assembly/ELF        | Fixed encodings/relocations, arbitrary byte payloads, hand-built ELF headers and zero-fill        |
-| Static analysis     | Architectural effects, generated MOV/branch operands and independent extension encodings          |
-| Execution/editing   | Scalar reference results, real MOV alias behavior, flag preservation, PC/REP restart and reset    |
-| SIMD                | Full YMM/Z/P/FFR banks, alias preservation, AVX2/SVE lanes, rounding and independent guest stores |
-| Scheduling/delivery | Latest valid pending build, exactly-once outcomes, retained stream baselines and stale identities |
-| Editor              | Incremental versus fresh parsing, GNU blocks, literal labels and Unicode byte/UTF-16 boundaries   |
-| Presentation        | Exact lane reconstruction, IEEE-754 fixtures, signed zero, NaN, infinities and subnormals         |
-| Files/recovery      | Standard filesystem I/O, exact exports, UTF-8 budgets and preservation of the last valid draft    |
-| Localization        | Key/parameter-set agreement and supported-language preference order                               |
+| Boundary            | Independent evidence                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
+| Addresses/scalars   | Standard formatting, wider arithmetic and the final address-space page                                 |
+| Memory              | Complete containment in one mapping, bit-set permissions and observed faults                           |
+| Framing             | Published headers, fragmentation/truncation and rejection before body reads                            |
+| Assembly/ELF        | Fixed encodings/relocations, arbitrary byte payloads, hand-built ELF headers and zero-fill             |
+| Source provenance   | Relocated points, Unicode, macro/repeat attribution, gaps, foreign files and complete truncated groups |
+| Static analysis     | Architectural effects, generated MOV/branch operands and independent extension encodings               |
+| Execution/editing   | Scalar reference results, real MOV alias behavior, flag preservation, PC/REP restart and reset         |
+| SIMD                | Full YMM/Z/P/FFR banks, alias preservation, AVX2/SVE lanes, rounding and independent guest stores      |
+| Scheduling/delivery | Latest valid pending build, exactly-once outcomes, retained stream baselines and stale identities      |
+| Editor              | Incremental versus fresh parsing, GNU blocks, literal labels and Unicode byte/UTF-16 boundaries        |
+| Presentation        | Exact lane reconstruction, IEEE-754 fixtures, signed zero, NaN, infinities and subnormals              |
+| Files/recovery      | Standard filesystem I/O, exact exports, UTF-8 budgets and preservation of the last valid draft         |
+| Localization        | Key/parameter-set agreement and supported-language preference order                                    |
 
 Enumerate small finite domains such as SVE lengths; generate bit patterns and
 overlapping edit sequences with shrinking. Check active views separately from
@@ -56,8 +57,9 @@ full-width storage, including predicates and low aliases. Half-precision expecta
 use IEEE-754 fields and explicit ties-to-even/subnormal cases.
 
 Deterministic examples suit fixed protocol limits; random selection from a short
-constant list adds little. Policy limits should be stated independently of production constants. Native generation uses fewer cases than pure logic but still executes
-the real backend. Preserve minimized regressions and replay data:
+constant list adds little. State policy limits independently of production constants;
+verify acceptance at the limit and rejection beyond it. Native generation uses fewer
+cases than pure logic but still executes the real backend. Preserve minimized regressions and replay data:
 [Proptest persistence](https://proptest-rs.github.io/proptest/proptest/failure-persistence.html)
 belongs in version control; fast-check prints the `seed` and `path` for replay.
 Do not retry until green or weaken a contract to accommodate a fixture.
@@ -103,12 +105,16 @@ Keep these observable workflows covered:
   invalid regex, case/whole-word toggles, no-match controls, keyboard replacement and
   undo. Line navigation preserves source/search state and supports relative positions.
   Completion includes AVX2/SVE hints. Stale builds cannot annotate current text.
+  Source breakpoints cover partial groups, pending/rejected updates, retry and
+  invalidation after edits; generated source maps preserve every exact relation.
 - **Files/recovery:** exact BOM/newline export before editing, long UTF-8 imports,
   cancellation, failure/retry, import conflicts and callbacks after unmount. Oversized
   edits preserve the previous recoverable draft. Binary import never loads a machine.
 - **Instructions:** byte-based paging, offset validation, explicit analysis/retry,
   late outcomes, input changes/reversions and locale retention. Re-decoding clears
-  selection; returning from narrow analysis does not decode again.
+  selection; returning from narrow analysis does not decode again. Superseded
+  decode success/failure cannot clear pending state or replace a newer result,
+  regardless of completion order.
 - **Machine/setup:** tab switching retains SIMD format and unfinished input. Exact
   values and unavailable state render correctly. Initial GPRs/mappings retain
   per-target input and reject malformed values before load. Opening a view has no
@@ -126,8 +132,8 @@ Keep these observable workflows covered:
 For visual acceptance, use HMR at 1440×900 and the desktop minimum 880×600, then
 check 800px/414px layouts, zoom, long values and both languages. Inspect the floating
 upper-right search and line-navigation panels, including simultaneous display,
-replacement, wrapping, keyboard focus and retained drafts after closing/reopening observations. Broader keyboard and
-screen-reader acceptance remains open, including toolbars whose actions start disabled;
+replacement, wrapping, keyboard focus and retained drafts after closing/reopening
+observations. Broader keyboard and screen-reader acceptance remains open, including toolbars whose actions start disabled;
 prefer native semantics and Bits UI over focus patches.
 
 Component fixtures do not establish native IPC or guest behavior. Known tool warnings
@@ -147,14 +153,15 @@ Allow backend metadata to improve without freezing known omissions. The
 [runtime scope](runtime.md#coverage-and-limits) and [engine contract](engine.md)
 define current limits.
 
-For relevant UI/native changes, verify a fresh static desktop bundle:
+For relevant UI/native changes, verify a freshly built desktop bundle:
 
 1. Assemble/load each bundled example; step, run and inspect `output`, RAX/X0 and
    `checksum` (4814 / `0x12ce`). Reset and repeat; read-only input remains intact.
 2. Configure initial registers/mappings on both guests. Reject an overlapping
    replacement without losing state; exercise a bounded loop, pause and stop.
-3. Edit source/target and verify artifact/session separation, stale-result rejection
-   and Unicode diagnostic navigation/clearing.
+3. Navigate between source and instructions; set, resume and remove line breakpoints.
+   Edit source/target and verify stale mappings/diagnostics clear without changing
+   the loaded machine. Check Unicode diagnostic navigation.
 4. Import/export exact UTF-8 and raw bytes. Inspect ELF segments and captured memory,
    analyze both architectures, change locale and verify retained state.
 5. Load raw code with explicit placement, stop at a breakpoint, resume and reset.
@@ -174,11 +181,10 @@ bundle is not signed or independently installed distribution evidence.
 
 ## Automation and release gates
 
-[Tauri's WebDriver guide](https://tauri.app/develop/tests/webdriver/) describes
-WebdriverIO with `@wdio/tauri-service`: its embedded provider supports Windows,
-Linux and macOS; direct upstream `tauri-driver` supports Windows/Linux. No desktop
-WebDriver harness is installed. A future test-only harness must exercise real IPC
-and the worker without duplicating component suites or shipping automation.
+No desktop WebDriver harness is installed. Follow
+[Tauri's WebDriver guide](https://tauri.app/develop/tests/webdriver/) when adding one,
+and verify its host support. The harness must exercise real IPC and the worker
+without duplicating component suites or shipping automation in production.
 
 [Release gates](roadmap.md#release-gates) cover multi-host CI, installed artifacts,
 containment and measured performance. Output bounds, cooperative cancellation,
