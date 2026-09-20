@@ -33,8 +33,8 @@ x86 declares `.intel_syntax noprefix`; AArch64 declares `.arch armv9-a` and need
 SVE2, not SVE2.1. Array lengths use assembler expressions. There is no scalar tail
 or intermediate sum buffer.
 
-GNU directives, labels, expressions, macros and pseudo-instructions remain toolchain
-owned. Use `.byte`, `.quad`, `.macro`/`.endm` and `.rept`/`.endr`.
+LLVM handles GNU directives, labels, expressions, macros and pseudo-instructions,
+including `.byte`, `.quad`, `.macro`/`.endm` and `.rept`/`.endr`.
 [GNU Intel syntax](https://sourceware.org/binutils/docs/as/i386_002dVariations.html)
 still uses GNU directives. Prefer `.balign N` for bytes or `.p2align N` for powers
 of two; [`.align`](https://sourceware.org/binutils/docs/as/Align.html) varies by target.
@@ -271,9 +271,10 @@ bytes alone never starts or replaces a session.
 `InitialRegisters` bank and additional `InitialMapping` regions. Canonical names are
 lowercase: the 16 x86 GPRs (including `rsp`), or `x0`–`x30` and separate `sp`.
 Unspecified GPRs in an explicit bank are zero. Aliases, duplicate names, PC, flags
-and wrong-target banks are rejected. GPR values are unsigned 64-bit bit patterns; a pointer value is not proof
-of a mapping or valid alignment for a later guest access. PC comes from the image;
-integer flags retain backend defaults. The SIMD environment below is explicit.
+and wrong-target banks are rejected. GPR values are unsigned 64-bit bit patterns;
+a pointer does not establish a mapping or valid alignment for a later guest access.
+PC comes from the image; integer flags retain backend defaults. The SIMD
+environment below is explicit.
 
 Additional regions must be page-aligned, disjoint from each other and all image
 pages, and fit the combined 64-region/64-MiB budget. Permissions remain exact; zero
@@ -357,9 +358,10 @@ Recording can be toggled while ready/paused and preserves existing entries. Disa
 intervals produce gaps in counters. Overflow evicts the oldest entry and increments
 a discarded count. Clear resets that count and history, preserving execution counters
 and recording mode. Reset clears history and the discarded count while retaining
-recording mode. A new load starts with recording disabled. The visible trace panel fetches when execution
-is stopped, including on opening; running sessions use explicit refresh. Hidden panels,
-including focus mode, do not fetch automatically. History stays outside observation streams.
+recording mode. A new load starts with recording disabled. The visible trace panel
+fetches when execution is stopped, including on opening; running sessions use
+explicit refresh. Hidden panels, including focus mode, do not fetch automatically.
+History stays outside observation streams.
 
 ### Runtime and SIMD
 

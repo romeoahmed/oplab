@@ -18,7 +18,7 @@ Silicon macOS. Windows, Linux and independently installed packages remain
 
 ## Try a program
 
-The editor starts blank and restores your last draft on reopening.
+The editor starts blank on first launch and restores valid drafts on reopening.
 
 1. Choose an architecture and **Load example**.
 2. **Assemble** (`Ctrl+Enter` / `⌘+Enter`), then **Load artifact**.
@@ -28,8 +28,9 @@ The editor starts blank and restores your last draft on reopening.
 
 Both examples brighten eight RGBA pixels while preserving alpha, using AVX2 or a
 vector-length-agnostic SVE2 loop. Assembly, loading and execution are explicit
-actions. Editing source leaves the loaded machine intact. Programs have an explicit
-completion address or symbol and instruction budget; stacks and operating-system services are not implicit.
+actions. Editing source leaves the loaded machine intact. Programs use an explicit
+completion address or symbol and instruction budget. Stacks and operating-system
+services are not supplied implicitly.
 
 ## What you can do
 
@@ -51,8 +52,14 @@ completion address or symbol and instruction budget; stacks and operating-system
   floating-point rounding while ready or paused; patch up to 4 KiB of data or code.
 - **Use standard files:** import/export UTF-8 assembly and raw machine bytes;
   export complete ELF objects and executables through native dialogs.
-- **Work comfortably:** local draft recovery, offline JetBrains Mono or system
-  monospace, adjustable font size, wrapping, panel proportions and focus mode.
+- **Work across documents:** keep independent undo, search, architecture, load
+  inputs and artifacts. Switch through tabs, the source list or Ctrl+PageUp/PageDown.
+  Each tab has its own close button; closing a background tab preserves the active
+  editor. Rename documents and return to the loaded machine's source without
+  replacing its state. Drafts recover after restart; builds and editor history do not.
+- **Arrange the workspace:** drag panel dividers or focus them and use arrow keys;
+  double-click to reset. Adjust font size, wrapping and focus mode with offline
+  JetBrains Mono or system monospace.
 - **Automate experiments:** run source, ELF or raw code from stdin and receive
   final state as JSON through the [CLI](docs/protocol.md#cli).
 
@@ -63,7 +70,7 @@ in **Instructions**.
 Both guests use a fixed QEMU MAX runtime. AVX2 and SVE/SVE2 samples execute;
 recognizing an instruction does not guarantee execution support. AVX-512 execution
 is unavailable; x87 and SME matrix state are not exposed. Broader instruction
-coverage and multiple documents remain [planned](docs/roadmap.md#next-product-work).
+coverage and data watchpoints remain [planned](docs/roadmap.md#next-product-work).
 
 ## Build from source
 
@@ -78,9 +85,10 @@ pnpm install --frozen-lockfile
 pnpm tauri dev
 ```
 
-Tauri stages the worker and starts Vite. Native changes require rebuilding the
-worker and restarting the app; QEMU adapter changes also require rebuilding the SDK.
-For frontend-only HMR, use `pnpm dev`; browser preview cannot assemble or execute.
+Tauri stages the worker and starts Vite. Native changes require worker staging and
+an app restart; QEMU adapter changes also require an SDK rebuild. For frontend-only
+HMR, use `pnpm dev`; browser preview cannot assemble or execute. See the guide for
+tool discovery, generated files and build outputs.
 
 With the same native environment, run the bundled example from the terminal:
 

@@ -25,7 +25,8 @@ Use installed tool discovery; do not invent paths or patch generated headers.
 | `cargo xtask sdk`                                           | Build the versioned QEMU/XED SDK                          |
 | `cargo xtask sidecar [--release]`                           | Rebuild and stage the worker                              |
 
-Use one Vite server per checkout; stop it before Tauri dev or a static build.
+Use one Vite server per checkout; stop it before Tauri dev, a static build or
+`pnpm check`, which regenerates shared SvelteKit/Paraglide output.
 Native changes need worker staging and an app restart; Tauri's watcher does not
 rebuild the worker. Rebuild the SDK after QEMU adapter changes. Frontend recipes
 belong in package.json; cross-tool tasks belong in xtask. Preserve native tool lifecycles.
@@ -50,6 +51,10 @@ Keep document, artifact and session identities separate. Reject stale results;
 never replay uncertain mutations. Native handles stay on their owning threads,
 and queues, allocations and payloads stay bounded. llvm-sys owns LLVM discovery
 and linkage; CXX consumes its Cargo metadata.
+
+Address document actions by identity. Closing a background document preserves the
+active editor; closing any source leaves the loaded machine intact. Keep runtime
+editor/build state separate from the persisted draft schema.
 
 Edit DTOs and exported comments in Rust, then run codegen. Never hand-edit
 `src/lib/protocol/generated`. The private protocol stays at version 1 during

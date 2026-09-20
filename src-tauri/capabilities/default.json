@@ -4,6 +4,7 @@
   "description": "Main application window; native commands require explicit grants.",
   "windows": ["main"],
   "permissions": [
+    "core:window:allow-set-title",
     "allow-worker-connect",
     "allow-worker-request",
     "allow-worker-ack",

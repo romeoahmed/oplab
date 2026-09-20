@@ -1,7 +1,7 @@
 # Protocol and CLI
 
 This document defines the worker protocol, desktop boundary and CLI output.
-Rust declarations in `oplab-core::protocol` own the wire contracts;
+Rust declarations in `oplab-core::protocol` define the wire contracts;
 `cargo xtask codegen [--check]` exports or verifies their TypeScript declarations.
 [Engine](engine.md) owns machine semantics and artifact limits;
 [development](development.md#native-toolchain) owns CLI build requirements.
@@ -59,7 +59,8 @@ their exact byte length, including leading zeroes; odd-length or uppercase hex i
 JSON numbers are rejected where exact strings are required. Human input is not
 constrained to wire spelling.
 Build identity includes document, revision, target, base and assembler name/version.
-Compare the entire identity before displaying a build.
+Match the entire identity to its still-open source before accepting a build. The
+owner need not be the active tab; closure or an intervening edit invalidates it.
 
 ## Artifacts and sessions
 
@@ -267,8 +268,9 @@ unsolicited output stream.
 
 Independent threads own native assembly, native execution and blocking pipe I/O.
 The dispatcher admits one active build and up to eight pending builds, one per
-document. A newer valid pending build replaces its predecessor with `superseded`;
-it does not implicitly cancel active work. Invalid input cannot replace valid work.
+document. This queue bound does not limit open source tabs. A newer valid pending
+build replaces its predecessor with `superseded`; it does not implicitly cancel
+active work. Invalid input cannot replace valid work.
 A full pending queue rejects a new document with `resource_limit`, while replacement
 for an already queued document remains possible. Controls and instruction inspection
 do not await assembly.

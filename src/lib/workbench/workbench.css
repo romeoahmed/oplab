@@ -105,6 +105,7 @@
 }
 
 .workspace-grid {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, var(--inspector-width));
   grid-template-rows: minmax(220px, 1fr) minmax(180px, var(--memory-height));
@@ -131,37 +132,16 @@
   border-block-end: 1px solid var(--border);
 }
 
-.file-heading {
-  min-inline-size: 0;
-}
-
 .pane-header h2,
-.file-heading,
 .pane-tools {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.pane-header .file-heading h2 {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .pane-tools {
   flex-shrink: 0;
   gap: 4px;
-}
-
-.file-heading > svg {
-  color: var(--accent);
-}
-
-.revision-tag {
-  color: var(--muted);
-  font: 11px var(--mono);
 }
 
 .target-picker select {

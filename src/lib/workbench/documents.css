@@ -1,0 +1,147 @@
+.document-header {
+  display: flex;
+  min-inline-size: 0;
+  min-block-size: 36px;
+  background: var(--surface-deep);
+  border-block-end: 1px solid var(--border);
+}
+
+.document-tabs {
+  display: flex;
+  flex: 1;
+  min-inline-size: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  overscroll-behavior-inline: contain;
+}
+
+.document-tab {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  max-inline-size: 240px;
+  border-inline-end: 1px solid var(--border);
+}
+
+.document-tab [role='tab'] {
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 8px 36px 8px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  outline-offset: -3px;
+}
+
+.document-tab [role='tab'][data-state='active'] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 2px var(--accent);
+}
+
+.document-tab [role='tab'] span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-tab .document-close {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 4px;
+  translate: 0 -50%;
+  inline-size: 26px;
+  block-size: 26px;
+  padding: 0;
+  opacity: 0;
+}
+
+.document-tab:where(:hover, :focus-within, :has([aria-selected='true'])) .document-close {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .document-tab .document-close {
+    opacity: 1;
+  }
+}
+
+.document-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-inline: 5px;
+}
+
+.source-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.document-rename,
+.document-rename label {
+  display: grid;
+  gap: 8px;
+}
+
+.document-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgb(0 0 0 / 45%);
+}
+
+.document-dialog {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  z-index: 81;
+  translate: -50% -50%;
+  inline-size: min(420px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: 0 16px 64px rgb(0 0 0 / 30%);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.document-dialog-title {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.document-dialog-description {
+  margin-block: 12px 24px;
+  color: var(--muted);
+}
+
+.document-dialog-actions {
+  display: flex;
+  justify-content: end;
+  gap: 8px;
+}
+
+.document-menu {
+  inline-size: min(320px, calc(100vw - 24px));
+
+  [role='menuitemradio'] span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  svg {
+    flex-shrink: 0;
+    color: var(--syntax-directive);
+  }
+}
+
+.document-tabs [role='tab'] > svg:first-child {
+  color: var(--syntax-directive);
+}

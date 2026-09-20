@@ -1,0 +1,48 @@
+.pane-separator {
+  position: absolute;
+  min-block-size: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  z-index: 4;
+  touch-action: none;
+  outline-offset: -2px;
+}
+
+.pane-separator::after {
+  position: absolute;
+  inset: 2px;
+  content: '';
+  border-radius: 2px;
+}
+
+.pane-separator:is(:hover, :focus-visible)::after {
+  background: var(--accent);
+}
+
+.column-separator {
+  inset-block: 0;
+  inset-inline-end: calc(max(320px, var(--inspector-width)) - 3px);
+  inline-size: 6px;
+  cursor: col-resize;
+}
+
+.row-separator {
+  inset-inline-start: 0;
+  inset-block-end: calc(max(180px, var(--memory-height)) - 3px);
+  inline-size: calc(100% - max(320px, var(--inspector-width)));
+  block-size: 6px;
+  cursor: row-resize;
+}
+
+.focus-mode .pane-separator,
+.panel-hidden .row-separator {
+  display: none;
+}
+
+@media (width <= 800px) {
+  .pane-separator {
+    display: none;
+  }
+}

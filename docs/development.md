@@ -192,8 +192,9 @@ Cargo build; do not patch generated headers to hide configuration errors.
 
 Use `pnpm dev` for frontend HMR or `pnpm tauri dev` after native setup. Stop
 standalone Vite before starting Tauri dev; both use the same configured port.
-Stop development servers before a static build in the same checkout. Both regenerate
-SvelteKit/Paraglide output, which can invalidate the running HMR module graph.
+Stop development servers before a static build or `pnpm check` in the same checkout.
+These commands regenerate shared SvelteKit/Paraglide output and can invalidate a
+running HMR module graph.
 
 Install the test browser separately when running component tests:
 
@@ -220,10 +221,12 @@ and Tauri owns desktop builds. Use `cargo xtask --help` for options. Focused run
 native arguments: `pnpm test --project logic`, `pnpm test --project browser` or
 `cargo test -p oplab-core --locked`.
 
-Check/test commands compile dependencies, refresh ignored generated files and stage
-the worker plus QEMU libraries in `src-tauri/binaries/` and `src-tauri/runtime/`.
-They preserve lockfiles, tracked source and the Git index. Codegen writes committed
-DTOs unless `--check` is supplied; formatting writes source unless `--check` is supplied.
+`cargo xtask check` and `cargo xtask test` stage the worker plus QEMU libraries in
+`src-tauri/binaries/` and `src-tauri/runtime/` before verification. Frontend commands
+do not build or stage native binaries. Verification may refresh ignored generated
+files, but preserves lockfiles, tracked source and the Git index. Codegen writes
+committed DTOs unless `--check` is supplied; formatting likewise writes source
+unless `--check` is supplied.
 Frontend and catalog changes use HMR; engine changes require worker staging and
 an app restart. Tauri's watcher does not rebuild the independent worker automatically.
 Protocol changes require rebuilding clients and worker together: the private
@@ -255,8 +258,9 @@ cargo xtask codegen --check
 ```
 
 README introduces the product and first workflow; AGENTS gives repository rules.
-Each reference owns one subject. Keep dated acceptance in the roadmap, not inline
-comments or repeated audit histories. See [AGENTS.md guidance](https://agents.md/)
+Each reference owns one subject. Keep dated acceptance in the roadmap, merging
+repeated runs by scope without discarding unresolved failures or verification limits.
+See [AGENTS.md guidance](https://agents.md/)
 and [README examples](https://github.com/matiassingers/awesome-readme).
 
 ## Outputs and distribution

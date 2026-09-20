@@ -5,7 +5,7 @@ export type Preferences = {
   wrap: boolean;
   /** Inspector width as a percentage of the workbench width. */
   inspectorWidth: number;
-  /** Observation panel height as a percentage of the workbench height. */
+  /** Observation panel height in dynamic viewport height units (dvh). */
   memoryHeight: number;
 };
 export const defaultPreferences: Preferences = {

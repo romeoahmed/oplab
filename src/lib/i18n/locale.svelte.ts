@@ -3,7 +3,7 @@ import { localStorageKey, setLocale, type Locale } from '$lib/paraglide/runtime.
 import { preferredLocale } from './match';
 
 /**
- * Own locale selection and document metadata for the mounted application.
+ * Own locale selection and document language for the mounted application.
  *
  * @remarks
  * Call `initialize` after mounting. Changes persist in order without reloading;
@@ -18,7 +18,6 @@ export function createLocaleController() {
     current = locale;
     document.documentElement.lang = locale;
     document.documentElement.dir = 'ltr';
-    document.title = 'Oplab';
   }
 
   return {

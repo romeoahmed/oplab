@@ -57,3 +57,39 @@ export function readScratch(value: unknown): Scratch {
     budget: value.budget,
   };
 }
+
+export type Workspace = {
+  active: string;
+  documents: (Scratch & { name: string })[];
+};
+
+/** Validate the complete workspace atomically; a damaged draft cannot silently disappear. */
+export function readWorkspace(value: unknown): Workspace {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('active' in value) ||
+    typeof value.active !== 'string' ||
+    !('documents' in value) ||
+    !Array.isArray(value.documents) ||
+    value.documents.length < 1
+  )
+    throw new RangeError('Invalid workspace');
+  const documents = value.documents.map((item: unknown) => {
+    const draft = readScratch(item);
+    if (
+      typeof item !== 'object' ||
+      item === null ||
+      !('name' in item) ||
+      typeof item.name !== 'string' ||
+      item.name.trim().length === 0 ||
+      item.name.length > 80
+    )
+      throw new RangeError('Invalid document name');
+    return { ...draft, name: item.name };
+  });
+  const identities = new Set(documents.map((document) => document.documentId));
+  if (identities.size !== documents.length || !identities.has(value.active))
+    throw new RangeError('Invalid active document');
+  return { active: value.active, documents };
+}

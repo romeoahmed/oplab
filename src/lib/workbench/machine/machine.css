@@ -226,3 +226,14 @@
     gap: 16px;
   }
 }
+
+.loaded-source {
+  justify-content: start;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-block-end: 8px;
+  color: var(--accent);
+  background: transparent;
+}

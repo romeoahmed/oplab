@@ -17,9 +17,10 @@ Guest bytes + QEMU CPU state
 
 `crates/runtime/native` owns QEMU layouts, vCPU work queues, memory regions and
 exceptions. Within `crates/runtime`, `src/qemu.rs` loads the private SDK;
-`src/jit.rs` and `src/jit/` own LLVM compilation and TCG lowering. Bindgen generates only the private Oplab ABI;
-Rust never mirrors `CPUArchState`, TCG structs or helper type encodings. Each guest
-uses a private shared library exporting only `oplab_qemu`; libraries remain loaded
+`src/jit.rs` and `src/jit/` own LLVM compilation and TCG lowering. Bindgen generates
+only the private Oplab ABI; Rust never mirrors `CPUArchState`, TCG structs or helper
+type encodings. Each guest uses a private shared library exporting only
+`oplab_qemu`; libraries remain loaded
 for the worker lifetime because QEMU owns process hooks and native threads.
 Translation transfers owned temporary/operation arrays to Rust; `Block::drop` releases
 them through the SDK. Operation names and helper addresses have SDK lifetime.
@@ -102,13 +103,11 @@ but does not provide AVX-512 execution. AArch64 enables FP/NEON and SVE access
 using native architectural controls. Broader instruction samples must be verified,
 not inferred from decoder recognition or feature names.
 
-Tests cover integer/flags, ELF/raw loading, memory faults, REP interruption,
-self-modifying code, live edits, reset, floating-point rounding/status, AVX2 and
-predicated SVE lanes. Bundled programs independently check saturated RGBA bytes
-and their checksum. Full YMM/Z and P/FFR reads and edits are checked through
-independent guest stores, alias preservation and reset. The adapter uses QEMU
-vector storage and effective SVE-length helpers directly. The
-[roadmap](roadmap.md#verification) records acceptance and platform limits.
+The adapter uses QEMU vector storage and effective SVE-length helpers directly;
+active lengths and maximum storage remain distinct. Tests compare SIMD effects
+with independent guest stores and scalar RGBA results, including alias/inactive-bit
+preservation and reset. [Testing](testing.md) defines the wider acceptance contract;
+the [roadmap](roadmap.md#verification) records completed runs and platform limits.
 
 ## Distribution design
 

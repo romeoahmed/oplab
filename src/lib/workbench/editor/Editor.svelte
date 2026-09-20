@@ -62,7 +62,8 @@
     CornerDownRight,
   } from '@lucide/svelte';
   import { DropdownMenu } from 'bits-ui';
-  import { untrack } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
 
   import { debugGutter, executionLine } from './debug';
   import { goToLine, retainLineDialog } from './goto-line';
@@ -73,6 +74,9 @@
 
   const {
     value,
+    tools,
+    documentId = 'scratch',
+    documents = [documentId],
     locale,
     target,
     wrap,
@@ -89,6 +93,9 @@
     onreveal,
   }: {
     value: string;
+    tools?: Snippet;
+    documentId?: string;
+    documents?: readonly string[];
     locale: Locale;
     target: Target;
     wrap: boolean;
@@ -207,10 +214,9 @@
     const accessibility = new Compartment();
     const debugging = new Compartment();
     const execution = new Compartment();
-    const view = new EditorView({
-      parent: element,
-      state: EditorState.create({
-        doc: untrack(() => value),
+    const createState = (source: string) =>
+      EditorState.create({
+        doc: source,
         extensions: [
           debugging.of([]),
           lineNumbers(),
@@ -293,10 +299,37 @@
           }),
           EditorView.darkTheme.of(true),
         ],
-      }),
-    });
+      });
+    const view = new EditorView({ parent: element, state: createState(untrack(() => value)) });
+    let currentDocument = $state(untrack(() => documentId));
+    const retained = new SvelteMap<
+      string,
+      { state: EditorState; scroll: ReturnType<EditorView['scrollSnapshot']> }
+    >();
     currentView = view;
+    editorState = view.state;
     $effect(() => {
+      const id = documentId;
+      const open = documents;
+      untrack(() => {
+        if (id !== currentDocument) {
+          retained.set(currentDocument, { state: view.state, scroll: view.scrollSnapshot() });
+          const previous = retained.get(id);
+          retained.delete(id);
+          view.setState(previous?.state ?? createState(value));
+          if (previous !== undefined) view.dispatch({ effects: previous.scroll });
+          currentDocument = id;
+          editorState = view.state;
+          const position = view.state.selection.main.head;
+          const line = view.state.doc.lineAt(position);
+          oncursor(line.number, position - line.from + 1);
+        }
+        const identities = new Set(open);
+        for (const key of retained.keys()) if (!identities.has(key)) retained.delete(key);
+      });
+    });
+    $effect(() => {
+      if (documentId !== currentDocument) return;
       const options = { locale };
       view.dispatch({
         effects: debugging.reconfigure(
@@ -314,15 +347,19 @@
       });
     });
     $effect(() => {
+      if (documentId !== currentDocument) return;
       view.dispatch({ effects: execution.reconfigure(executionLine(view, currentLine)) });
     });
     $effect(() => {
+      if (documentId !== currentDocument) return;
       view.dispatch({ effects: syntax.reconfigure(assembly(target)) });
     });
     $effect(() => {
+      if (documentId !== currentDocument) return;
       view.dispatch({ effects: wrapping.reconfigure(wrap ? EditorView.lineWrapping : []) });
     });
     $effect(() => {
+      if (documentId !== currentDocument) return;
       const next = value;
       if (!view.state.doc.eq(view.state.toText(next))) {
         // Preserve original BOM/newlines in the document owner until the user edits.
@@ -333,9 +370,11 @@
       }
     });
     $effect(() => {
+      if (documentId !== currentDocument) return;
       view.dispatch(setDiagnostics(view.state, diagnostic === null ? [] : [diagnostic]));
     });
     $effect(() => {
+      if (documentId !== currentDocument) return;
       retainLineDialog(view, () => {
         view.dispatch({
           effects: [
@@ -360,8 +399,8 @@
 </script>
 
 <div class="editor-toolbar">
-  <span>{m.assembly_syntax({}, options)}</span>
-  <div>
+  {#if tools}{@render tools()}{:else}<span>{m.assembly_syntax({}, options)}</span>{/if}
+  <div class="editor-actions">
     {#if onbreakpoint !== undefined && cursorAddresses.length > 0}
       <button
         class="icon-button source-toggle"

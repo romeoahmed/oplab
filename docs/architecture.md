@@ -1,7 +1,7 @@
 # Architecture
 
-Oplab separates editable source, immutable ELF artifacts and a mutable loaded
-machine. The [engine contract](engine.md) defines their semantics;
+Oplab separates editable source documents, their immutable ELF artifacts and one
+mutable loaded machine. The [engine contract](engine.md) defines their semantics;
 [roadmap](roadmap.md) distinguishes implemented and planned capabilities.
 
 ## Ownership
@@ -125,7 +125,11 @@ and editor suggestions do not imply execution support.
 A Svelte await block loads CodeMirror; an [attachment](https://svelte.dev/docs/svelte/@attach)
 owns cleanup. [Compartments](https://codemirror.net/examples/config/) reconfigure
 language, locale, wrapping and debugger markers without replacing history. Documents
-start blank or restore their last valid draft, including an intentionally empty one.
+start blank or restore their last valid drafts, including intentionally empty ones.
+A single CodeMirror view switches between native `EditorState` objects and scroll
+snapshots, retaining each document's undo, selection, folds and search. Closed
+documents release their retained state. Restart recovery restores named source
+drafts and their target/base/completion/budget fields, not builds or editor history.
 Examples load explicitly through Vite raw imports and Rust `include_str!`.
 
 Target-specific StreamLanguage tokens and Lezer tags distinguish GNU symbols,
@@ -164,8 +168,27 @@ fields, tables and definition lists describe content.
 
 The default window is 1440×900 logical pixels with an 880×600 minimum and Tauri
 `preventOverflow`. Decorations remain native; macOS retains the default application
-menu. The machine panel starts at 28% width (320px minimum); bottom observations
-start closed and open on assembly or binary import, at 32% height (180px minimum).
+menu. The active source name supplies the browser and native window titles through
+Svelte head metadata and Tauri's scoped `setTitle` permission. Native window APIs
+load only in the desktop host; Svelte effect cancellation discards superseded title
+requests before invoking the native API.
+
+Source tabs scroll independently. A Bits UI radio menu and Ctrl+PageUp/PageDown
+keep documents reachable; long names truncate with room reserved for the close button.
+Selection and tab-bar resizing reveal the active tab without moving keyboard focus.
+Each close button is a sibling of its tab trigger, avoiding nested buttons. It is
+visible on the active tab, hover or keyboard focus, and on devices without hover.
+Middle click and Delete on a focused tab share the close action. Nonempty sources
+require a filename-specific confirmation; empty sources close directly. Bits UI owns
+the trigger and dialog lifecycle. Architecture and editor tools occupy a separate,
+wrapping row.
+
+Pointer capture owns divider drags; other pointers cannot end the active drag.
+Focusable separators support arrow keys, Shift for larger steps, Home/End for
+limits and double-click to restore defaults.
+They share bounds and persisted proportions with Appearance and hide in stacked
+layouts and focus mode. The machine panel starts at 28% width (320px minimum).
+Bottom observations start closed and open on assembly or binary import, at 32% height (180px minimum).
 Closing or Mod-J toggling retains contents. Focus mode hides inspectors without
 unmounting the editor or disconnecting the worker.
 
@@ -215,12 +238,30 @@ phrases and accessible names update without reload. Source, identifiers, file
 extensions and standard units remain untranslated. App dialog titles use the
 selected locale; native controls follow the host.
 
-Browser storage retains validated, bounded scratch and display preferences.
-Invalid/oversized drafts preserve the last recoverable copy while current text stays
-editable. Import replaces source only if it has not changed while the picker was
-open. BOM/newlines survive export until editing; CodeMirror edits use LF. Binary
-import never loads implicitly. Files use standard text, raw bytes and ELF; no
-saved-experiment container is planned.
+Each source owns its target, base, completion, budget, per-target initial inputs,
+artifact and diagnostic. Builds publish only to their still-open, unchanged owner,
+even when another tab is active. Source markers require the loaded build to match
+the active document. The machine's freshness instead compares its originating
+open document; switching tabs does not make it stale. Closing a background document
+preserves the active editor. Closing the active document selects its next neighbor,
+or its previous neighbor at the end; closing the last creates a blank document.
+Closing the machine's source drops its source link without changing the machine.
+Raw-code inputs, initial state and budget are independent of source documents.
+
+Browser storage retains named drafts, active identity and display preferences.
+Artifacts, diagnostics, initial register/memory inputs and editor history are not
+persisted. There is no fixed open-document count. Recovery limits each source to
+256 KiB of UTF-8 and remains subject to the WebView's total storage quota. The
+complete record is validated, including unique IDs and active membership. Invalid
+or oversized edits and quota failures preserve the last recoverable copy while
+current documents stay editable. A failed recovery is not overwritten on exit
+unless the user changes the workspace. A stored single draft is adopted only when
+no workspace exists and removed after a successful workspace write.
+
+Import replaces source only if its document identity, revision and text still match
+when the picker completes. BOM/newlines survive export until editing; CodeMirror
+edits use LF. Binary import never loads implicitly. Files use standard text, raw
+bytes and ELF; no saved-experiment container is planned.
 
 Native dialogs select paths; paths never reach the frontend. Bounded I/O validates
 exports before atomic same-directory replacement. There is no implicit write-back

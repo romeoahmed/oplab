@@ -93,6 +93,9 @@ assertions. Read accessible names from catalogs rather than hard-coding copy.
 Translation placeholders may repeat without changing the required parameter set.
 Scope role locators by accessible name; include hidden elements explicitly when
 checking visibility transitions instead of retaining a previous DOM node.
+Use exact text assertions for source content and partial matches only where intended.
+An empty CodeMirror document still renders placeholder text; verify editing, undo or
+exported source instead of asserting an empty DOM or matching that placeholder.
 Parameterize independent outcomes. Use small editor documents instead of coupling
 workflow tests to bundled examples; verify long documents through assembly/export
 because CodeMirror renders only a viewport.
@@ -107,9 +110,21 @@ Keep these observable workflows covered:
   Completion includes AVX2/SVE hints. Stale builds cannot annotate current text.
   Source breakpoints cover partial groups, pending/rejected updates, retry and
   invalidation after edits; generated source maps preserve every exact relation.
+- **Documents/layout:** independent text, target, build inputs, undo and search;
+  captured build/load ownership and late outcomes after source closure. Per-tab close,
+  middle click and Delete must preserve the machine; closing a background tab also
+  preserves the active edit and undo history. Cover cancellation, empty-source closure
+  and a fresh editor after closing the last document. Exercise many documents through
+  the list and keyboard, rename/recovery, unique IDs and locale changes. Superseded
+  native title updates cannot overwrite the current title. Check selected-tab
+  visibility after resizing, divider limits, persistence, pointer dragging and
+  stacked layouts. Avoid asserting placeholder or confirmation wording.
 - **Files/recovery:** exact BOM/newline export before editing, long UTF-8 imports,
-  cancellation, failure/retry, import conflicts and callbacks after unmount. Oversized
-  edits preserve the previous recoverable draft. Binary import never loads a machine.
+  cancellation, failure/retry, import conflicts across edits or document
+  identities and callbacks after unmount. Oversized edits and quota failures preserve
+  the previous complete workspace. Recovery rejects damaged inactive documents as
+  well as the active document. Binary import remains
+  independent of source selection and never loads a machine.
 - **Instructions:** byte-based paging, offset validation, explicit analysis/retry,
   late outcomes, input changes/reversions and locale retention. Re-decoding clears
   selection; returning from narrow analysis does not decode again. Superseded
@@ -154,7 +169,9 @@ Allow backend metadata to improve without freezing known omissions. The
 [runtime scope](runtime.md#coverage-and-limits) and [engine contract](engine.md)
 define current limits.
 
-For relevant UI/native changes, verify a freshly built desktop bundle:
+For relevant UI/native changes, verify the affected workflows in a freshly built
+desktop bundle. Use this checklist for broader acceptance and record which parts
+ran; a focused UI change does not require repeating unrelated native suites.
 
 1. Assemble/load each bundled example; step, run and inspect `output`, RAX/X0 and
    `checksum` (4814 / `0x12ce`). Reset and repeat; read-only input remains intact.
@@ -185,8 +202,8 @@ interruption, recursive returns to the same address, instruction budgets and REP
 continuation. Trace checks distinguish admission from retirement, verify the bounded
 chronological suffix and recording gaps, and reject obsolete success/failure replies
 after reset, reconnect or a newer refresh. Model recording intervals with an
-independent history; retain fixed cases at 511/512/513 starts. Enabling recording alone must not
-produce an entry, including in browser fixtures.
+independent history; retain fixed cases at 511/512/513 starts. Enabling recording
+alone must not produce an entry, including in browser fixtures.
 
 Desktop acceptance includes F10/F11, source run-to-cursor, explicit address targets,
 record/refresh/clear and source navigation from history. Hidden trace panels must not

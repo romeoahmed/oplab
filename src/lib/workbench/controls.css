@@ -1,4 +1,4 @@
-:where(.workbench, .settings-popover, .tooltip) {
+:where(.workbench, .settings-popover, .tooltip, .document-dialog) {
   h1,
   h2,
   h3,
@@ -258,7 +258,7 @@
   font-size: 13px;
   z-index: 30;
 
-  [role='menuitem'] {
+  :is([role='menuitem'], [role='menuitemradio']) {
     display: flex;
     align-items: center;
     gap: 8px;

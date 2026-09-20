@@ -17,6 +17,8 @@
     loadedCurrent,
     loadedRevision,
     loadedKind,
+    loadedDocument = null,
+    onsource,
     editable,
     onbreakpoint,
     onregister,
@@ -28,6 +30,8 @@
     loadedCurrent: boolean;
     loadedRevision: string | null;
     loadedKind: 'source' | 'raw' | null;
+    loadedDocument?: string | null;
+    onsource?: () => void;
     editable: boolean;
     onbreakpoint: (address: string, enabled: boolean) => void;
     onregister: (name: string, value: string) => void;
@@ -39,7 +43,7 @@
   const running = $derived(observation?.status.type === 'running');
 </script>
 
-<aside class="inspector" aria-label={m.machine({}, options)}>
+<aside id="machine-inspector" class="inspector" aria-label={m.machine({}, options)}>
   <header class="pane-header">
     <h2><Cpu size={17} aria-hidden="true" />{m.machine({}, options)}</h2>
     <span
@@ -80,6 +84,13 @@
         </li>
       </ol>
     {:else}
+      {#if loadedDocument !== null}
+        <button
+          class="loaded-source"
+          onclick={onsource}
+          title={m.reveal_loaded_document({}, options)}>{loadedDocument}</button
+        >
+      {/if}
       <div class="session-heading">
         <span class="architecture-label"
           >{observation.registers?.type === 'x86_64'
@@ -98,7 +109,7 @@
       {#if !loadedCurrent}<p class="revision-warning">
           {loadedKind === 'raw'
             ? m.raw_changed({}, options)
-            : loadedRevision === null
+            : loadedDocument === null
               ? m.source_unlinked({}, options)
               : m.source_changed({}, options)}
         </p>{/if}

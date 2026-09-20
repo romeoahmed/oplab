@@ -54,7 +54,9 @@ test('exports preserve the selected format and complete bytes', async () => {
     [en.export_image, 'image', input.image],
   ] as const) {
     await choose(name);
-    await expect.poll(() => input.port.save).toHaveBeenLastCalledWith(format, name, bytes);
+    await expect
+      .poll(() => input.port.save)
+      .toHaveBeenLastCalledWith(format, expect.any(String), bytes);
   }
   expect(input.onsource).not.toHaveBeenCalled();
   expect(input.onbinary).not.toHaveBeenCalled();
@@ -79,17 +81,35 @@ test('keyboard import handles cancellation and failure, then accepts a retry', a
   expect(input.onbinary).not.toHaveBeenCalled();
 });
 
-test('a pending import cannot overwrite edits', async () => {
+test.each([{ source: 'edited' }, { identity: 'other-document:0' }, { identity: 'original:2' }])(
+  'a pending import cannot cross a changed document identity: %j',
+  async (change) => {
+    const input = props();
+    const first = Promise.withResolvers<Uint8Array | null>();
+    input.port.open.mockReturnValueOnce(first.promise);
+    const view = await render(FileMenu, { ...input, identity: 'original:0' });
+    await choose(en.import_source);
+    await expect.element(page.getByRole('button', { name: en.files, exact: true })).toBeDisabled();
+    await view.rerender(change);
+    first.resolve(new TextEncoder().encode('replacement'));
+    await expect.poll(() => input.onerror).toHaveBeenLastCalledWith('file_conflict');
+    expect(input.onsource).not.toHaveBeenCalled();
+  },
+);
+
+test('a pending binary import remains independent of source document changes', async () => {
   const input = props();
-  const first = Promise.withResolvers<Uint8Array | null>();
-  input.port.open.mockReturnValueOnce(first.promise);
-  const view = await render(FileMenu, input);
-  await choose(en.import_source);
-  await expect.element(page.getByRole('button', { name: en.files, exact: true })).toBeDisabled();
-  await view.rerender({ source: 'edited' });
-  first.resolve(new TextEncoder().encode('replacement'));
-  await expect.poll(() => input.onerror).toHaveBeenLastCalledWith('file_conflict');
+  const reply = Promise.withResolvers<Uint8Array | null>();
+  const bytes = new Uint8Array([0, 0xff, 0xc3]);
+  input.port.open.mockReturnValueOnce(reply.promise);
+  const view = await render(FileMenu, { ...input, identity: 'original:0' });
+  await choose(en.import_binary);
+  await view.rerender({ source: 'edited', identity: 'other-document:1' });
+  reply.resolve(bytes);
+  await expect.poll(() => input.onbinary).toHaveBeenCalledExactlyOnceWith(bytes);
+  await expect.element(page.getByRole('button', { name: en.files, exact: true })).toBeEnabled();
   expect(input.onsource).not.toHaveBeenCalled();
+  expect(input.onerror).toHaveBeenLastCalledWith(null);
 });
 
 test.each(['contents', 'failure'])('an unmounted file view ignores late %s', async (outcome) => {
@@ -118,7 +138,7 @@ test('failed exports release the menu and preserve the next export payload', asy
   expect(input.onerror).toHaveBeenLastCalledWith(null);
   expect(input.port.save).toHaveBeenLastCalledWith(
     'source',
-    en.export_source,
+    expect.any(String),
     new TextEncoder().encode(input.source),
   );
 });

@@ -1,6 +1,7 @@
 <script lang="ts">
   import '@fontsource-variable/jetbrains-mono/wght.css';
   import { desktopFiles, type FilePort } from '$lib/desktop/files';
+  import { setWindowTitle } from '$lib/desktop/window';
   import { createLocaleController } from '$lib/i18n/locale.svelte';
   import * as m from '$lib/paraglide/messages.js';
   import type { RoundingMode } from '$lib/protocol/generated/RoundingMode';
@@ -19,7 +20,6 @@
     Pause,
     Square,
     RotateCcw,
-    FileCode,
     Settings2,
     X,
     Maximize2,
@@ -33,10 +33,11 @@
     RefreshCw,
   } from '@lucide/svelte';
   import { Toolbar, Tooltip, Popover, Tabs, Toggle } from 'bits-ui';
-  import { onMount, untrack, tick } from 'svelte';
+  import { getAbortSignal, onMount, untrack, tick } from 'svelte';
 
   import Appearance from './Appearance.svelte';
   import { createWorkbench, examples } from './controller.svelte';
+  import Documents from './Documents.svelte';
   import { sourceInfo, sourceLocation, sourceIndex } from './editor/source';
   import FileMenu from './FileMenu.svelte';
   import { segmentBytes } from './instructions/bytes';
@@ -49,6 +50,7 @@
   import Trace from './machine/Trace.svelte';
   import { defaultPreferences, readPreferences } from './preferences';
   import { problemLabel } from './presentation';
+  import Separator from './Separator.svelte';
   import ToolbarAction from './ToolbarAction.svelte';
 
   import './workbench.css';
@@ -116,6 +118,12 @@
   const selectedBytes = $derived(
     byteSources.find((item) => item.id === byteSource) ?? byteSources[0],
   );
+  const title = $derived(`${work.documentName} — Oplab`);
+  $effect(() => {
+    void setWindowTitle(title, getAbortSignal()).catch(() => {
+      console.warn('Unable to update the window title.');
+    });
+  });
   let initialized = $state(false);
   let preferences = $state({ ...defaultPreferences });
   let preferencesFailed = $state(false);
@@ -314,6 +322,7 @@
   }
 </script>
 
+<svelte:head><title>{title}</title></svelte:head>
 <svelte:window onkeydown={shortcuts} />
 {#if initialized}
   <Tooltip.Provider delayDuration={450}>
@@ -337,6 +346,7 @@
           port={filePort}
           locale={language.current}
           source={work.source}
+          identity={`${work.documentId}:${work.revision}`}
           object={work.candidate?.object}
           image={work.candidate?.image}
           binary={selectedBytes?.bytes}
@@ -436,50 +446,56 @@
         </div>
       </header>
       <div class="workspace-grid">
-        <section class="source-pane" aria-label={m.source({}, options)}>
-          <header class="pane-header source-header">
-            <div class="file-heading">
-              <FileCode size={17} aria-hidden="true" />
-              <h2>experiment.s</h2>
-              <span class="revision-tag">r{work.revision}</span>
-            </div>
-            <div class="pane-tools">
-              <button
-                class="icon-button"
-                aria-label={m.load_example({}, options)}
-                title={m.load_example({}, options)}
-                onclick={() => {
-                  work.setSource(examples[work.target]);
-                }}><BookOpen size={16} aria-hidden="true" /></button
-              >
-              <label class="target-picker"
-                ><span class="sr-only">{m.target({}, options)}</span><select
-                  value={work.target}
-                  onchange={(event) => {
-                    work.setTarget(event.currentTarget.value === 'aarch64' ? 'aarch64' : 'x86_64');
-                  }}
-                  ><option value="x86_64">x86_64</option><option value="aarch64">AArch64</option
-                  ></select
-                ></label
-              >
-              <Toggle.Root
-                class="icon-button"
-                aria-label={m.focus_editor({}, options)}
-                title={m.focus_editor({}, options)}
-                bind:pressed={focused}
-                >{#if focused}<Minimize2 size={16} aria-hidden="true" />{:else}<Maximize2
-                    size={16}
-                    aria-hidden="true"
-                  />{/if}</Toggle.Root
-              >
-            </div>
-          </header>
+        <Separator
+          axis="width"
+          label={m.resize_inspector({}, options)}
+          controls="machine-inspector"
+          value={preferences.inspectorWidth}
+          minimum={26}
+          maximum={45}
+          defaultValue={defaultPreferences.inspectorWidth}
+          onchange={(value: number) => {
+            preferences.inspectorWidth = value;
+          }}
+        />
+        <Separator
+          axis="height"
+          label={m.resize_observations({}, options)}
+          controls="observations"
+          value={preferences.memoryHeight}
+          minimum={20}
+          maximum={45}
+          defaultValue={defaultPreferences.memoryHeight}
+          onchange={(value: number) => {
+            preferences.memoryHeight = value;
+          }}
+        />
+        <Documents
+          documents={work.documents}
+          active={work.documentId}
+          loaded={work.loadedDocument}
+          locale={language.current}
+          onselect={(id: string) => {
+            work.selectDocument(id);
+          }}
+          oncreate={() => {
+            work.createDocument();
+          }}
+          onclose={(id: string) => {
+            work.closeDocument(id);
+          }}
+          onrename={(name: string) => {
+            work.renameDocument(name);
+          }}
+        >
           <div class="editor-body">
             {#await import('./editor/Editor.svelte')}
               <p class="editor-message muted-note" role="status">{m.editor_loading({}, options)}</p>
             {:then { default: Editor }}
               <Editor
                 bind:this={editor}
+                documentId={work.documentId}
+                documents={work.documents.map((document) => document.id)}
                 {diagnostic}
                 locations={work.sourceMap?.locations ?? []}
                 breakpoints={work.loadedSourceMap === null ? [] : (observation?.breakpoints ?? [])}
@@ -510,7 +526,43 @@
                 onchange={(value: string) => {
                   work.setSource(value);
                 }}
-              />
+              >
+                {#snippet tools()}
+                  <div class="pane-tools">
+                    <button
+                      class="icon-button"
+                      aria-label={m.load_example({}, options)}
+                      title={m.load_example({}, options)}
+                      onclick={() => {
+                        work.setSource(examples[work.target]);
+                      }}><BookOpen size={16} aria-hidden="true" /></button
+                    >
+                    <label class="target-picker"
+                      ><span class="sr-only">{m.target({}, options)}</span><select
+                        value={work.target}
+                        onchange={(event) => {
+                          work.setTarget(
+                            event.currentTarget.value === 'aarch64' ? 'aarch64' : 'x86_64',
+                          );
+                        }}
+                        ><option value="x86_64">x86_64</option><option value="aarch64"
+                          >AArch64</option
+                        ></select
+                      ></label
+                    >
+                    <Toggle.Root
+                      class="icon-button"
+                      aria-label={m.focus_editor({}, options)}
+                      title={m.focus_editor({}, options)}
+                      bind:pressed={focused}
+                      >{#if focused}<Minimize2 size={16} aria-hidden="true" />{:else}<Maximize2
+                          size={16}
+                          aria-hidden="true"
+                        />{/if}</Toggle.Root
+                    >
+                  </div>
+                {/snippet}
+              </Editor>
             {:catch}
               <p class="editor-message" role="alert">{m.editor_failed({}, options)}</p>
             {/await}
@@ -536,12 +588,17 @@
               )}</span
             >
           </div>
-        </section>
+        </Documents>
         <Machine
           {observation}
           loadedCurrent={work.loadedCurrent}
           loadedRevision={work.loadedRevision}
           loadedKind={work.loadedKind}
+          loadedDocument={work.documents.find((document) => document.id === work.loadedDocument)
+            ?.name ?? null}
+          onsource={() => {
+            if (work.loadedDocument !== null) work.selectDocument(work.loadedDocument);
+          }}
           editable={work.connected && resumable && !work.controlling}
           onbreakpoint={(address: string, enabled: boolean) => {
             void work.breakpoint(address, enabled);
@@ -719,7 +776,7 @@
             <RawCode
               bind:value={work.raw}
               bind:setup={work.rawSetup}
-              bind:budget={work.budget}
+              bind:budget={work.rawBudget}
               bytes={work.binary?.length}
               disabled={!work.connected || work.controlling || running}
               locale={language.current}

@@ -11,6 +11,7 @@
     port,
     locale,
     source,
+    identity = '',
     object,
     image,
     binary,
@@ -21,6 +22,7 @@
     port: FilePort | null;
     locale: Locale;
     source: string;
+    identity?: string;
     object: Uint8Array | undefined;
     image: Uint8Array | undefined;
     binary: Uint8Array | undefined;
@@ -51,13 +53,14 @@
     }
   }
   function open(format: 'source' | 'binary', title: string) {
-    // If the source changes while a picker is open, do not overwrite those edits.
+    // Keep the picker result bound to the unchanged document that opened it.
     const previous = source;
+    const document = identity;
     void transfer('file_read', async (files) => {
       const bytes = await files.open(format, title);
       if (!active || bytes === null) return;
       if (format === 'binary') onbinary(bytes);
-      else if (source !== previous) onerror('file_conflict');
+      else if (source !== previous || identity !== document) onerror('file_conflict');
       else {
         let text: string;
         try {

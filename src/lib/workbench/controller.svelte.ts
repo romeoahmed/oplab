@@ -4,7 +4,6 @@ import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
 import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
 import type { DesktopFailure } from '$lib/protocol/generated/DesktopFailure';
-import type { Diagnostic } from '$lib/protocol/generated/Diagnostic';
 import type { DiagnosticCode } from '$lib/protocol/generated/DiagnosticCode';
 import type { ExecutionTrace } from '$lib/protocol/generated/ExecutionTrace';
 import type { FailureCode } from '$lib/protocol/generated/FailureCode';
@@ -26,12 +25,15 @@ import {
   parseCounter,
   parseUnsigned,
 } from '$lib/protocol/scalars';
+import { untrack } from 'svelte';
+import { SvelteSet } from 'svelte/reactivity';
 
 import aarch64 from '../../../examples/aarch64.s?raw';
 import x86_64 from '../../../examples/x86_64.s?raw';
+import { SourceDocument, newDocument } from './document.svelte';
 import { initialState, type InitialInput } from './load/initial-state';
 import { initialMemory, patchBytes } from './machine/memory';
-import { readScratch } from './scratch';
+import { readScratch, readWorkspace } from './scratch';
 
 type Stream = { event: StreamEvent; memory: Uint8Array | null };
 type Snapshot = { observation: Observation; memory: Uint8Array | null };
@@ -56,7 +58,7 @@ export const examples: Record<Target, string> = {
 };
 
 /**
- * Own a scratch document, build candidate and separately loaded machine.
+ * Own source documents and their builds, independently of the loaded machine.
  *
  * @remarks
  * Call `initialize` after mounting and `dispose` on unmount. Async results retain
@@ -66,24 +68,26 @@ export const examples: Record<Target, string> = {
 export function createWorkbench(factory: Factory = desktopWorker) {
   let trace = $state.raw<ExecutionTrace | null>(null);
   let traceRequest: symbol | undefined;
-  let source = $state('');
-  let target = $state<Target>('x86_64');
-  let base = $state('0x1000');
-  let completion = $state('done');
-  let budget = $state('1000000');
-  const setups = $state<Record<Target, InitialInput>>({
+  let active = $state(newDocument('untitled-1.s'));
+  let documents = $state([untrack(() => active)]);
+  const source = $derived(active.inputs.source);
+  const target = $derived(active.inputs.target);
+  const base = $derived(active.inputs.base);
+  const completion = $derived(active.inputs.completion);
+  const budget = $derived(active.inputs.budget);
+  const setups = $derived(active.setups);
+  const documentId = $derived(active.inputs.documentId);
+  const revision = $derived(parseCounter(active.inputs.revision));
+  const candidate = $derived(active.candidate);
+  let memoryAddress = $state('0x2000');
+  let memoryLength = $state(64);
+  let info = $state.raw<ConnectionInfo | null>(null);
+  let binary = $state.raw<Uint8Array>();
+  let rawBudget = $state('1000000');
+  const rawSetups = $state<Record<Target, InitialInput>>({
     x86_64: { registers: [], mappings: [] },
     aarch64: { registers: [], mappings: [] },
   });
-  let memoryAddress = $state('0x2000');
-  let memoryLength = $state(64);
-  let revision = $state(0n);
-  let documentId = $state<string>(crypto.randomUUID());
-  let info = $state.raw<ConnectionInfo | null>(null);
-  let candidate = $state.raw<{ artifact: Artifact; object: Uint8Array; image: Uint8Array } | null>(
-    null,
-  );
-  let binary = $state.raw<Uint8Array>();
   let raw = $state<{ target: Target; base: string; entry: string; completion: string }>({
     target: 'x86_64',
     base: '0x1000',
@@ -101,7 +105,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   let building = $state(false);
   let controlling = $state(false);
   let problem = $state<string | null>(null);
-  let buildFailure = $state.raw<{ identity: BuildIdentity; diagnostic: Diagnostic } | null>(null);
+  const buildFailure = $derived(active.failure);
   const diagnostic = $derived(
     buildFailure !== null && matches(buildFailure.identity) ? buildFailure.diagnostic : null,
   );
@@ -117,21 +121,22 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   let pending: Stream | null = null;
   const lifetime = new AbortController();
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let recoveryWritable = true;
   const port = factory(receive, failed);
 
-  function identity(): BuildIdentity {
+  function identity(document = active): BuildIdentity {
     if (info === null) throw new Error('No worker');
     return {
-      document: documentId,
-      revision: formatCounter(revision),
-      target,
-      base: normalizeAddress(base),
+      document: document.inputs.documentId,
+      revision: document.inputs.revision,
+      target: document.inputs.target,
+      base: normalizeAddress(document.inputs.base),
       assembler: info.capabilities.assembler,
     };
   }
-  function matches(value: BuildIdentity): boolean {
+  function matches(value: BuildIdentity, document = active): boolean {
     try {
-      return sameBuildIdentity(value, identity());
+      return sameBuildIdentity(value, identity(document));
     } catch {
       return false;
     }
@@ -279,7 +284,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     try {
       const next = await port.connect(restart);
       lifetime.signal.throwIfAborted();
-      buildFailure = null;
+      active.failure = null;
       info = next;
       connected = true;
       // A retained native session does not prove which local source produced it.
@@ -304,16 +309,18 @@ export function createWorkbench(factory: Factory = desktopWorker) {
   async function assemble(): Promise<void> {
     if (port === null || !connected || building) return;
     building = true;
-    buildFailure = null;
+    active.failure = null;
     problem = null;
     unknown = false;
+    const document = active;
     try {
-      const build = identity();
+      const build = identity(document);
       const message = await port.request({ type: 'assemble', data: { identity: build, source } });
-      if (lifetime.signal.aborted || !matches(build)) return;
+      if (lifetime.signal.aborted || !documents.includes(document) || !matches(build, document))
+        return;
       const result = message.response.result;
       if (result.type === 'error') {
-        buildFailure = { identity: build, diagnostic: result.data };
+        document.failure = { identity: build, diagnostic: result.data };
         return;
       }
       const object = message.payloads[0];
@@ -325,7 +332,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
         !sameBuildIdentity(result.data.identity, build)
       )
         throw new Error('Invalid artifact');
-      candidate = { artifact: result.data, object, image };
+      document.candidate = { artifact: result.data, object, image };
     } catch (error) {
       report(error);
     } finally {
@@ -386,6 +393,8 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     completion: string;
     identity: Loaded;
     memory: MemoryWindow | null;
+    setup: InitialInput;
+    budget: string;
   };
   async function loadInput(prepare: () => LoadInput): Promise<void> {
     if (
@@ -400,7 +409,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     unknown = false;
     try {
       const input = prepare();
-      const maximum = BigInt(budget);
+      const maximum = BigInt(input.budget);
       if (maximum < 1n || maximum > 100000000n) throw new RangeError('Invalid budget');
       const message = await port.request(
         {
@@ -412,7 +421,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
             completion: input.completion,
             instruction_budget: formatCounter(maximum),
             image_bytes: input.bytes.length,
-            initial: initialState(setups[input.target]),
+            initial: initialState(input.setup),
           },
         },
         input.bytes,
@@ -452,6 +461,8 @@ export function createWorkbench(factory: Factory = desktopWorker) {
           sourceMap: candidate.artifact.source_map,
         },
         memory: initialMemory(candidate.artifact.image),
+        setup: setups[candidate.artifact.identity.target],
+        budget,
       };
     });
   }
@@ -467,6 +478,8 @@ export function createWorkbench(factory: Factory = desktopWorker) {
         completion: normalizeAddress(raw.completion),
         identity: { type: 'raw', bytes: binary, target: raw.target, base, entry },
         memory: { address: base, length: Math.min(binary.length, 64) },
+        setup: rawSetups[raw.target],
+        budget: rawBudget,
       };
     });
   }
@@ -548,50 +561,102 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     }
   }
   function save(): void {
+    if (!recoveryWritable) return;
     try {
       localStorage.setItem(
-        'oplab.scratch.v1',
+        'oplab.workspace.v1',
         JSON.stringify(
-          readScratch({
-            documentId,
-            source,
-            target,
-            base,
-            completion,
-            budget,
-            revision: formatCounter(revision),
+          readWorkspace({
+            active: documentId,
+            documents: documents.map((document) => ({ ...document.inputs, name: document.name })),
           }),
         ),
       );
+      localStorage.removeItem('oplab.scratch.v1');
       storageFailed = false;
     } catch {
       storageFailed = true;
     }
   }
   function persist(): void {
+    recoveryWritable = true;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 250);
   }
   function initialize(): void {
     try {
-      const stored = localStorage.getItem('oplab.scratch.v1');
+      const stored = localStorage.getItem('oplab.workspace.v1');
       if (stored !== null) {
-        const value = readScratch(JSON.parse(stored));
-        const storedRevision = parseCounter(value.revision);
-        source = value.source;
-        target = value.target;
-        revision = storedRevision;
-        documentId = value.documentId;
-        base = value.base;
-        completion = value.completion;
-        budget = value.budget;
+        const workspace = readWorkspace(JSON.parse(stored));
+        documents = workspace.documents.map(
+          ({ name, ...inputs }) => new SourceDocument(inputs, name),
+        );
+        active =
+          documents.find((document) => document.inputs.documentId === workspace.active) ?? active;
+      } else {
+        const scratch = localStorage.getItem('oplab.scratch.v1');
+        if (scratch !== null) {
+          active = new SourceDocument(readScratch(JSON.parse(scratch)), 'untitled-1.s');
+          documents = [active];
+        }
       }
     } catch {
+      recoveryWritable = false;
       storageFailed = true;
     }
     void connect();
   }
   return {
+    get documents() {
+      return documents.map((document) => ({
+        id: document.inputs.documentId,
+        name: document.name,
+        hasSource: document.inputs.source.length > 0,
+      }));
+    },
+    get documentId() {
+      return documentId;
+    },
+    get documentName() {
+      return active.name;
+    },
+    get loadedDocument() {
+      const origin = loaded?.type === 'source' ? loaded.identity.document : null;
+      return origin !== null
+        ? (documents.find((document) => document.inputs.documentId === origin)?.inputs.documentId ??
+            null)
+        : null;
+    },
+    selectDocument(id: string) {
+      const document = documents.find((document) => document.inputs.documentId === id);
+      if (document === undefined || document === active) return;
+      active = document;
+      persist();
+    },
+    createDocument() {
+      const names = new SvelteSet(documents.map((document) => document.name));
+      let number = 1;
+      while (names.has(`untitled-${String(number)}.s`)) number++;
+      active = newDocument(`untitled-${String(number)}.s`, target);
+      documents.push(active);
+      persist();
+    },
+    renameDocument(name: string) {
+      const trimmed = name.trim();
+      if (trimmed.length === 0 || trimmed.length > 80) return;
+      active.name = trimmed;
+      persist();
+    },
+    closeDocument(id: string) {
+      const index = documents.findIndex((document) => document.inputs.documentId === id);
+      if (index < 0) return;
+      const closingActive = active.inputs.documentId === id;
+      documents = documents.filter((document) => document.inputs.documentId !== id);
+      if (closingActive)
+        active = documents[Math.min(index, documents.length - 1)] ?? newDocument('untitled-1.s');
+      if (documents.length === 0) documents = [active];
+      persist();
+    },
     decode,
     analyze,
     readTrace,
@@ -622,11 +687,11 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     },
     setSource(value: string) {
       if (value !== source) {
-        source = value;
+        active.inputs.source = value;
         if (revision === (1n << 64n) - 1n) {
-          documentId = crypto.randomUUID();
-          revision = 0n;
-        } else revision += 1n;
+          active.inputs.documentId = crypto.randomUUID();
+          active.inputs.revision = '0';
+        } else active.inputs.revision = formatCounter(revision + 1n);
         persist();
       }
     },
@@ -634,21 +699,21 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       return target;
     },
     setTarget(value: Target) {
-      target = value;
+      active.inputs.target = value;
       persist();
     },
     get base() {
       return base;
     },
     set base(value: string) {
-      base = value;
+      active.inputs.base = value;
       persist();
     },
     get completion() {
       return completion;
     },
     set completion(value: string) {
-      completion = value;
+      active.inputs.completion = value;
       persist();
     },
     get setup() {
@@ -661,7 +726,7 @@ export function createWorkbench(factory: Factory = desktopWorker) {
       return budget;
     },
     set budget(value: string) {
-      budget = value;
+      active.inputs.budget = value;
       persist();
     },
     get memoryAddress() {
@@ -708,7 +773,13 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     },
     get loadedCurrent() {
       if (loaded === null) return false;
-      if (loaded.type === 'source') return matches(loaded.identity);
+      if (loaded.type === 'source') {
+        const build = loaded.identity;
+        const document = documents.find(
+          (document) => document.inputs.documentId === build.document,
+        );
+        return document !== undefined && matches(build, document);
+      }
       try {
         return (
           loaded.bytes === binary &&
@@ -743,11 +814,17 @@ export function createWorkbench(factory: Factory = desktopWorker) {
     set raw(value: typeof raw) {
       raw = value;
     },
+    get rawBudget() {
+      return rawBudget;
+    },
+    set rawBudget(value: string) {
+      rawBudget = value;
+    },
     get rawSetup() {
-      return setups[raw.target];
+      return rawSetups[raw.target];
     },
     set rawSetup(value: InitialInput) {
-      setups[raw.target] = value;
+      rawSetups[raw.target] = value;
     },
     importBinary(bytes: Uint8Array) {
       binary = bytes;
