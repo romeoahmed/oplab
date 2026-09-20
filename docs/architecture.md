@@ -255,8 +255,7 @@ persisted. There is no fixed open-document count. Recovery limits each source to
 complete record is validated, including unique IDs and active membership. Invalid
 or oversized edits and quota failures preserve the last recoverable copy while
 current documents stay editable. A failed recovery is not overwritten on exit
-unless the user changes the workspace. A stored single draft is adopted only when
-no workspace exists and removed after a successful workspace write.
+unless the user changes the workspace. Only the current workspace schema is read.
 
 Import replaces source only if its document identity, revision and text still match
 when the picker completes. BOM/newlines survive export until editing; CodeMirror

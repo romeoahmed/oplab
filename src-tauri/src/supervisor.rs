@@ -6,7 +6,7 @@ mod process;
 
 use delivery::Delivery;
 use oplab_core::protocol::{
-    Artifact, Capabilities, Command, Reply, Request, VERSION,
+    Capabilities, Command, Reply, Request, VERSION,
     desktop::{ConnectionInfo, DesktopFailure, FailureCode},
     execution::Observation,
     scalar::Counter,
@@ -49,7 +49,6 @@ struct State {
     capabilities: Option<Capabilities>,
     session: Option<Box<Observation>>,
     closed_session: u64,
-    artifact: Option<Artifact>,
     subscription: Option<Counter>,
     cache: observations::Cache,
     delivery: Option<Delivery>,
@@ -258,7 +257,6 @@ impl Service {
                 .clone()
                 .ok_or_else(|| DesktopFailure::new(FailureCode::Protocol))?,
             session: state.session.clone(),
-            artifact: state.artifact.clone(),
         })
     }
 

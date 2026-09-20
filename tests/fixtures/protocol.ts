@@ -94,7 +94,6 @@ export function connection(session: Observation | null = null): ConnectionInfo {
     connection: '1',
     view: '1',
     session,
-    artifact: null,
     capabilities: {
       version: 1,
       targets: ['x86_64', 'aarch64'],

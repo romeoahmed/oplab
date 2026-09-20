@@ -9,13 +9,13 @@ import { page, userEvent } from 'vitest/browser';
 import en from '../../messages/en.json';
 import zh from '../../messages/zh-CN.json';
 import { connection, observation } from '../fixtures/protocol';
-import { scratch } from '../fixtures/scratch';
+import { storeDraft } from '../fixtures/scratch';
 
 import '$lib/styles/theme.css';
 
 beforeEach(() => {
   localStorage.clear();
-  localStorage.setItem('oplab.scratch.v1', JSON.stringify(scratch));
+  storeDraft();
 });
 afterEach(() => {
   localStorage.clear();

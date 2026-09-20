@@ -108,9 +108,11 @@ export CC="$(brew --prefix llvm@23)/bin/clang"
 export CXX="$(brew --prefix llvm@23)/bin/clang++"
 export LLVM_SYS_231_PREFIX="$(brew --prefix llvm@23)"
 export LIBCLANG_PATH="$LLVM_SYS_231_PREFIX/lib"
+export PATH="$LLVM_SYS_231_PREFIX/bin:$PATH"
 ```
 
-Ensure Homebrew's executable directory is on `PATH`. These are shell settings,
+Ensure Homebrew's executable directory and the selected LLVM tools (including
+`llvm-ar`, which XED's Clang build invokes) are on `PATH`. These are shell settings,
 not repository configuration. LLVM and LLD are separate Homebrew packages; verify
 their reported release identities match before building.
 Keep the system SDK and C++ runtime unless a coherent alternative has been verified.

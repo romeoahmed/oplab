@@ -323,7 +323,8 @@ Four main-window Tauri commands manage the worker. Two separate commands handle
 
 Reattachment issues a new lease while preserving the worker. Zero, detached and
 obsolete leases cannot mutate it. Source association is not inferred from retained
-session/artifact metadata.
+session metadata. Build results belong to their source document; the supervisor
+does not retain or resend artifacts when a view attaches.
 
 | Supervisor policy                      | Value                         |
 | -------------------------------------- | ----------------------------- |

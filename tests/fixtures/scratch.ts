@@ -10,3 +10,14 @@ export const scratch = {
   completion: 'done',
   budget: '1000000',
 } satisfies Scratch;
+
+/** Seed one document through the current workspace recovery format. */
+export function storeDraft(inputs: Scratch = scratch): void {
+  localStorage.setItem(
+    'oplab.workspace.v1',
+    JSON.stringify({
+      active: inputs.documentId,
+      documents: [{ ...inputs, name: 'untitled-1.s' }],
+    }),
+  );
+}

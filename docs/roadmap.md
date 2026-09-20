@@ -85,9 +85,24 @@ Evidence below was recorded on Apple Silicon macOS. Automated suites, browser
 fixtures, desktop acceptance and sanitizer runs establish different guarantees;
 they were not one complete matrix.
 
+### Boundary cleanup — 2026-09-20
+
+Rebuilt the QEMU/XED SDK with LLVM/LLD 23.1.1. `cargo xtask check` passed;
+`cargo xtask test` passed **158 Rust tests**, including doctests, and **158 frontend
+tests**. New attachment tests reject obsolete replies, failures and acknowledgements
+after reconnect/detach, preserve current failures and release stale connection leases.
+Recovery tests now use only the current workspace schema. The supervisor retains
+session state, not unused artifact metadata.
+
+A fresh macOS debug bundle built through the normal Tauri hooks. Desktop acceptance
+restored existing drafts, assembled/loaded/ran both AVX2 and SVE2 examples, and
+verified checksum 4814 in registers and memory. Switching documents preserved the
+loaded machine and its source identity. This run did not repeat sanitizers or
+establish installed distribution, other-host or measured performance evidence.
+
 ### Workbench — 2026-09-20
 
-The latest run passed **154 frontend tests**, Svelte/TypeScript checks, ESLint,
+The source-tab acceptance run passed **154 frontend tests**, Svelte/TypeScript checks, ESLint,
 Stylelint, Knip and formatting. Coverage includes:
 
 - Independent document text, targets, history, search, builds and recovery; many-tab

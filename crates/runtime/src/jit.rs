@@ -488,12 +488,13 @@ impl<'a> Ir<'a> {
             .args
             .get(..outputs + inputs + constants)
             .ok_or(Error::Native)?;
-        let values = args[outputs..outputs + inputs]
-            .iter()
-            .map(|&index| self.get(index))
-            .collect::<Result<Vec<_>>>()?;
+        // The SDK bounds operand arity. Keep per-op scratch storage on the stack.
+        let mut values = [null_mut(); 16];
+        for (value, &index) in values.iter_mut().zip(&args[outputs..outputs + inputs]) {
+            *value = self.get(index)?;
+        }
         let immediates = &args[outputs + inputs..];
-        self.operation(name, condition, op, &values, immediates)
+        self.operation(name, condition, op, &values[..inputs], immediates)
     }
     fn operation(
         &mut self,

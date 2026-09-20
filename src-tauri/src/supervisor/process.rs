@@ -133,7 +133,6 @@ fn read(shared: &Shared, stdout: impl Read) -> std::result::Result<(), FailureCo
                     .ok_or(FailureCode::Protocol)?;
                 match &message.response.result {
                     Reply::Observed(observation) => state.observe(observation),
-                    Reply::Assembled(artifact) => state.artifact = Some(artifact.clone()),
                     Reply::SessionClosed(key) => {
                         state.closed_session = state.closed_session.max(key.session.get());
                         state.session = None;

@@ -17,14 +17,14 @@ import { page, userEvent } from 'vitest/browser';
 import en from '../../messages/en.json';
 import zh from '../../messages/zh-CN.json';
 import { assembled, connection, observation, nopAnalysis } from '../fixtures/protocol';
-import { scratch } from '../fixtures/scratch';
+import { scratch, storeDraft } from '../fixtures/scratch';
 
 import '$lib/styles/theme.css';
 
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('PARAGLIDE_LOCALE', 'en');
-  localStorage.setItem('oplab.scratch.v1', JSON.stringify(scratch));
+  storeDraft();
 });
 afterEach(() => {
   localStorage.clear();
@@ -136,8 +136,8 @@ test.each(['artifact', 'diagnostic'] as const)(
   },
 );
 
-test('corrupt scratch recovery preserves the attached machine without replaying a mutation', async () => {
-  localStorage.setItem('oplab.scratch.v1', '{');
+test('corrupt workspace recovery preserves the attached machine without replaying a mutation', async () => {
+  localStorage.setItem('oplab.workspace.v1', '{');
   const commands: Command[] = [];
   await render(Workbench, {
     portFactory: (): WorkerPort => ({
@@ -576,7 +576,7 @@ test.each(['en', 'zh-CN'] as const)(
 test.each(['en', 'zh-CN'] as const)(
   '%s starts blank, loads examples explicitly and restores a deliberately empty draft',
   async (locale) => {
-    localStorage.removeItem('oplab.scratch.v1');
+    localStorage.removeItem('oplab.workspace.v1');
     localStorage.setItem('PARAGLIDE_LOCALE', locale);
     const copy = locale === 'en' ? en : zh;
     const request = vi.fn<WorkerPort['request']>((command) => {

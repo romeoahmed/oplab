@@ -33,7 +33,7 @@ import x86_64 from '../../../examples/x86_64.s?raw';
 import { SourceDocument, newDocument } from './document.svelte';
 import { initialState, type InitialInput } from './load/initial-state';
 import { initialMemory, patchBytes } from './machine/memory';
-import { readScratch, readWorkspace } from './scratch';
+import { readWorkspace } from './scratch';
 
 type Stream = { event: StreamEvent; memory: Uint8Array | null };
 type Snapshot = { observation: Observation; memory: Uint8Array | null };
@@ -572,7 +572,6 @@ export function createWorkbench(factory: Factory = desktopWorker) {
           }),
         ),
       );
-      localStorage.removeItem('oplab.scratch.v1');
       storageFailed = false;
     } catch {
       storageFailed = true;
@@ -593,12 +592,6 @@ export function createWorkbench(factory: Factory = desktopWorker) {
         );
         active =
           documents.find((document) => document.inputs.documentId === workspace.active) ?? active;
-      } else {
-        const scratch = localStorage.getItem('oplab.scratch.v1');
-        if (scratch !== null) {
-          active = new SourceDocument(readScratch(JSON.parse(scratch)), 'untitled-1.s');
-          documents = [active];
-        }
       }
     } catch {
       recoveryWritable = false;

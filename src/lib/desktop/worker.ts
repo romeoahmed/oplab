@@ -34,6 +34,22 @@ export function desktopWorker(
   if (!isTauri()) return null;
   let attachment: ConnectionInfo | null = null;
   let epoch = 0;
+  function assertCurrent(view: number): void {
+    if (view !== epoch) throw new DOMException('Detached workbench', 'AbortError');
+  }
+  // Late failures are just as stale as late replies, including delivery acknowledgements.
+  function scoped<T>(view: number, operation: Promise<T>): Promise<T> {
+    return operation.then(
+      (value) => {
+        assertCurrent(view);
+        return value;
+      },
+      (error: unknown) => {
+        assertCurrent(view);
+        throw error;
+      },
+    );
+  }
   return {
     async connect(restart) {
       const current = ++epoch;
@@ -47,9 +63,17 @@ export function desktopWorker(
           onfailure({ code: 'protocol', request: null, outcome_unknown: false });
         }
       });
-      const info = await invoke<ConnectionInfo>('worker_connect', { channel, restart });
+      const info = await invoke<ConnectionInfo>('worker_connect', { channel, restart }).catch(
+        (error: unknown) => {
+          // A successful stale attach must still release its lease below.
+          assertCurrent(current);
+          throw error;
+        },
+      );
       if (current !== epoch) {
-        await invoke('worker_detach', { connection: info.connection, view: info.view });
+        await invoke('worker_detach', { connection: info.connection, view: info.view }).catch(
+          () => {},
+        );
         throw new DOMException('Detached workbench', 'AbortError');
       }
       attachment = info;
@@ -62,18 +86,20 @@ export function desktopWorker(
         { connection: attachment.connection, view: attachment.view, command },
         payload ?? null,
       );
-      const response = await invoke<ArrayBuffer>('worker_request', bytes);
-      if (current !== epoch) throw new DOMException('Detached workbench', 'AbortError');
+      const response = await scoped(current, invoke<ArrayBuffer>('worker_request', bytes));
       return decodeResponse(response);
     },
     async acknowledge(subscription, sequence) {
       if (attachment === null) return;
-      await invoke('worker_ack', {
-        connection: attachment.connection,
-        view: attachment.view,
-        subscription,
-        sequence,
-      });
+      await scoped(
+        epoch,
+        invoke('worker_ack', {
+          connection: attachment.connection,
+          view: attachment.view,
+          subscription,
+          sequence,
+        }),
+      );
     },
     detach() {
       epoch += 1;

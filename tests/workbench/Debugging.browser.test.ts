@@ -12,7 +12,7 @@ import { page, userEvent } from 'vitest/browser';
 import en from '../../messages/en.json';
 import zh from '../../messages/zh-CN.json';
 import { assembled, connection, observation } from '../fixtures/protocol';
-import { scratch } from '../fixtures/scratch';
+import { scratch, storeDraft } from '../fixtures/scratch';
 
 import '$lib/styles/theme.css';
 
@@ -28,10 +28,7 @@ test.each(['en', 'zh-CN'] as const)(
   async (locale) => {
     const copy = locale === 'en' ? en : zh;
     localStorage.setItem('PARAGLIDE_LOCALE', locale);
-    localStorage.setItem(
-      'oplab.scratch.v1',
-      JSON.stringify({ ...scratch, source: 'again: jmp again\ndone: nop' }),
-    );
+    storeDraft({ ...scratch, source: 'again: jmp again\ndone: nop' });
     const machine = observation('1');
     const pc = '0x0000000000001000';
     const trace: ExecutionTrace = { key: machine.key, enabled: false, entries: [], discarded: '0' };

@@ -1,6 +1,6 @@
 //! Desktop ownership and failure metadata; native machine semantics remain shared.
 
-use super::{Artifact, Capabilities, Command, execution::Observation, scalar::Counter};
+use super::{Capabilities, Command, execution::Observation, scalar::Counter};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -28,8 +28,6 @@ pub struct ConnectionInfo {
     pub capabilities: Capabilities,
     /// Last coherent machine status; a fresh subscription obtains current values.
     pub session: Option<Box<Observation>>,
-    /// Latest successful build metadata, independent of the loaded session.
-    pub artifact: Option<Artifact>,
 }
 
 /// Stable supervisor failures for localized presentation; no native logs or paths.
