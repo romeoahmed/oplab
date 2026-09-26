@@ -2,6 +2,7 @@ import { desktopWorker, type WorkerPort } from '$lib/desktop/worker';
 import type { Artifact } from '$lib/protocol/generated/Artifact';
 import type { BuildIdentity } from '$lib/protocol/generated/BuildIdentity';
 import type { ConnectionInfo } from '$lib/protocol/generated/ConnectionInfo';
+import type { DataWatchpoint } from '$lib/protocol/generated/DataWatchpoint';
 import type { DecodedInstruction } from '$lib/protocol/generated/DecodedInstruction';
 import type { DesktopFailure } from '$lib/protocol/generated/DesktopFailure';
 import type { DiagnosticCode } from '$lib/protocol/generated/DiagnosticCode';
@@ -850,6 +851,17 @@ export function createWorkbench(factory: Factory = desktopWorker) {
           },
           bytes,
         );
+      } catch (error) {
+        report(error);
+      }
+    },
+    async watchpoints(points: DataWatchpoint[]) {
+      try {
+        const data = points.map((point) => ({
+          ...point,
+          address: normalizeAddress(point.address),
+        }));
+        await execute({ type: 'watchpoints', data });
       } catch (error) {
         report(error);
       }

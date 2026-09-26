@@ -7,6 +7,7 @@
   import { untrack } from 'svelte';
 
   import type { sourceIndex as indexSource } from '../editor/source';
+  import { canResume } from '../presentation';
 
   import './trace.css';
 
@@ -36,12 +37,7 @@
     onsource: (line: number) => void;
   } = $props();
   const options = $derived({ locale });
-  const editable = $derived(
-    connected &&
-      !busy &&
-      observation !== undefined &&
-      ['ready', 'paused', 'stepped', 'breakpoint', 'target'].includes(observation.status.type),
-  );
+  const editable = $derived(connected && !busy && canResume(observation?.status));
   const stopped = $derived(
     connected &&
       !busy &&

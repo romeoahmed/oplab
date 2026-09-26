@@ -11,6 +11,7 @@
 }
 
 .machine-status {
+  flex-shrink: 0;
   padding: 2px 7px;
   border-radius: 4px;
   font-size: 11px;
@@ -230,10 +231,24 @@
 .loaded-source {
   justify-content: start;
   max-inline-size: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   margin-block-end: 8px;
   color: var(--accent);
   background: transparent;
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.watchpoint-stop {
+  padding: 10px 12px;
+  margin-block: 12px;
+  border-inline-start: 2px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--accent) 8%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }

@@ -63,6 +63,8 @@ pub enum PauseReason {
     Breakpoint(Address),
     /// A temporary run target was reached before effects.
     Target(Address),
+    /// A data access paused after instruction or REP-iteration effects.
+    Watchpoint(crate::watchpoint::WatchpointHit),
 }
 
 /// An explicit terminal outcome; faults and budget limits are never success.

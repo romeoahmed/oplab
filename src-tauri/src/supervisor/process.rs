@@ -13,7 +13,7 @@ use oplab_core::protocol::{
     transport::{self, Output},
 };
 use std::{
-    io::{BufReader, Read},
+    io::{BufReader, BufWriter, Read},
     process::{Command as ProcessCommand, Stdio},
     thread,
 };
@@ -54,7 +54,8 @@ pub(super) fn spawn(executable: &Path, runtime: &Path, id: Counter) -> Result<Co
         writer: Some(writer),
         threads: Vec::new(),
     };
-    let mut stdin = stdin.ok_or_else(|| DesktopFailure::new(FailureCode::Unavailable))?;
+    let mut stdin =
+        BufWriter::new(stdin.ok_or_else(|| DesktopFailure::new(FailureCode::Unavailable))?);
     let stdout = stdout.ok_or_else(|| DesktopFailure::new(FailureCode::Unavailable))?;
     let stderr = stderr.ok_or_else(|| DesktopFailure::new(FailureCode::Unavailable))?;
     connection.thread("oplab-writer", move |shared| {

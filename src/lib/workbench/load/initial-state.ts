@@ -12,7 +12,8 @@ export type InitialInput = {
  * @remarks
  * The loader validates register names, page alignment, overlap and aggregate memory limits.
  *
- * @throws RangeError - An input is malformed or exceeds its field or collection limit.
+ * @throws RangeError
+ * An input is malformed or exceeds its field or collection limit.
  */
 export function initialState(input: InitialInput): InitialState {
   if (input.registers.length > 32 || input.mappings.length > 63)

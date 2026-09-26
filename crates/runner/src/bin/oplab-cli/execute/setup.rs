@@ -103,3 +103,27 @@ impl Setup {
         })
     }
 }
+
+/// Parse CLI syntax; the shared constructor owns range policy.
+pub(super) fn watchpoint(value: &str) -> Result<oplab_core::watchpoint::Watchpoint, &'static str> {
+    use oplab_core::watchpoint::{WatchAccess, Watchpoint};
+    let mut parts = value.split(':');
+    let address = parts
+        .next()
+        .ok_or("expected ADDRESS:SIZE:r|w|rw")?
+        .parse()
+        .map_err(|_| "expected a hexadecimal address")?;
+    let length = u32::try_from(number(parts.next().ok_or("missing size")?)?)
+        .map_err(|_| "size exceeds 65536 bytes")?;
+    let access = match parts.next() {
+        Some("r") => WatchAccess::Read,
+        Some("w") => WatchAccess::Write,
+        Some("rw") => WatchAccess::ReadWrite,
+        _ => return Err("expected r, w or rw"),
+    };
+    if parts.next().is_some() {
+        return Err("expected ADDRESS:SIZE:r|w|rw");
+    }
+    Watchpoint::new(address, length, access)
+        .map_err(|_| "range must be nonempty, nonwrapping and at most 65536 bytes")
+}

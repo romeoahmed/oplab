@@ -93,11 +93,13 @@ impl<'de> Deserialize<'de> for HexAddress {
                 formatter.write_str("a canonical 64-bit hexadecimal address string")
             }
             fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
-                let address: Address = value.parse().map_err(E::custom)?;
-                if value != address.to_string() {
+                if value.len() != 18
+                    || !value.starts_with("0x")
+                    || value.bytes().any(|byte| byte.is_ascii_uppercase())
+                {
                     return Err(E::custom("noncanonical wire address"));
                 }
-                Ok(HexAddress(address))
+                value.parse().map(HexAddress).map_err(E::custom)
             }
         }
         deserializer.deserialize_str(Visitor)

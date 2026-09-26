@@ -6,17 +6,18 @@ use oplab_core::protocol::{
     stream::{ObservationUpdate, RegisterUpdate, StreamEvent},
     transport::StreamMessage,
 };
+use std::sync::Arc;
 
 #[derive(Default)]
 pub(super) struct Cache {
-    current: Option<StreamMessage>,
+    current: Option<Arc<StreamMessage>>,
 }
 
 impl Cache {
     pub(super) fn apply(
         &mut self,
         message: StreamMessage,
-    ) -> Result<StreamMessage, DesktopFailure> {
+    ) -> Result<Arc<StreamMessage>, DesktopFailure> {
         let StreamMessage { event, memory } = message;
         match event.update {
             ObservationUpdate::Full(observation) => {
@@ -24,13 +25,13 @@ impl Cache {
             }
             ObservationUpdate::Ended(error) => {
                 self.current = None;
-                Ok(StreamMessage {
+                Ok(Arc::new(StreamMessage {
                     event: StreamEvent {
                         subscription: event.subscription,
                         update: ObservationUpdate::Ended(error),
                     },
                     memory: None,
-                })
+                }))
             }
             ObservationUpdate::Delta(delta) => {
                 let base = self
@@ -65,6 +66,7 @@ impl Cache {
                     },
                     fault: delta.fault,
                     breakpoints: observation.breakpoints.clone(),
+                    watchpoints: observation.watchpoints.clone(),
                     memory: observation.memory,
                 });
                 let memory = if delta.memory_bytes == 0 {
@@ -82,24 +84,21 @@ impl Cache {
         subscription: oplab_core::protocol::scalar::Counter,
         observation: Box<Observation>,
         memory: Option<Vec<u8>>,
-    ) -> Result<StreamMessage, DesktopFailure> {
+    ) -> Result<Arc<StreamMessage>, DesktopFailure> {
         if (observation.status == Status::Crashed) != observation.registers.is_none()
             || observation.memory.map(|window| window.length as usize)
                 != memory.as_ref().map(Vec::len)
         {
             return Err(protocol());
         }
-        let message = StreamMessage {
+        let message = Arc::new(StreamMessage {
             event: StreamEvent {
                 subscription,
                 update: ObservationUpdate::Full(observation),
             },
             memory,
-        };
-        self.current = Some(StreamMessage {
-            event: message.event.clone(),
-            memory: message.memory.clone(),
         });
+        self.current = Some(Arc::clone(&message));
         Ok(message)
     }
 }

@@ -1,6 +1,25 @@
 import * as m from '$lib/paraglide/messages.js';
 import type { Locale } from '$lib/paraglide/runtime';
 import type { Status } from '$lib/protocol/generated/Status';
+import type { WatchAccess } from '$lib/protocol/generated/WatchAccess';
+
+/** Ready and paused states permit execution and live machine edits. */
+export function canResume(status: Status | undefined): boolean {
+  switch (status?.type) {
+    case 'ready':
+    case 'paused':
+    case 'stepped':
+    case 'breakpoint':
+    case 'watchpoint':
+    case 'target':
+      return true;
+    case 'running':
+    case 'terminated':
+    case 'crashed':
+    case undefined:
+      return false;
+  }
+}
 
 export function stateLabel(status: Status | undefined, locale: Locale): string {
   const options = { locale };
@@ -16,6 +35,8 @@ export function stateLabel(status: Status | undefined, locale: Locale): string {
       return m.state_stepped({}, options);
     case 'target':
       return m.state_target({}, options);
+    case 'watchpoint':
+      return m.state_watchpoint({}, options);
     case 'breakpoint':
       return m.state_breakpoint({}, options);
     case 'crashed':
@@ -70,5 +91,17 @@ export function problemLabel(code: string, locale: Locale): string {
       return m.error_input({}, options);
     default:
       return m.error_engine({}, options);
+  }
+}
+
+export function watchAccessLabel(access: WatchAccess, locale: Locale): string {
+  const options = { locale };
+  switch (access) {
+    case 'read':
+      return m.watch_read({}, options);
+    case 'write':
+      return m.watch_write({}, options);
+    case 'read_write':
+      return m.watch_read_write({}, options);
   }
 }

@@ -395,7 +395,33 @@ Breakpoints can be edited in ready/paused states. The desktop adds/removes addre
 in the machine panel or toggles decoded rows from captured memory. Successful
 observations carry the authoritative sorted set; repeated adds/removals are
 idempotent, and rejected changes leave it intact. Source controls use atomic address
-groups from the loaded build; watchpoints remain planned.
+groups from the loaded build.
+
+Data watchpoints observe reads, writes or either across 1–65,536 bytes. A ready/paused
+session accepts up to 32 input ranges before de-duplication, atomically replacing the
+complete set. An empty list clears it.
+Ranges need not be aligned or mapped and may cross page/mapping boundaries. Exact
+duplicates collapse; overlapping ranges remain distinct. A rejected replacement
+preserves the previous set. Reset retains the set; a new load starts empty.
+
+QEMU's native watchpoint matching covers memory helpers, including vector and
+atomic accesses. A hit pauses **after the current instruction**, or after one REP
+iteration. All effects remain, and resume continues without replay. Instruction
+fetches and debugger reads/patches do not trigger. Stores count even when the value
+does not change. This is access observation, not expression evaluation.
+
+The first native match supplies the configured range, triggering instruction PC,
+first overlapping byte and matching access mode. With overlapping ranges, native
+access order and sorted configuration order select the reported match; no access
+log or exact whole-operand width is inferred. Native read-modify-write checks may
+report both modes, restricted to the selected modes. A later fault in the same
+dispatch takes precedence and retains any partial effects. A successful hit before
+the declared completion address is reached pauses first; continue acknowledges
+completion without executing that address. Other stops cancel temporary run goals.
+
+The desktop manages ranges in the machine's Breakpoints tab and keeps controls
+available when paused on a watchpoint. The status identifies the access instruction,
+which can differ from the resulting register PC. CLI stops report the same metadata.
 
 Observations capture canonical x86_64 GPRs/RIP/RFLAGS and
 YMM0–YMM15/MXCSR, or AArch64 X0–X30/SP/PC/NZCV, Z0–Z31, P0–P15, FFR,
@@ -422,7 +448,7 @@ and HLT at CPL3 retain QEMU's processor exception. This is not an OS ABI or
 a promise of arbitrary privileged-instruction support.
 
 Reset constructs a fresh machine from the initial image, restores processor/memory
-state, clears execution progress and faults, and retains address breakpoints.
+state, clears execution progress and faults, and retains address breakpoints and data watchpoints.
 Replacement failure preserves the old machine. Generation advances only on success
 and never wraps. A new load receives a new connection-scoped session identity;
 commands for stale generations cannot mutate the current machine.
@@ -434,7 +460,7 @@ tracks containment and distribution work.
 ### Live editing
 
 `Session::write_register`, `write_vector`, `set_rounding` and `write_memory` accept
-Ready and Paused sessions, including breakpoint, step and temporary-target pauses.
+Ready and Paused sessions, including breakpoint, watchpoint, step and temporary-target pauses.
 Running, terminated and crashed sessions reject writes. Inputs are validated before
 native mutation. These debugger operations are independent of source, artifacts and
 initial setup.
@@ -503,8 +529,8 @@ current CPU state and bytes before reusing compiled code, so guest-written code
 cannot reuse a block solely by PC. Broader self-modifying-code patterns still
 require explicit acceptance.
 
-Writes preserve counters, completion policy, generation and breakpoints. Reset
-restores original bytes and initial registers. Validation failures leave the
-machine intact. A native write or invalidation failure may have partial effects:
+Writes preserve counters, completion policy, generation, address breakpoints and
+data watchpoints. Reset restores original bytes and initial registers. Validation
+failures leave the machine intact. A native write or invalidation failure may have partial effects:
 the session becomes Crashed, cannot resume or reset, and must be loaded again.
 There is no rollback or automatic mutation retry.

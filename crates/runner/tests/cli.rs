@@ -204,3 +204,44 @@ fn cli_decodes_raw_stdin_and_reports_invalid_arguments_separately()
     assert!(!output.stderr.is_empty());
     Ok(())
 }
+
+#[test]
+fn cli_watchpoint_reports_post_access_state_without_claiming_completion()
+-> Result<(), Box<dyn std::error::Error>> {
+    let output = common::run(
+        env!("CARGO_BIN_EXE_oplab-cli"),
+        &[
+            "run",
+            "source",
+            "x86_64",
+            "0x1000",
+            "--until-symbol",
+            "done",
+            "--budget",
+            "100",
+            "--map",
+            "0x8000:4096:rw",
+            "--watch",
+            "0x8000:8:w",
+            "--memory",
+            "0x8000",
+            "--memory-bytes",
+            "8",
+        ],
+        b"mov edi, 0x8000\nmov qword ptr [rdi], 42\ndone: nop",
+    )?;
+    assert_eq!(output.status.code(), Some(1));
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(report["type"], "executed");
+    assert_eq!(report["data"]["outcome"], "watchpoint");
+    assert_eq!(
+        report["data"]["watchpoint"]["address"],
+        "0x0000000000008000"
+    );
+    assert_eq!(report["data"]["watchpoint"]["access"], "write");
+    assert_eq!(
+        report["data"]["memory"]["bytes"],
+        serde_json::json!([42, 0, 0, 0, 0, 0, 0, 0])
+    );
+    Ok(())
+}

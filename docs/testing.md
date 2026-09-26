@@ -44,6 +44,7 @@ checking disassembly boundaries.
 | Source provenance   | Relocated points, Unicode, macro/repeat attribution, gaps, foreign files and complete truncated groups |
 | Static analysis     | Architectural effects, generated MOV/branch operands and independent extension encodings               |
 | Execution/editing   | Scalar reference results, real MOV alias behavior, flag preservation, PC/REP restart and reset         |
+| Data watchpoints    | Post-access effects, REP continuation, page boundaries, native vector/atomic helpers, faults and reset |
 | SIMD                | Full YMM/Z/P/FFR banks, alias preservation, AVX2/SVE lanes, rounding and independent guest stores      |
 | Scheduling/delivery | Latest valid pending build, exactly-once outcomes, retained stream baselines and stale identities      |
 | Editor              | Incremental versus fresh parsing, GNU blocks, literal labels and Unicode byte/UTF-16 boundaries        |
@@ -63,6 +64,11 @@ cases than pure logic but still executes the real backend. Preserve minimized re
 [Proptest persistence](https://proptest-rs.github.io/proptest/proptest/failure-persistence.html)
 belongs in version control; fast-check prints the `seed` and `path` for replay.
 Do not retry until green or weaken a contract to accommodate a fixture.
+
+Assert the expected completion or fault for non-matching execution cases; absence
+of a watchpoint hit alone can hide a crash. Verify complete affected bytes, not just
+the first byte. In stream histories, change configuration fields independently so
+one field cannot conceal a missing update for another.
 
 Use white-box control where it adds evidence: holding a job at a handoff, returning
 output capacity, coalescing samples or losing a writer. Assert barriers and control
@@ -138,6 +144,10 @@ Keep these observable workflows covered:
   captured inputs while later edits remain editable. Rejected controls retain state;
   replies without bytes retain memory, changed bytes invalidate disassembly, and
   reset clears the capture. Inspect at PC shares native memory-form validation.
+- **Data watchpoints:** range/access validation, pending keyboard submission,
+  rejection/retry and removal against authoritative replies. Verify that a hit
+  permits resuming, editing and trace inspection. Native tests own access matching,
+  post-instruction effects and reset retention.
 - **Live edits:** keyboard submission, overflow/flag constraints, aliases, PC,
   memory, SIMD lanes and rounding. Pending requests prevent duplicate submission,
   including Enter from an editable field. Rejected writes retain authoritative values
@@ -185,6 +195,8 @@ ran; a focused UI change does not require repeating unrelated native suites.
 5. Load raw code with explicit placement, stop at a breakpoint, resume and reset.
    Invalid entry preserves the machine; import alone neither loads nor runs.
 6. Edit GPRs, aliases, flags, PC and data/code; inspect fresh effects and reset.
+   Configure data watchpoints, inspect post-instruction hits and continue without
+   replay; verify reset retention and clearing on replacement load.
    Exercise full YMM/Z and low XMM/V writes, highest lanes, P/FFR bits,
    f16/f32/f64, signed zero/raw NaNs and directed rounding,
    including rejection and stale writes in both languages.

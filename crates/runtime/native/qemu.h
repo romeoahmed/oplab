@@ -66,6 +66,9 @@ typedef struct {
   uint64_t size;
   int32_t exception;
   bool repeated;
+  uint32_t watch_index; /* One-based index, zero when no access matched. */
+  uint32_t watch_access;
+  uint64_t watch_address;
 } OplabExit;
 
 typedef enum {
@@ -79,6 +82,11 @@ typedef enum {
   OPLAB_VECTOR_LENGTH
 } OplabRegister;
 typedef struct OplabCpu OplabCpu;
+typedef struct {
+  uint64_t address;
+  uint32_t length;
+  uint32_t access; /* Read=1, write=2, both=3. */
+} OplabWatchpoint;
 
 /* One SDK per guest, retained for the process lifetime. Buffers are borrowed only for
  * each call. Memory permissions use R=1, W=2, X=4, unlike ELF permission bits. */
@@ -96,6 +104,7 @@ typedef struct {
   OplabExit (*translate)(OplabCpu *, OplabBlock *);
   void (*release)(OplabBlock *);
   OplabExit (*execute)(OplabCpu *, const OplabBlock *, uintptr_t entry);
+  bool (*watchpoints)(OplabCpu *, const OplabWatchpoint *, size_t);
   uintptr_t load;
   uintptr_t store;
   uintptr_t load_pair;

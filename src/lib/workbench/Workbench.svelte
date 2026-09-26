@@ -4,6 +4,7 @@
   import { setWindowTitle } from '$lib/desktop/window';
   import { createLocaleController } from '$lib/i18n/locale.svelte';
   import * as m from '$lib/paraglide/messages.js';
+  import type { DataWatchpoint } from '$lib/protocol/generated/DataWatchpoint';
   import type { RoundingMode } from '$lib/protocol/generated/RoundingMode';
   import type { VectorWrite } from '$lib/protocol/generated/VectorWrite';
   import type { Diagnostic } from '@codemirror/lint';
@@ -49,7 +50,7 @@
   import MemoryPatch from './machine/MemoryPatch.svelte';
   import Trace from './machine/Trace.svelte';
   import { defaultPreferences, readPreferences } from './preferences';
-  import { problemLabel } from './presentation';
+  import { canResume, problemLabel } from './presentation';
   import Separator from './Separator.svelte';
   import ToolbarAction from './ToolbarAction.svelte';
 
@@ -171,10 +172,7 @@
     await instructions?.reveal(address);
   }
   const running = $derived(observation?.status.type === 'running');
-  const resumable = $derived(
-    observation !== undefined &&
-      ['ready', 'paused', 'stepped', 'breakpoint', 'target'].includes(observation.status.type),
-  );
+  const resumable = $derived(canResume(observation?.status));
   const sourceDetails = $derived(sourceInfo(work.source));
   const canAssemble = $derived(work.connected && !work.building && work.source.trim().length > 0);
   const actions = $derived([
@@ -600,6 +598,9 @@
             if (work.loadedDocument !== null) work.selectDocument(work.loadedDocument);
           }}
           editable={work.connected && resumable && !work.controlling}
+          onwatchpoints={(points: DataWatchpoint[]) => {
+            void work.watchpoints(points);
+          }}
           onbreakpoint={(address: string, enabled: boolean) => {
             void work.breakpoint(address, enabled);
           }}

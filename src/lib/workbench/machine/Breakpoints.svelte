@@ -3,7 +3,7 @@
   import type { Locale } from '$lib/paraglide/runtime';
   import { Circle, Plus, Trash } from '@lucide/svelte';
 
-  import './breakpoints.css';
+  import './debugging.css';
 
   const {
     addresses,
@@ -21,7 +21,7 @@
   const id = $props.id();
 </script>
 
-<section class="breakpoints" aria-label={m.breakpoints({}, options)}>
+<section class="debug-points" aria-label={m.breakpoints({}, options)}>
   <h3>
     <Circle size={13} aria-hidden="true" />{m.breakpoints({}, options)}<span
       >{addresses.length} / 256</span
@@ -33,14 +33,15 @@
       onchange(address, true);
     }}
   >
-    <label class="sr-only" for={id}>{m.breakpoint_address({}, options)}</label>
-    <input {id} required bind:value={address} spellcheck="false" placeholder="0x1000" />
-    <button
-      class="icon-button"
-      disabled={disabled || addresses.length >= 256}
-      aria-label={m.add_breakpoint({}, options)}
-      title={m.add_breakpoint({}, options)}><Plus size={15} aria-hidden="true" /></button
-    >
+    <fieldset disabled={disabled || addresses.length >= 256}>
+      <label class="sr-only" for={id}>{m.breakpoint_address({}, options)}</label>
+      <input {id} required bind:value={address} spellcheck="false" placeholder="0x1000" />
+      <button
+        class="icon-button"
+        aria-label={m.add_breakpoint({}, options)}
+        title={m.add_breakpoint({}, options)}><Plus size={15} aria-hidden="true" /></button
+      >
+    </fieldset>
   </form>
   {#if addresses.length === 0}<p class="muted-note">{m.breakpoints_hint({}, options)}</p>{:else}
     <ul>

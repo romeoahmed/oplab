@@ -70,14 +70,20 @@ test('keyboard import handles cancellation and failure, then accepts a retry', a
     .mockResolvedValueOnce(new Uint8Array([0xff]))
     .mockResolvedValueOnce(new TextEncoder().encode(input.source));
   await render(FileMenu, input);
-  for (const error of [null, 'file_read', 'file_encoding', null]) {
-    await page.getByRole('button', { name: en.files, exact: true }).click();
-    await userEvent.keyboard('{Home}{Enter}');
-    await expect.element(page.getByRole('button', { name: en.files, exact: true })).toBeEnabled();
-    expect(input.onerror).toHaveBeenLastCalledWith(error);
+  const trigger = page.getByRole('button', { name: en.files, exact: true });
+  for (const [index, error] of [null, 'file_read', 'file_encoding', null].entries()) {
+    trigger.element().focus();
+    await userEvent.keyboard('{ArrowDown}');
+    await expect
+      .element(page.getByRole('menuitem', { name: en.import_source, exact: true }))
+      .toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect.poll(() => input.port.open).toHaveBeenCalledTimes(index + 1);
+    await expect.poll(() => input.onerror).toHaveBeenLastCalledWith(error);
+    await expect.element(trigger).toBeEnabled();
     if (error !== null) expect(input.onsource).not.toHaveBeenCalled();
   }
-  expect(input.onsource).toHaveBeenCalledExactlyOnceWith(input.source);
+  await expect.poll(() => input.onsource).toHaveBeenCalledExactlyOnceWith(input.source);
   expect(input.onbinary).not.toHaveBeenCalled();
 });
 

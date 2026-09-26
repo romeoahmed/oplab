@@ -201,6 +201,17 @@ impl Cpu {
             )
         })
     }
+    pub(crate) fn watchpoints(&mut self, points: &[abi::OplabWatchpoint]) -> Result<(), Error> {
+        // SAFETY: the SDK validates and copies these call-scoped range descriptors.
+        let ok = unsafe {
+            self.backend.api.watchpoints.ok_or(Error::Native)?(
+                self.handle.as_ptr(),
+                points.as_ptr(),
+                points.len(),
+            )
+        };
+        ok.then_some(()).ok_or(Error::Native)
+    }
     pub(crate) const fn memory_helpers(&self) -> [usize; 4] {
         let api = &self.backend.api;
         [api.load, api.store, api.load_pair, api.store_pair]

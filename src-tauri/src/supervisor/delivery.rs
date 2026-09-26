@@ -6,12 +6,13 @@ use oplab_core::protocol::{
     stream::ObservationUpdate,
     transport::{self, StreamMessage},
 };
+use std::sync::Arc;
 use tauri::ipc::{Channel, InvokeResponseBody};
 
 pub(super) struct Delivery {
     channel: Channel,
     waiting: Option<(Counter, Counter)>,
-    latest: Option<StreamMessage>,
+    latest: Option<Arc<StreamMessage>>,
 }
 
 impl Delivery {
@@ -23,7 +24,7 @@ impl Delivery {
         }
     }
 
-    pub(super) fn offer(&mut self, message: StreamMessage) -> Result<(), DesktopFailure> {
+    pub(super) fn offer(&mut self, message: Arc<StreamMessage>) -> Result<(), DesktopFailure> {
         self.latest = Some(message);
         self.flush()
     }

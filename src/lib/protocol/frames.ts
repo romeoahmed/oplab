@@ -69,7 +69,9 @@ class Reader {
  * Encode a desktop call and its declared binary payload as one contiguous message.
  *
  * @param payload - Load image or memory patch; otherwise `null`.
- * @throws RangeError - Metadata disagrees with the payload or a size limit is exceeded.
+ *
+ * @throws RangeError
+ * Metadata disagrees with the payload or a size limit is exceeded.
  */
 export function encodeCall(call: DesktopCall, payload: Uint8Array | null): Uint8Array {
   const command: Command = call.command;
@@ -110,9 +112,15 @@ export function encodeCall(call: DesktopCall, payload: Uint8Array | null): Uint8
  *
  * @returns Owned payload buffers in wire order: object then image for assembly,
  * or a single memory window for an observation.
- * @throws RangeError - Framing, lengths, chunk boundaries or trailing bytes are invalid.
- * @throws TypeError - A JSON body is not valid UTF-8.
- * @throws SyntaxError - A control body is not valid JSON.
+ *
+ * @throws RangeError
+ * Framing, lengths, chunk boundaries or trailing bytes are invalid.
+ *
+ * @throws TypeError
+ * A JSON body is not valid UTF-8.
+ *
+ * @throws SyntaxError
+ * A control body is not valid JSON.
  */
 export function decodeResponse(buffer: ArrayBuffer): {
   response: Response;
@@ -136,9 +144,15 @@ export function decodeResponse(buffer: ArrayBuffer): {
  * Decode a Rust-validated subscription event and its complete memory window.
  *
  * @returns The event and its owned memory buffer; the `memory` field is `null` when absent.
- * @throws RangeError - Framing, memory bounds or payload completeness is invalid.
- * @throws TypeError - A JSON body is not valid UTF-8.
- * @throws SyntaxError - An event body is not valid JSON.
+ *
+ * @throws RangeError
+ * Framing, memory bounds or payload completeness is invalid.
+ *
+ * @throws TypeError
+ * A JSON body is not valid UTF-8.
+ *
+ * @throws SyntaxError
+ * An event body is not valid JSON.
  */
 export function decodeStream(buffer: ArrayBuffer): {
   event: StreamEvent;

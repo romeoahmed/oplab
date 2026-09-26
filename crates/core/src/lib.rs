@@ -13,3 +13,4 @@ pub mod policy;
 pub mod protocol;
 pub mod registers;
 pub mod target;
+pub mod watchpoint;

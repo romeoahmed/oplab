@@ -54,8 +54,9 @@ pub enum RegisterUpdate {
 
 /// A coherent update relative to the last delivered subscription sample.
 ///
-/// Status, counters and fault are current; unchanged registers, memory and breakpoints
-/// come from `base`. Breakpoint changes require a full observation.
+/// Status, counters and fault are current. Unchanged registers and memory, plus
+/// breakpoint and watchpoint sets, come from `base`. Changes to either set or the
+/// memory window metadata require a full observation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationDelta {

@@ -19,28 +19,31 @@ See [runtime](runtime.md) for boundaries and [development](development.md) for s
 
 ## Implemented
 
-| Area             | Available behavior                                                                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Assembly         | LLVM 23 MC/LLD through CXX/C++23; unchanged GNU-style source, separate compile/link APIs and complete ELF object/image output                                                        |
-| Loading          | Validated static ELF64 program headers, entry, permissions, BSS and padding; raw-code loading in desktop/worker/CLI                                                                  |
-| Execution        | Both guests; step/run/pause/stop/reset, explicit completion and budgets, managed address breakpoints, temporary run targets, call step-over, bounded opt-in trace and fault outcomes |
-| Initial state    | Canonical GPRs and extra zero-filled mappings in desktop/worker/CLI; shared validation, failed-load preservation and reset to retained setup                                         |
-| Live editing     | Ready/paused GPR/alias/PC/flag writes, full YMM/Z/P/FFR and lane edits, FP rounding and memory patches (4 KiB desktop, 64 KiB engine/worker); reset restores initial state           |
-| Inspection       | Bounded raw/ELF-segment/observed-memory disassembly and on-demand instruction metadata in desktop/worker/CLI; static recognition remains distinct from execution support             |
-| Editor           | GNU-aware CodeMirror/Lezer highlighting and completion, block folding, literal-label navigation, search/history/comments and build-scoped Unicode diagnostics                        |
-| Source debugging | Build-scoped DWARF points, bidirectional source/instruction navigation, current execution line, atomic grouped source breakpoints and run-to-cursor                                  |
-| Workbench        | Source tabs/list with independent editor/build state, quota-aware draft recovery, explicit machine provenance, draggable/keyboard-adjustable panels and focus mode                   |
-| Files            | Native UTF-8 source and exact-byte import/export, complete ELF exports, bounded I/O and atomic replacement with paths kept native                                                    |
-| CLI              | Source/ELF/raw execution, explicit completion and instruction/time limits, final JSON registers/faults and optional bounded memory                                                   |
-| Delivery         | Bounded framing, correlated requests, assembly coalescing/cancellation, reserved output, full/delta observations and orderly shutdown                                                |
-| Supervision      | View leases, deadlines/RSS monitoring, uncertain outcomes, bounded WebView delivery, kill/reap and explicit worker recovery                                                          |
-| Presentation     | English/Simplified Chinese, self-hosted/system monospace, native CSS, Bits UI, Lucide and application icon assets                                                                    |
-| Tooling          | Workspace dependencies/lints, clap CLI/xtask, native build lifecycles, strict checks, contract generation and isolated behavior/property tests                                       |
+| Area             | Available behavior                                                                                                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Assembly         | LLVM 23 MC/LLD through CXX/C++23; unchanged GNU-style source, separate compile/link APIs and complete ELF object/image output                                                             |
+| Loading          | Validated static ELF64 program headers, entry, permissions, BSS and padding; raw-code loading in desktop/worker/CLI                                                                       |
+| Execution        | Both guests; step/run/pause/stop/reset, explicit completion and budgets, managed address/data breakpoints, temporary run targets, call step-over, bounded opt-in trace and fault outcomes |
+| Initial state    | Canonical GPRs and extra zero-filled mappings in desktop/worker/CLI; shared validation, failed-load preservation and reset to retained setup                                              |
+| Live editing     | Ready/paused GPR/alias/PC/flag writes, full YMM/Z/P/FFR and lane edits, FP rounding and memory patches (4 KiB desktop, 64 KiB engine/worker); reset restores initial state                |
+| Inspection       | Bounded raw/ELF-segment/observed-memory disassembly and on-demand instruction metadata in desktop/worker/CLI; static recognition remains distinct from execution support                  |
+| Editor           | GNU-aware CodeMirror/Lezer highlighting and completion, block folding, literal-label navigation, search/history/comments and build-scoped Unicode diagnostics                             |
+| Source debugging | Build-scoped DWARF points, bidirectional source/instruction navigation, current execution line, atomic grouped source breakpoints and run-to-cursor                                       |
+| Workbench        | Source tabs/list with independent editor/build state, quota-aware draft recovery, explicit machine provenance, draggable/keyboard-adjustable panels and focus mode                        |
+| Files            | Native UTF-8 source and exact-byte import/export, complete ELF exports, bounded I/O and atomic replacement with paths kept native                                                         |
+| CLI              | Source/ELF/raw execution, explicit completion and instruction/time limits, final JSON registers/faults and optional bounded memory                                                        |
+| Delivery         | Bounded framing, correlated requests, assembly coalescing/cancellation, reserved output, full/delta observations and orderly shutdown                                                     |
+| Supervision      | View leases, deadlines/RSS monitoring, uncertain outcomes, bounded WebView delivery, kill/reap and explicit worker recovery                                                               |
+| Presentation     | English/Simplified Chinese, self-hosted/system monospace, native CSS, Bits UI, Lucide and application icon assets                                                                         |
+| Tooling          | Workspace dependencies/lints, clap CLI/xtask, native build lifecycles, strict checks, contract generation and isolated behavior/property tests                                            |
+
+Data watchpoints are implemented through QEMU's native matching, with post-dispatch
+pauses, REP continuation, reset retention, desktop controls and CLI stop reports.
+AArch64 flat RAM now has explicit Normal-memory semantics.
 
 ## Next product work
 
-1. **Debugging:** add data watchpoints with explicit before/after-effect semantics.
-   Define frame/unwind policy before step-out, and source provenance before supporting
+1. **Debugging:** define frame/unwind policy before step-out, and source provenance before supporting
    user-authored DWARF or mappings for modified code.
 2. **Execution coverage:** extend the verified guest/extension matrix, including
    exceptions, vector-length transitions, undefined flags and self-modifying code.
@@ -85,53 +88,63 @@ Evidence below was recorded on Apple Silicon macOS. Automated suites, browser
 fixtures, desktop acceptance and sanitizer runs establish different guarantees;
 they were not one complete matrix.
 
-### Boundary cleanup — 2026-09-20
+### Current baseline — 2026-09-26
 
-Rebuilt the QEMU/XED SDK with LLVM/LLD 23.1.1. `cargo xtask check` passed;
-`cargo xtask test` passed **158 Rust tests**, including doctests, and **158 frontend
-tests**. New attachment tests reject obsolete replies, failures and acknowledgements
-after reconnect/detach, preserve current failures and release stale connection leases.
-Recovery tests now use only the current workspace schema. The supervisor retains
-session state, not unused artifact metadata.
+| Scope   | Recorded result                                                                                                                                              |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SDK     | Both QEMU guest adapters rebuilt with LLVM/LLD 23.1.2                                                                                                        |
+| Checks  | `cargo xtask check`, including native linting and 56 generated declarations, passed                                                                          |
+| Tests   | **170 Rust tests**, including doctests, and **161 frontend tests** passed; the frontend suite was rerun with localhost access after a sandbox startup denial |
+| Desktop | Fresh macOS debug bundle built through normal Tauri hooks; both guests exercised through real IPC                                                            |
 
-A fresh macOS debug bundle built through the normal Tauri hooks. Desktop acceptance
-restored existing drafts, assembled/loaded/ran both AVX2 and SVE2 examples, and
-verified checksum 4814 in registers and memory. Switching documents preserved the
-loaded machine and its source identity. This run did not repeat sanitizers or
-establish installed distribution, other-host or measured performance evidence.
+Data-watchpoint coverage includes cross-page and overlapping ranges, access filtering,
+same-value stores, REP continuation, AVX2/SVE and atomic stores, inactive SVE lanes,
+fault priority, fetch exclusion and reset retention. Range properties cover
+wraparound; fixed cases verify the 32/33-input boundary. Native tests verify complete
+affected bytes and exact non-hit completion. AArch64 regressions distinguish ordinary
+unaligned Normal-memory accesses from instructions requiring alignment.
 
-### Workbench — 2026-09-20
+Worker/CLI tests verify atomic rejection, hit delivery and resulting memory. Stream
+properties vary range, length and access independently, including replacement,
+inheritance and clearing. Browser fixtures verify pending keyboard edits,
+rejection/retry and removal without implementing backend behavior in the fixture.
 
-The source-tab acceptance run passed **154 frontend tests**, Svelte/TypeScript checks, ESLint,
-Stylelint, Knip and formatting. Coverage includes:
+Desktop acceptance verified AVX2 and SVE2 watchpoint creation, post-store pauses,
+continuation to checksum 4814, x86 reset retention, replacement on load and bilingual
+controls. The AVX2 flow also exercised trace inspection. Drafts and locale were
+preserved, and the app and worker exited after acceptance. Built-in browser checks
+covered search, line navigation and 880×600 / 414px layouts; the desktop pass covered
+native select alignment.
 
-- Independent document text, targets, history, search, builds and recovery; many-tab
-  navigation, rename/title updates and locale changes.
-- Late artifacts/diagnostics for inactive or closed sources, captured load ownership,
-  source closure without machine loss and import identity conflicts.
-- Per-tab close buttons, middle click, Delete, confirmation/cancellation and direct
-  empty-source closure in both languages. Background closure preserves the active
-  edit and undo history; closing the last document creates a fresh editor state.
-- Workspace identity/order properties, damaged entries, quota failures, retained
-  recovery data and independent binary imports.
-- Keyboard divider limits and persisted panel sizes.
+The subsequent repository audit rebuilt the SDK and debug bundle, reran workspace
+checks and tests, and removed duplicate observation-cache/delivery copies, buffered
+pipe writes with per-frame flushes, and eliminated temporary address-format strings
+during wire decoding. Properties verify memory replacement/inheritance and that
+later deltas leave previously delivered snapshots unchanged. This audit did not
+repeat desktop interaction or sanitizer acceptance; performance gains have not
+been benchmarked.
 
-Built-in browser acceptance covered both divider drags, long names, selected-tab
-visibility after resizing, source-list navigation and upper-right search/line panels.
-880×600 and 414px layouts were checked; the narrow layout had no horizontal overflow
-and hid the dividers.
+### Documents and delivery — 2026-09-20
 
-Fresh macOS debug bundles verified English/Chinese interaction, native title updates,
-renaming, keyboard navigation/resizing, confirmation cancellation and background
-closure while preserving existing drafts. Earlier runs that day assembled and ran
-both examples: AArch64 completed while another source was selected; x86_64 stepped
-and completed after returning through its source link. Both produced checksum 4814.
+Native checks/tests passed after an SDK rebuild with LLVM/LLD 23.1.1. Attachment
+regressions reject obsolete replies, failures and acknowledgements after
+reconnect/detach, preserve current failures and release stale leases.
 
-These frontend runs reused unchanged staged worker/QEMU libraries. The latest tab
-acceptance did not repeat guest execution; none repeated the native SDK build,
-Rust tests or sanitizers. One register-form keyboard submission failed in an earlier
-run, then passed in isolation and subsequent full runs without assertion changes;
-no root cause was established.
+Workbench coverage verifies independent text/target/history/search/builds,
+late outcomes for inactive or closed sources, import conflicts, recovery quotas,
+per-tab closure and a fresh editor after closing the last source. Background closure
+preserves active edits and undo; closing any source preserves the loaded machine.
+
+Built-in browser acceptance covered divider dragging, long names, selected-tab
+visibility, source-list navigation and upper-right search/line panels. At 880×600
+and 414px, controls remained reachable; the narrow layout hid dividers without
+horizontal overflow. Fresh macOS debug bundles verified bilingual interaction,
+native titles, renaming, keyboard navigation/resizing and confirmation cancellation.
+Separate runs executed both examples to checksum 4814 while switching documents.
+The final tab-only acceptance reused native binaries and did not repeat guest execution.
+
+An earlier register-form keyboard submission failed, then passed in isolation and
+subsequent full runs without assertion changes; its root cause remains unresolved.
 
 ### Native baseline — 2026-09-17
 

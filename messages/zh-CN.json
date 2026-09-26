@@ -302,5 +302,17 @@
   "loaded_document": "机器来源文档",
   "reveal_loaded_document": "查看机器来源",
   "resize_inspector": "调整机器面板宽度",
-  "resize_observations": "调整观察区高度"
+  "resize_observations": "调整观察区高度",
+  "state_watchpoint": "数据观察点",
+  "watchpoints": "数据观察点",
+  "watchpoints_hint": "访问此范围的指令执行后暂停；REP 在本次迭代后暂停。若发生故障，优先报告故障。",
+  "watch_address": "起始地址",
+  "watch_length": "长度（字节）",
+  "watch_access": "访问类型",
+  "watch_read": "读取",
+  "watch_write": "写入",
+  "watch_read_write": "读写",
+  "add_watchpoint": "添加数据观察点",
+  "remove_watchpoint": "移除 {address} 的数据观察点",
+  "watchpoint_stopped": "执行后暂停：{access} {address} · 指令 {pc}。"
 }

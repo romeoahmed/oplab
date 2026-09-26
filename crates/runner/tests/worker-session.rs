@@ -1063,3 +1063,84 @@ fn temporary_targets_and_trace_survive_wire_transport_but_not_reset_identity() -
     }
     Ok(())
 }
+
+#[test]
+fn data_watchpoints_round_trip_reject_invalid_replacements_and_retain_reset_configuration()
+-> TestResult {
+    use oplab_core::{protocol::execution::DataWatchpoint, watchpoint::WatchAccess};
+    for (target, source) in [
+        (
+            Target::X86_64,
+            "lea rdi, [rip + output]\nmov qword ptr [rdi], 42\ndone: nop\n.data\noutput: .quad 0",
+        ),
+        (
+            Target::Aarch64,
+            "adr x1, output\nmov x0, 42\nstr x0, [x1]\ndone: nop\n.data\noutput: .quad 0",
+        ),
+    ] {
+        let (image, done, output) = fixture(target, source)?;
+        interactive::worker(|client| {
+            client.request(Command::Hello { version: VERSION }, None)?;
+            let loaded = load(client, target, &image, done, 100, None)?;
+            let key = observed(&loaded)?.key;
+            let point = DataWatchpoint {
+                address: output,
+                length: 8,
+                access: WatchAccess::Write,
+            };
+            let configured = execute(client, key, SessionAction::Watchpoints(vec![point]))?;
+            assert_eq!(observed(&configured)?.watchpoints, [point]);
+            for invalid in [
+                vec![
+                    DataWatchpoint {
+                        access: WatchAccess::Read,
+                        ..point
+                    },
+                    DataWatchpoint { length: 0, ..point },
+                ],
+                vec![DataWatchpoint {
+                    address: address(u64::MAX),
+                    length: 2,
+                    ..point
+                }],
+                vec![point; 33],
+            ] {
+                let reply = execute(client, key, SessionAction::Watchpoints(invalid))?;
+                assert!(
+                    matches!(reply.response.result, Reply::Error(error) if error.code == DiagnosticCode::InvalidInput)
+                );
+            }
+            let retained = execute(client, key, SessionAction::Observe { memory: None })?;
+            assert_eq!(observed(&retained)?.watchpoints, [point]);
+            execute(client, key, SessionAction::Run)?;
+            let paused = settle(client, key)?;
+            let Status::Watchpoint(hit) = observed(&paused)?.status else {
+                return Err("watchpoint missing".into());
+            };
+            assert_eq!(hit.watchpoint, point);
+            assert_eq!(hit.address, output);
+            let memory = execute(
+                client,
+                key,
+                SessionAction::Observe {
+                    memory: Some(MemoryWindow {
+                        address: output,
+                        length: 8,
+                    }),
+                },
+            )?;
+            assert_eq!(memory.payloads, [42_u64.to_le_bytes().to_vec()]);
+            let reset = execute(client, key, SessionAction::Reset)?;
+            let restored = observed(&reset)?;
+            assert_eq!(restored.watchpoints, [point]);
+            assert_ne!(restored.key, key);
+            let stale = execute(client, key, SessionAction::Watchpoints(Vec::new()))?;
+            assert!(
+                matches!(stale.response.result, Reply::Error(error) if error.code == DiagnosticCode::StaleSession)
+            );
+            client.request(Command::Shutdown, None)?;
+            Ok(())
+        })?;
+    }
+    Ok(())
+}

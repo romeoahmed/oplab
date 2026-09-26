@@ -3,11 +3,12 @@ use oplab_core::registers::VectorBits;
 use oplab_core::{
     address::Address,
     protocol::{
-        execution::{MemoryWindow, Registers, SessionKey},
+        execution::{DataWatchpoint, MemoryWindow, Registers, SessionKey},
         scalar::{Counter, HexAddress},
         stream::ObservationDelta,
     },
     target::Target,
+    watchpoint::WatchAccess,
 };
 use proptest::prelude::*;
 
@@ -17,19 +18,31 @@ proptest! {
         target in prop::sample::select(vec![Target::X86_64, Target::Aarch64]),
         samples in prop::collection::vec((
             prop::collection::btree_set(any::<u64>(), 0..16),
+            prop::collection::btree_set(any::<u64>(), 0..8),
             any::<[[u8; 256]; 32]>(), any::<[[u8; 32]; 17]>(), 1_u16..=16, any::<u32>(),
+            prop::collection::vec(any::<u8>(), 1..=256),
         ), 1..16),
     ) {
         let mut cache = Cache::default();
         let mut sequence = 0;
-        for (set, vectors, predicates, vq, control) in samples {
+        for (set, watches, vectors, predicates, vq, control, bytes) in samples {
             sequence += 1;
             let mut expected = sample(target, sequence);
             expected.breakpoints = set.into_iter().map(|value| HexAddress::new(Address::new(value))).collect();
-            cache.apply(StreamMessage {
+            expected.watchpoints = watches.into_iter().map(|value| DataWatchpoint {
+                address: HexAddress::new(Address::new(value)), length: 1, access: WatchAccess::ReadWrite,
+            }).collect();
+            let length = u32::try_from(bytes.len()).map_err(|error| TestCaseError::fail(error.to_string()))?;
+            expected.memory = Some(MemoryWindow {
+                address: HexAddress::new(Address::new(0x2000)), length,
+            });
+            let initial = cache.apply(StreamMessage {
                 event: StreamEvent { subscription: Counter::new(3), update: ObservationUpdate::Full(expected.clone()) },
-                memory: None,
+                memory: Some(bytes.clone()),
             }).map_err(|error| TestCaseError::fail(format!("{error:?}")))?;
+            let initial_observation = expected.clone();
+            let replaced_bytes: Vec<_> = bytes.iter().map(|byte| !byte).collect();
+            let mut expected_memory = bytes.clone();
             let mut replacement = expected.registers.clone();
             match &mut replacement {
                 Some(Registers::X86_64 { ymm, mxcsr, .. }) => {
@@ -46,10 +59,10 @@ proptest! {
                 }
                 None => return Err(TestCaseError::fail("missing register bank")),
             }
-            for update in [
-                RegisterUpdate::Replace(replacement.map(Box::new)),
-                RegisterUpdate::Unchanged,
-                RegisterUpdate::Replace(None),
+            for (update, memory) in [
+                (RegisterUpdate::Replace(replacement.map(Box::new)), Some(replaced_bytes)),
+                (RegisterUpdate::Unchanged, None),
+                (RegisterUpdate::Replace(None), None),
             ] {
                 let base = expected.sequence;
                 sequence += 1;
@@ -58,6 +71,10 @@ proptest! {
                     expected.registers = bank.as_deref().cloned();
                     if bank.is_none() { expected.status = Status::Crashed; }
                 }
+                let memory_bytes = memory.as_ref().map_or(0, |bytes| {
+                    expected_memory = bytes.clone();
+                    length
+                });
                 let delivered = cache.apply(StreamMessage {
                     event: StreamEvent {
                         subscription: Counter::new(3),
@@ -65,12 +82,15 @@ proptest! {
                             key: expected.key, base, sequence: expected.sequence,
                             status: expected.status, instructions: expected.instructions,
                             dispatches: expected.dispatches, fault: None,
-                            registers: update, memory_bytes: 0,
+                            registers: update, memory_bytes,
                         })),
                     },
-                    memory: None,
+                    memory,
                 }).map_err(|error| TestCaseError::fail(format!("{error:?}")))?;
-                prop_assert_eq!(delivered.event.update, ObservationUpdate::Full(expected.clone()));
+                prop_assert_eq!(&delivered.event.update, &ObservationUpdate::Full(expected.clone()));
+                prop_assert_eq!(delivered.memory.as_ref(), Some(&expected_memory));
+                prop_assert_eq!(&initial.event.update, &ObservationUpdate::Full(initial_observation.clone()));
+                prop_assert_eq!(initial.memory.as_ref(), Some(&bytes));
             }
         }
     }
@@ -110,6 +130,7 @@ fn sample(target: Target, sequence: u64) -> Box<Observation> {
         }),
         fault: None,
         breakpoints: Vec::new(),
+        watchpoints: Vec::new(),
         memory: None,
     })
 }
@@ -204,7 +225,7 @@ fn rejected_deltas_preserve_the_last_valid_baseline() {
             assert_eq!(
                 cache
                     .apply(packet(delta.clone()))
-                    .map(|message| (message.event, message.memory)),
+                    .map(|message| (message.event.clone(), message.memory.clone())),
                 Ok((expected.event.clone(), expected.memory.clone()))
             );
         }

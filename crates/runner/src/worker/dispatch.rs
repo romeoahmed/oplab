@@ -97,7 +97,7 @@ fn write_messages(
     replies: &outbox::Receiver,
     events: &SyncSender<Event>,
 ) -> Result<(), WorkerError> {
-    let mut output = io::stdout().lock();
+    let mut output = io::BufWriter::new(io::stdout().lock());
     let mut encoder = stream::Encoder::default();
     while let Some(message) = replies.receive()? {
         // A full event queue already contains work that will recheck capacity.

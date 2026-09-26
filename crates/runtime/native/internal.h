@@ -1,6 +1,7 @@
 #pragma once
 
 /* QEMU translation units include qemu/osdep.h before this header. */
+#include "exec/breakpoint.h"
 #include "exec/memop.h"
 #include "exec/mmu-access-type.h"
 #include "exec/translation-block.h"
@@ -30,8 +31,12 @@ struct OplabCpu {
   uint64_t mapped;
   OplabExit exit;
   TranslationBlock block;
+  CPUWatchpoint *watchpoints[32];
+  size_t watch_count;
 };
 
+bool oplab_watchpoint_hit(CPUState *, CPUWatchpoint *);
+bool oplab_watchpoints(OplabCpu *, const OplabWatchpoint *, size_t);
 void oplab_enter(void);
 void oplab_leave(void);
 void oplab_state_init(CPUState *);

@@ -24,7 +24,8 @@ The editor starts blank on first launch and restores valid drafts on reopening.
 2. **Assemble** (`Ctrl+Enter` / `⌘+Enter`), then **Load artifact**.
 3. **Step** (`F11`), **Step over** (`F10`) or **Run** (`F5`).
 4. Inspect `output` in **Memory** and checksum **4814** (`0x12ce`) in RAX or X0.
-5. **Reset** restores the loaded program and initial state, retaining breakpoints.
+5. **Reset** restores the loaded program and initial state, retaining address
+   breakpoints and data watchpoints.
 
 Both examples brighten eight RGBA pixels while preserving alpha, using AVX2 or a
 vector-length-agnostic SVE2 loop. Assembly, loading and execution are explicit
@@ -34,34 +35,27 @@ services are not supplied implicitly.
 
 ## What you can do
 
-- **Edit GNU-style assembly:** CodeMirror highlighting, completion, folding,
-  label navigation, search/replacement, history and source diagnostics.
-- **Debug source:** set line breakpoints (`F9`), navigate between source and
-  instructions, and highlight the current execution line. Debug links belong to
-  the assembled revision and are cleared when the source changes. Run to the cursor
-  with `Ctrl+F10` / `⌘+F10` without adding a persistent breakpoint.
-- **Follow execution:** step over calls, run to an address and optionally record the last
-  512 instruction starts. Recording is off by default; history contains addresses
-  and counters, not replayable machine snapshots.
-- **Run ELF or raw code:** step, run, pause, stop, reset and set address breakpoints.
-  Configure initial GPRs and additional memory before loading.
-- **Inspect effects:** integer registers, flags, memory, disassembly and on-demand
-  instruction analysis. SIMD views include YMM/Z, low XMM/V aliases and SVE P/FFR,
-  with exact bits, integer lanes and f16/f32/f64 interpretation.
-- **Change live state:** edit registers, aliases, PC, flags, SIMD values/lanes and
-  floating-point rounding while ready or paused; patch up to 4 KiB of data or code.
-- **Use standard files:** import/export UTF-8 assembly and raw machine bytes;
-  export complete ELF objects and executables through native dialogs.
-- **Work across documents:** keep independent undo, search, architecture, load
-  inputs and artifacts. Switch through tabs, the source list or Ctrl+PageUp/PageDown.
-  Each tab has its own close button; closing a background tab preserves the active
-  editor. Rename documents and return to the loaded machine's source without
-  replacing its state. Drafts recover after restart; builds and editor history do not.
-- **Arrange the workspace:** drag panel dividers or focus them and use arrow keys;
-  double-click to reset. Adjust font size, wrapping and focus mode with offline
-  JetBrains Mono or system monospace.
-- **Automate experiments:** run source, ELF or raw code from stdin and receive
-  final state as JSON through the [CLI](docs/protocol.md#cli).
+- **Edit and debug assembly:** GNU-aware highlighting, completion, folding, label
+  navigation, search/replacement and diagnostics. Set source breakpoints (`F9`),
+  navigate between source and instructions, or run to the cursor (`Ctrl+F10` / `⌘+F10`).
+  Source links belong to the assembled revision and clear when it changes.
+- **Control execution:** run ELF or raw code with explicit initial registers and
+  memory. Step over calls, run to an address, pause on data reads/writes, and
+  optionally record the last 512 instruction starts. History records addresses and
+  counters; it does not replay machine state.
+- **Inspect and edit state:** registers, flags, memory, disassembly and instruction
+  metadata. View YMM/Z vectors and low XMM/V aliases as exact bits, integer lanes
+  or f16/f32/f64, and inspect SVE P/FFR predicates. While ready or paused, edit
+  registers, lanes and floating-point rounding, or patch up to 4 KiB of data or code.
+- **Work across documents:** independent source, undo, search, architecture, load
+  inputs and artifacts. Switch by tabs, source list or Ctrl+PageUp/PageDown; closing
+  a source leaves the loaded machine intact. Drafts recover after restart; builds
+  and editor history do not.
+- **Use standard files:** import/export UTF-8 assembly and raw bytes; export complete
+  ELF objects and executables through native dialogs. Automate source, ELF or raw-code
+  execution with JSON results through the [CLI](docs/protocol.md#cli).
+- **Arrange the workspace:** resizable panels, keyboard dividers, focus mode,
+  wrapping and font sizes. Choose offline JetBrains Mono or system monospace.
 
 For raw execution, import bytes from **Files**, set placement in **Raw code**, then
 load explicitly. For live disassembly, inspect memory and choose **Captured memory**
@@ -70,7 +64,7 @@ in **Instructions**.
 Both guests use a fixed QEMU MAX runtime. AVX2 and SVE/SVE2 samples execute;
 recognizing an instruction does not guarantee execution support. AVX-512 execution
 is unavailable; x87 and SME matrix state are not exposed. Broader instruction
-coverage and data watchpoints remain [planned](docs/roadmap.md#next-product-work).
+coverage remains [planned](docs/roadmap.md#next-product-work).
 
 ## Build from source
 

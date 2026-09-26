@@ -71,6 +71,11 @@ pub(crate) struct Policy {
     /// Final memory window length, from 1 to 65536 bytes; requires --memory.
     #[arg(long, requires = "memory", default_value_t = 64, value_parser = clap::value_parser!(u32).range(1..=65_536))]
     pub memory_bytes: u32,
+    /// Stop after an instruction or REP iteration accesses a watched range.
+    ///
+    /// Repeat up to 32 times; the limit applies before de-duplication.
+    #[arg(long = "watch", value_name = "ADDRESS:SIZE:r|w|rw", value_parser = super::setup::watchpoint)]
+    pub watchpoints: Vec<oplab_core::watchpoint::Watchpoint>,
 }
 
 impl Input {

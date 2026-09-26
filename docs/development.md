@@ -46,7 +46,7 @@ WebView minimums. Native CSS and Web APIs must also pass on the intended host.
 ## Native toolchain
 
 The bridge accepts **LLVM 23**, with **the same LLVM/LLD release identity** and a
-compatible C++ ABI. LLVM/LLD 23.1.1 is verified; the build does not pin that patch.
+compatible C++ ABI. LLVM/LLD 23.1.2 is verified; the build does not pin that patch.
 A compiler-only LLVM installer or a standalone `ld.lld` is insufficient. Supply:
 
 - `llvm-config`, LLVM headers and libraries with the **X86 and AArch64** targets.
@@ -55,7 +55,7 @@ A compiler-only LLVM installer or a standalone `ld.lld` is insufficient. Supply:
 - GNU C23 and C++23 compilers with a compatible standard library. The bridge uses CXX; CXX does
   not provide LLVM, an SDK, or a C++ standard library.
 - QEMU 11.1.1 and Intel XED v2026.08.23, built with `cargo xtask sdk`.
-- Git, Python, Ninja, pkg-config and GLib development files. QEMU's configure
+- Git, Python 3.11 or newer, Ninja, pkg-config and GLib development files. QEMU's configure
   creates its own Python environment and obtains its declared build dependencies.
 - `clang-format` and `clang-tidy` from the selected LLVM installation.
 
@@ -243,11 +243,13 @@ unsafe operations and native lifetime rules beside their owning boundary.
 
 - [TSDoc](https://tsdoc.org/): start with a short summary. Put additional behavior
   in `@remarks`; use `@param`, `@returns` and `@throws` only for information beyond
-  the signature. Use backticks for identifiers and units, not repeated type tags.
+  the signature. Separate each exception type into its own `@throws` block and
+  explain the failure condition. Use backticks for identifiers; TypeScript owns types.
 - [Rust](https://doc.rust-lang.org/reference/comments.html): use `//!` for modules
   and `///` for items. Separate summaries from `# Errors`, `# Panics` or `# Safety`
-  where applicable; link related items with rustdoc links. Keep useful examples
-  runnable and distinguish guest faults returned as data from infrastructure errors.
+  where applicable, with a blank documentation line after each heading. Link related
+  items with rustdoc links. Keep useful examples runnable and distinguish guest faults
+  returned as data from infrastructure errors.
 - Generated DTO comments originate in Rust. Run `cargo xtask codegen` after changing
   them; do not edit TypeScript output or generated/cache documentation.
 

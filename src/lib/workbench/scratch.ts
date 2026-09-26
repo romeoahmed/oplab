@@ -19,7 +19,8 @@ export type Scratch = {
  * Source is limited to 256 KiB of UTF-8. Address, completion and budget fields retain
  * their text; operation-specific validation happens when assembling or loading.
  *
- * @throws RangeError - The draft shape, field bounds, identity or revision is invalid.
+ * @throws RangeError
+ * The draft shape, field bounds, identity or revision is invalid.
  */
 export function readScratch(value: unknown): Scratch {
   if (

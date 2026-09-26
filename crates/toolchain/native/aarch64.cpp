@@ -91,7 +91,7 @@ Window aarch64_window(rust::Slice<const std::uint8_t> bytes, const DecodeOptions
   const auto info = own(target->createMCInstrInfo());
   const auto asm_info = own(target->createMCAsmInfo(*registers, triple, llvm::MCTargetOptions{}));
   const auto subtarget = own(target->createMCSubtargetInfo(triple, "generic", ""));
-  // Inspection recognizes extensions independently of the selected execution profile.
+  // Static recognition is independent of runtime execution support.
   auto features = subtarget->getFeatureBits();
   for (const auto &feature : subtarget->getAllProcessorFeatures()) {
     features.set(feature.Value);

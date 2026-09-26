@@ -4,7 +4,8 @@ import { formatAddress, parseAddress } from '$lib/protocol/scalars';
 /**
  * Return a view of one ELF segment's file bytes, excluding zero-fill and page padding.
  *
- * @throws RangeError - The file extent is empty, nonintegral or outside the image.
+ * @throws RangeError
+ * The file extent is empty, nonintegral or outside the image.
  */
 export function segmentBytes(image: Uint8Array, segment: ImageSegment): Uint8Array {
   const start = segment.file_offset;
@@ -27,7 +28,8 @@ export function segmentBytes(image: Uint8Array, segment: ImageSegment): Uint8Arr
  * The offset need not be an instruction boundary; the decoder validates the bytes.
  * The returned bytes share the input buffer.
  *
- * @throws RangeError - The offset, canonical base address or full input extent is invalid.
+ * @throws RangeError
+ * The offset, canonical base address or full input extent is invalid.
  */
 export function decodeWindow(bytes: Uint8Array, base: string, offset: number) {
   if (!Number.isSafeInteger(offset) || offset < 0 || offset >= bytes.length)

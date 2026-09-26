@@ -143,6 +143,7 @@ impl Encoder {
                     && base.observation.key == current.key
                     && base.observation.memory == current.memory
                     && base.observation.breakpoints == current.breakpoints
+                    && base.observation.watchpoints == current.watchpoints
                     && base.observation.sequence < current.sequence
             })
             .map_or_else(

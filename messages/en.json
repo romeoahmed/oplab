@@ -302,5 +302,17 @@
   "loaded_document": "Loaded source document",
   "reveal_loaded_document": "Show loaded source",
   "resize_inspector": "Resize machine panel",
-  "resize_observations": "Resize observation panel"
+  "resize_observations": "Resize observation panel",
+  "state_watchpoint": "Data watchpoint",
+  "watchpoints": "Data watchpoints",
+  "watchpoints_hint": "Pause after the instruction that accesses this range, or after a REP iteration. Faults take priority.",
+  "watch_address": "Start address",
+  "watch_length": "Length (bytes)",
+  "watch_access": "Access",
+  "watch_read": "Read",
+  "watch_write": "Write",
+  "watch_read_write": "Read / write",
+  "add_watchpoint": "Add data watchpoint",
+  "remove_watchpoint": "Remove data watchpoint at {address}",
+  "watchpoint_stopped": "Paused after execution: {access} at {address} · instruction {pc}."
 }

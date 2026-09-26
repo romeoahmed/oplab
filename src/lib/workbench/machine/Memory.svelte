@@ -9,21 +9,21 @@
     bytes,
     locale,
   }: { window: MemoryWindow | null; bytes: Uint8Array | null; locale: Locale } = $props();
-  const rows = $derived(
-    bytes === null || window === null
-      ? []
-      : Array.from({ length: Math.ceil(bytes.length / 16) }, (_, row) => {
-          const start = row * 16;
-          const values = Array.from(bytes.subarray(start, start + 16));
-          return {
-            address: formatAddress(parseAddress(window.address) + BigInt(start)),
-            hex: values.map((value) => value.toString(16).padStart(2, '0')).join(' '),
-            ascii: values
-              .map((value) => (value >= 32 && value <= 126 ? String.fromCharCode(value) : '·'))
-              .join(''),
-          };
-        }),
-  );
+  const rows = $derived.by(() => {
+    if (bytes === null || window === null) return [];
+    const base = parseAddress(window.address);
+    return Array.from({ length: Math.ceil(bytes.length / 16) }, (_, row) => {
+      const start = row * 16;
+      const values = Array.from(bytes.subarray(start, start + 16));
+      return {
+        address: formatAddress(base + BigInt(start)),
+        hex: values.map((value) => value.toString(16).padStart(2, '0')).join(' '),
+        ascii: values
+          .map((value) => (value >= 32 && value <= 126 ? String.fromCharCode(value) : '·'))
+          .join(''),
+      };
+    });
+  });
 </script>
 
 <div class="memory-view" aria-label={m.memory({}, { locale })}>

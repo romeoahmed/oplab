@@ -53,6 +53,8 @@
   translate: 0 -50%;
   inline-size: 26px;
   block-size: 26px;
+  min-inline-size: 26px;
+  min-block-size: 26px;
   padding: 0;
   opacity: 0;
 }

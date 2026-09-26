@@ -251,6 +251,7 @@ impl Session {
             SliceStop::Budget => self.terminate(Termination::Budget),
             SliceStop::Breakpoint(address) => self.pause_with(PauseReason::Breakpoint(address)),
             SliceStop::Target(address) => self.pause_with(PauseReason::Target(address)),
+            SliceStop::Watchpoint(hit) => self.pause_with(PauseReason::Watchpoint(hit)),
             SliceStop::Fault(fault) => {
                 self.fault = Some(fault);
                 self.terminate(Termination::GuestFault)
@@ -301,7 +302,7 @@ impl Session {
         Ok(())
     }
 
-    /// Restore the original memory and CPU conditions, retaining address breakpoints.
+    /// Restore initial memory and CPU state, retaining address breakpoints and data watchpoints.
     ///
     /// Failure preserves the previous machine and generation.
     ///
@@ -347,6 +348,29 @@ impl Session {
         self.machine.set_breakpoints(addresses, enabled)
     }
 
+    /// Replace all data watchpoints while ready/paused; an empty slice clears the set.
+    ///
+    /// Reset retains the set; a new load starts empty. The 32-input limit applies before
+    /// de-duplication. Validation failures preserve the set.
+    ///
+    /// # Errors
+    ///
+    /// Rejects illegal states and excess inputs. A native failure invalidates the session.
+    pub fn set_watchpoints(
+        &mut self,
+        points: &[oplab_core::watchpoint::Watchpoint],
+    ) -> Result<(), MachineError> {
+        self.state.require_patchable()?;
+        let result = self.machine.set_watchpoints(points);
+        self.accept_write(result)
+    }
+
+    /// Sorted, distinct watched data ranges.
+    #[must_use]
+    pub fn watchpoints(&self) -> &[oplab_core::watchpoint::Watchpoint] {
+        self.machine.watchpoints()
+    }
+
     /// Sorted address breakpoints, retained across reset and cleared by a new load.
     pub fn breakpoints(&self) -> impl Iterator<Item = Address> + '_ {
         self.machine.breakpoints()
@@ -354,9 +378,9 @@ impl Session {
 
     /// Write an integer register, subregister, instruction pointer or application flag.
     ///
-    /// Counters, breakpoints and reset inputs survive. GPR/flag writes preserve REP
-    /// continuation. Writing PC, even its current value, starts a new instruction
-    /// and rearms breakpoints; it does not execute or validate instruction bytes.
+    /// Counters, address breakpoints, data watchpoints and reset inputs survive.
+    /// GPR/flag writes preserve REP continuation. Writing PC, even its current value,
+    /// starts a new instruction and rearms breakpoints; it does not execute or validate bytes.
     ///
     /// # Errors
     ///

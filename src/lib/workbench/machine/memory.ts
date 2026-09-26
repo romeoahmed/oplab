@@ -11,7 +11,8 @@ export const patchLimit = 4096;
  * @remarks
  * Input is capped at 12,288 UTF-16 code units; decoded output is capped at 4 KiB.
  *
- * @throws RangeError - Input is empty, malformed or exceeds either limit.
+ * @throws RangeError
+ * Input is empty, malformed or exceeds either limit.
  */
 export function patchBytes(text: string): Uint8Array {
   if (text.length > patchLimit * 3 || !/^(?:[\da-f]{2}\s*)+$/i.test(text.trim()))
@@ -28,7 +29,8 @@ export function patchBytes(text: string): Uint8Array {
  * Prefer writable data, then the entry segment, then the first readable segment.
  *
  * @returns A segment-bounded window, or `null` when no readable storage exists.
- * @throws RangeError - An inspected ELF address or size has invalid wire encoding.
+ * @throws RangeError
+ * An inspected ELF address or size has invalid wire encoding.
  */
 export function initialMemory(image: ImageInfo): MemoryWindow | null {
   const readable = image.segments.filter(

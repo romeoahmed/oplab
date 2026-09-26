@@ -262,3 +262,42 @@ test('trace refreshes for consecutive steps without polling unchanged observatio
   expect(record).toHaveBeenCalledWith(true);
   await expect.element(toggle).toHaveAttribute('aria-pressed', 'false');
 });
+
+test('watchpoint pauses allow trace recording and execution to an address', async () => {
+  const machine = observation('1');
+  const point = { address: '0x0000000000002000', length: 8, access: 'write' as const };
+  const record = vi.fn<(enabled: boolean) => void>();
+  const run = vi.fn(() => Promise.resolve());
+  const view = await render(Trace, {
+    trace: { key: machine.key, enabled: false, entries: [], discarded: '0' },
+    observation: {
+      ...machine,
+      status: {
+        type: 'watchpoint',
+        data: { watchpoint: point, pc: '0x1000', address: point.address, access: 'write' },
+      },
+    },
+    connected: true,
+    busy: false,
+    locale: 'en',
+    sourceIndex: { lines: new Map(), addresses: new Map() },
+    onrefresh: () => Promise.resolve(),
+    onrecord: record,
+    onclear: () => {},
+    onrun: run,
+    onsource: () => {},
+  });
+  const toggle = page.getByRole('button', { name: en.trace_record });
+  const submit = page.getByRole('button', { name: en.run_to_address });
+  await toggle.click();
+  expect(record).toHaveBeenCalledWith(true);
+  await page.getByRole('textbox', { name: en.address }).fill('0x1010');
+  await submit.click();
+  expect(run).toHaveBeenCalledWith('0x1010');
+  await view.rerender({ busy: true });
+  await expect.element(toggle).toBeDisabled();
+  await expect.element(submit).toBeDisabled();
+  await view.rerender({ busy: false, observation: { ...machine, status: { type: 'running' } } });
+  await expect.element(toggle).toBeDisabled();
+  await expect.element(submit).toBeDisabled();
+});

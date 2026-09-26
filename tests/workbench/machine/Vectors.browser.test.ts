@@ -31,6 +31,7 @@ test.each([
       loadedKind: 'source',
       editable: true,
       onbreakpoint: () => {},
+      onwatchpoints: () => {},
       onregister: () => {},
       onvector: () => {},
       onrounding: () => {},
@@ -94,6 +95,7 @@ test.each([
       loadedKind: 'source',
       editable: true,
       onbreakpoint: () => {},
+      onwatchpoints: () => {},
       onregister: () => {},
       onrounding: () => {},
       onvector: (write: VectorWrite) => {
@@ -179,6 +181,7 @@ test.each([
       loadedKind: 'source',
       editable: true,
       onbreakpoint: () => {},
+      onwatchpoints: () => {},
       onregister: () => {},
       onrounding: () => {},
       onvector: (write: VectorWrite) => {

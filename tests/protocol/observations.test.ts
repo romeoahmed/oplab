@@ -47,6 +47,15 @@ test.each(['x86_64', 'aarch64'] as const)(
             breakpoints: fc.uniqueArray(fc.bigInt({ min: 0n, max: (1n << 64n) - 1n }), {
               maxLength: 16,
             }),
+            watchpoints: fc.uniqueArray(
+              fc.record({
+                address: fc.bigInt({ min: 0n, max: (1n << 64n) - 65536n }),
+                length: fc.integer({ min: 1, max: 65536 }),
+                access: fc.constantFrom('read' as const, 'write' as const, 'read_write' as const),
+              }),
+              { maxLength: 8, selector: (point) => point.address },
+            ),
+            paused: fc.boolean(),
             vector: fc.option(
               fc.uint8Array({
                 minLength: target === 'x86_64' ? 32 : 256,
@@ -68,10 +77,30 @@ test.each(['x86_64', 'aarch64'] as const)(
             expected.observation.sequence = String(
               BigInt(previous.observation.sequence) + BigInt(sample.gap),
             );
-            if (sample.full)
+            if (sample.full) {
               expected.observation.breakpoints = sample.breakpoints
                 .toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0))
                 .map((value) => `0x${value.toString(16).padStart(16, '0')}`);
+              expected.observation.watchpoints = sample.watchpoints
+                .toSorted((a, b) => (a.address < b.address ? -1 : a.address > b.address ? 1 : 0))
+                .map((point) => ({
+                  ...point,
+                  address: `0x${point.address.toString(16).padStart(16, '0')}`,
+                }));
+            }
+            const watched = expected.observation.watchpoints[0];
+            expected.observation.status =
+              sample.paused && watched !== undefined
+                ? {
+                    type: 'watchpoint',
+                    data: {
+                      watchpoint: watched,
+                      address: watched.address,
+                      pc: '0x0000000000001000',
+                      access: watched.access === 'read' ? 'read' : 'write',
+                    },
+                  }
+                : { type: 'running' };
             expected.observation.instructions = String(index + 1);
             expected.observation.dispatches = String(index + 1);
             const bank = expected.observation.registers;

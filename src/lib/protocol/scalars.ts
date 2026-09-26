@@ -6,7 +6,8 @@ const maximum = (1n << 64n) - 1n;
 /**
  * Normalize hexadecimal user input, with optional prefix and surrounding whitespace.
  *
- * @throws RangeError - The input is empty, nonhexadecimal or outside the unsigned 64-bit range.
+ * @throws RangeError
+ * The input is empty, nonhexadecimal or outside the unsigned 64-bit range.
  */
 export function normalizeAddress(value: string): HexAddress {
   const digits = value.trim().replace(/^0x/i, '');
@@ -17,7 +18,8 @@ export function normalizeAddress(value: string): HexAddress {
 /**
  * Parse `0x` followed by exactly sixteen lowercase hexadecimal digits.
  *
- * @throws RangeError - The address is not in canonical wire form.
+ * @throws RangeError
+ * The address is not in canonical wire form.
  */
 export function parseAddress(value: HexAddress): bigint {
   if (!/^0x[0-9a-f]{16}$/.test(value)) throw new RangeError('Invalid wire address');
@@ -27,7 +29,8 @@ export function parseAddress(value: HexAddress): bigint {
 /**
  * Format an unsigned 64-bit address in canonical wire form without wrapping.
  *
- * @throws RangeError - The value is outside the unsigned 64-bit range.
+ * @throws RangeError
+ * The value is outside the unsigned 64-bit range.
  */
 export function formatAddress(value: bigint): HexAddress {
   if (value < 0n || value > maximum) throw new RangeError('Address exceeds 64 bits');
@@ -37,7 +40,8 @@ export function formatAddress(value: bigint): HexAddress {
 /**
  * Parse an unsigned 64-bit decimal string without leading zeros, except `0`.
  *
- * @throws RangeError - The counter is noncanonical or exceeds 64 bits.
+ * @throws RangeError
+ * The counter is noncanonical or exceeds 64 bits.
  */
 export function parseCounter(value: Counter): bigint {
   if (!/^(0|[1-9][0-9]{0,19})$/.test(value)) throw new RangeError('Invalid wire counter');
@@ -49,7 +53,8 @@ export function parseCounter(value: Counter): bigint {
 /**
  * Format an unsigned 64-bit counter as decimal text for JSON transport.
  *
- * @throws RangeError - The value is outside the unsigned 64-bit range.
+ * @throws RangeError
+ * The value is outside the unsigned 64-bit range.
  */
 export function formatCounter(value: bigint): Counter {
   if (value < 0n || value > maximum) throw new RangeError('Counter exceeds 64 bits');
@@ -62,7 +67,8 @@ export function formatCounter(value: bigint): Counter {
  * @remarks
  * The result is exact but not width-limited; callers enforce their own numeric bounds.
  *
- * @throws RangeError - The trimmed input is empty or contains invalid digits.
+ * @throws RangeError
+ * The trimmed input is empty or contains invalid digits.
  */
 export function parseUnsigned(value: string): bigint {
   const text = value.trim();

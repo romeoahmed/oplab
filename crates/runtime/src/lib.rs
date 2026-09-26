@@ -30,6 +30,7 @@ use oplab_core::{
     address::Address,
     execution::{Access, FaultKind, GuestFault},
     target::Target,
+    watchpoint::{MAX_WATCHPOINTS, WatchAccess, Watchpoint, WatchpointHit},
 };
 use qemu::{Cpu, abi};
 use std::collections::BTreeMap;
@@ -73,6 +74,8 @@ impl Register {
 pub enum Outcome {
     /// The instruction completed.
     Finished,
+    /// An instruction or REP iteration completed with a watched access; resume without replay.
+    Watchpoint(WatchpointHit),
     /// A repeated instruction reached its dispatch budget.
     Yield,
     /// The instruction requires an unimplemented operating environment.
@@ -115,6 +118,7 @@ pub struct Runtime {
     cpu: Cpu,
     compiler: jit::Compiler,
     cache: BTreeMap<Key, jit::Compiled>,
+    watchpoints: Vec<Watchpoint>,
 }
 impl Runtime {
     /// Create the architecture's MAX guest in x86 CPL3 or `AArch64` EL0.
@@ -129,7 +133,47 @@ impl Runtime {
             cpu: Cpu::new(target)?,
             compiler: jit::Compiler::new()?,
             cache: BTreeMap::new(),
+            watchpoints: Vec::new(),
         })
+    }
+    /// Current sorted, distinct data ranges.
+    #[must_use]
+    pub fn watchpoints(&self) -> &[Watchpoint] {
+        &self.watchpoints
+    }
+
+    /// Atomically replace the watched ranges without invalidating compiled instructions.
+    ///
+    /// Accepts at most 32 inputs before de-duplication. An empty slice clears the set.
+    ///
+    /// # Errors
+    ///
+    /// Rejects excess inputs or a native boundary failure.
+    pub fn set_watchpoints(&mut self, points: &[Watchpoint]) -> Result<(), Error> {
+        if points.len() > MAX_WATCHPOINTS {
+            return Err(Error::Native);
+        }
+        let mut next = points.to_vec();
+        next.sort_unstable();
+        next.dedup();
+        if next == self.watchpoints {
+            return Ok(());
+        }
+        let native: Vec<_> = next
+            .iter()
+            .map(|point| abi::OplabWatchpoint {
+                address: point.address().get(),
+                length: point.length(),
+                access: match point.access() {
+                    WatchAccess::Read => 1,
+                    WatchAccess::Write => 2,
+                    WatchAccess::ReadWrite => 3,
+                },
+            })
+            .collect();
+        self.cpu.watchpoints(&native)?;
+        self.watchpoints = next;
+        Ok(())
     }
     /// Map 4-KiB-aligned memory, copy `bytes` at its start and zero the remainder.
     ///
@@ -278,6 +322,24 @@ impl Runtime {
             }
             step.repeated = exit.repeated;
             step.outcome = outcome(exit, pc)?;
+            if matches!(step.outcome, Outcome::Finished) && exit.watch_index != 0 {
+                let point = self
+                    .watchpoints
+                    .get(usize::try_from(exit.watch_index - 1).map_err(|_| Error::Native)?)
+                    .ok_or(Error::Native)?;
+                let access = match exit.watch_access {
+                    1 => WatchAccess::Read,
+                    2 => WatchAccess::Write,
+                    3 => WatchAccess::ReadWrite,
+                    _ => return Err(Error::Native),
+                };
+                step.outcome = Outcome::Watchpoint(WatchpointHit {
+                    watchpoint: *point,
+                    pc,
+                    address: Address::new(exit.watch_address),
+                    access,
+                });
+            }
             if !exit.repeated || !matches!(step.outcome, Outcome::Finished) {
                 return Ok(step);
             }

@@ -110,8 +110,10 @@ Run checks proportionate to the change: actual xtask flows for orchestration,
 codegen verification for contracts, workspace checks/tests for broad code changes.
 For documentation-only edits, check formatting, local links and claims against code.
 Report what ran and what remains unverified. Local debug success does not establish
-distribution readiness. Keep setup in the development guide, contracts in their owning
-references and dated evidence in the roadmap.
+distribution readiness. Keep README focused on the first workflow and AGENTS on
+repository rules. Put setup in the development guide, contracts in their owning
+references and dated evidence in the roadmap; consolidate repeated runs without
+erasing verification limits.
 
 Inspect staged and unstaged changes; preserve user work. Do not stage, commit,
 reset or discard changes unless requested.

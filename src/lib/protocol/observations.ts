@@ -60,6 +60,7 @@ function applyDelta(base: Snapshot, delta: ObservationDelta, memory: Uint8Array 
         delta.registers.type === 'unchanged' ? base.observation.registers : delta.registers.data,
       fault: delta.fault,
       breakpoints: base.observation.breakpoints,
+      watchpoints: base.observation.watchpoints,
       memory: base.observation.memory,
     },
     memory: delta.memory_bytes === 0 ? base.memory : memory,
@@ -76,7 +77,9 @@ function applyDelta(base: Snapshot, delta: ObservationDelta, memory: Uint8Array 
  *
  * @returns `ignored` for stale identities/sequences, `resync` for a missing delta
  * baseline, `ended` for capture failure, or `updated` with the coherent snapshot.
- * @throws RangeError - Scalars, memory, register availability or counters are incoherent.
+ *
+ * @throws RangeError
+ * Scalars, memory, register availability or counters are incoherent.
  */
 export function applyObservation(
   cursor: Cursor,

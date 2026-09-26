@@ -8,6 +8,8 @@
 #include "accel/accel-cpu-ops.h"
 #include "accel/tcg/cpu-ops.h"
 #include "accel/tcg/tcg-accel-ops.h"
+#include "exec/breakpoint.h"
+#include "exec/watchpoint.h"
 #include "hw/core/cpu.h"
 #include "hw/core/qdev.h"
 #include "qapi/error.h"
@@ -137,6 +139,7 @@ static OplabCpu *create(void) {
   static TCGCPUOps operations;
   operations = *owner->cpu->cc->tcg_ops;
   operations.tlb_fill_align = oplab_tlb_fill;
+  operations.debug_check_watchpoint = oplab_watchpoint_hit;
   CPU_GET_CLASS(owner->cpu)->tcg_ops = &operations;
   if (!context) {
     tcg_register_thread();
@@ -149,6 +152,8 @@ static OplabCpu *create(void) {
 
 static void destroy(OplabCpu *owner) {
   oplab_enter();
+  /* CPU unrealize destroys the TLB but does not release our watchpoints. */
+  cpu_watchpoint_remove_all(owner->cpu, BP_CPU);
 #if defined(TARGET_X86_64)
   /* TCG registers this during realization; CPU unplug does not remove it. */
   qemu_remove_machine_init_done_notifier(&X86_CPU(owner->cpu)->machine_done);
@@ -191,7 +196,7 @@ static bool map_memory(OplabCpu *owner, uint64_t base, uint64_t size, uint32_t p
     map->size = size;
     map->permissions = permissions;
     g_autofree char *name = g_strdup_printf("oplab-memory-%u", owner->maps->len);
-    /* Sandbox RAM has QOM ownership but does not participate in VM migration. */
+    /* Experiment RAM has QOM ownership but does not participate in VM migration. */
     valid =
         memory_region_init_ram_flags_nomigrate(&map->memory, OBJECT(owner), name, size, 0, nullptr);
     if (!valid) {
@@ -273,6 +278,7 @@ const OplabQemu *oplab_qemu(void) {
       .translate = oplab_translate,
       .release = oplab_block_free,
       .execute = oplab_execute,
+      .watchpoints = oplab_watchpoints,
       .load = (uintptr_t)oplab_load,
       .store = (uintptr_t)oplab_store,
       .load_pair = (uintptr_t)oplab_load_pair,

@@ -132,7 +132,9 @@ pub enum SessionAction {
     Pause,
     /// Terminate execution as cancelled.
     Cancel,
-    /// Restore initial memory and registers, clear counters and advance the reset generation.
+    /// Restore initial memory/registers, clear counters/history and advance the generation.
+    ///
+    /// Address breakpoints, data watchpoints and the trace recording mode are retained.
     Reset,
     /// Write an integer register, alias, RIP/PC or application flag while ready/paused.
     ///
@@ -155,6 +157,11 @@ pub enum SessionAction {
         /// Whether the breakpoint should be retained.
         enabled: bool,
     },
+    /// Atomically replace watched data ranges while ready/paused.
+    ///
+    /// Accepts at most 32 inputs before de-duplication; an empty list clears the set.
+    /// Reset retains the set; a new load starts empty.
+    Watchpoints(Vec<DataWatchpoint>),
     /// Capture control state and available registers, optionally with memory.
     Observe {
         /// Null requests registers and control state only.
@@ -185,6 +192,8 @@ pub enum Status {
     Breakpoint(HexAddress),
     /// A temporary run target stopped before effects.
     Target(HexAddress),
+    /// Matching access paused after an instruction or REP iteration; faults take precedence.
+    Watchpoint(DataWatchpointHit),
     /// Execution ended with an explicit outcome.
     Terminated(Termination),
     /// The native state is unusable; register observations are unavailable.
@@ -280,6 +289,8 @@ pub struct Observation {
     pub fault: Option<Fault>,
     /// Sorted, distinct address breakpoints retained across reset; at most 256.
     pub breakpoints: Vec<HexAddress>,
+    /// Sorted, distinct data ranges retained across reset; at most 32.
+    pub watchpoints: Vec<DataWatchpoint>,
     /// Metadata for the binary memory payload following this response or full stream event.
     pub memory: Option<MemoryWindow>,
 }
@@ -362,4 +373,58 @@ pub struct TraceEntry {
     pub instruction: Counter,
     /// Address at admission. Later patches do not change this historical address.
     pub pc: HexAddress,
+}
+
+/// Guest data range; instruction fetch and debugger reads/writes never trigger it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DataWatchpoint {
+    /// First watched byte; no alignment or mapping requirement.
+    pub address: HexAddress,
+    /// 1–65,536 bytes without address wraparound.
+    pub length: u32,
+    /// Read, write or either; stores of the same value still count.
+    pub access: crate::watchpoint::WatchAccess,
+}
+
+/// First matching access reported after a successful instruction or REP iteration.
+///
+/// Effects have completed; resume continues without replay. A guest fault takes precedence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DataWatchpointHit {
+    /// Range that matched.
+    pub watchpoint: DataWatchpoint,
+    /// Instruction that accessed memory, distinct from the resulting register PC.
+    pub pc: HexAddress,
+    /// First overlapping byte, not necessarily the access start.
+    pub address: HexAddress,
+    /// Matching access bits restricted to the configured modes.
+    pub access: crate::watchpoint::WatchAccess,
+}
+
+impl From<crate::watchpoint::Watchpoint> for DataWatchpoint {
+    fn from(point: crate::watchpoint::Watchpoint) -> Self {
+        Self {
+            address: HexAddress::new(point.address()),
+            length: point.length(),
+            access: point.access(),
+        }
+    }
+}
+impl TryFrom<DataWatchpoint> for crate::watchpoint::Watchpoint {
+    type Error = crate::diagnostic::ValidationError;
+    fn try_from(point: DataWatchpoint) -> Result<Self, Self::Error> {
+        Self::new(point.address.address(), point.length, point.access)
+    }
+}
+impl From<crate::watchpoint::WatchpointHit> for DataWatchpointHit {
+    fn from(hit: crate::watchpoint::WatchpointHit) -> Self {
+        Self {
+            watchpoint: hit.watchpoint.into(),
+            pc: HexAddress::new(hit.pc),
+            address: HexAddress::new(hit.address),
+            access: hit.access,
+        }
+    }
 }

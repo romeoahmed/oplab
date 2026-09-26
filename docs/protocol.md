@@ -104,7 +104,7 @@ These values are load inputs, not live patches, and reset reapplies them.
 
 `execute` carries a session key and `run`, `step`, `step_over`, `run_until`,
 `record_trace`, `read_trace`, `clear_trace`, `pause`, `cancel`, `reset`,
-`breakpoint`, `write_register`, `write_vector`, `set_rounding`, `write_memory`,
+`breakpoint`, `watchpoints`, `write_register`, `write_vector`, `set_rounding`, `write_memory`,
 `observe` or `close`. Keys contain decimal `session` and `generation`. Stale keys
 fail before mutation. Reset advances generation; close drops the owner,
 even when running, and returns `session_closed`. IDs must also be qualified by the
@@ -129,6 +129,17 @@ accepted per request. Duplicate addresses have no additional effect. Alignment a
 the resulting set size are validated before any change. Address controls submit
 one address; source controls submit all addresses mapped to the selected line.
 Other breakpoints remain unchanged. The worker operates on addresses, not source lines.
+
+`watchpoints` carries an array of at most 32 `{address, length, access}` ranges.
+`length` is 1–65,536; `access` is `read`, `write` or `read_write`. The complete
+replacement is validated before mutation, sorted and deduplicated. An empty array
+clears all data watchpoints. Ready/paused state is required. Observations carry
+`watchpoints` as authoritative configuration; reset retains it.
+
+A data-access pause is `{type: "watchpoint", data: {watchpoint, pc, address, access}}`.
+It reports the first matching access after instruction or REP-iteration effects;
+`pc` identifies the triggering instruction and `address` the first overlapping byte.
+Faults take precedence. See [execution semantics](engine.md#breakpoints-observations-and-reset).
 
 `write_register` carries `{name, value}`. Names accept canonical GPRs, subregisters,
 RIP/PC and individual application flags; values use exact decimal strings, including
@@ -160,8 +171,9 @@ unknown-outcome semantics. Never replay a mutation to recover a missing observat
 
 Other successful controls return `observed`: a complete snapshot containing key,
 increasing sequence, status, instruction/dispatch counters, canonical
-registers, fault metadata, sorted distinct `breakpoints` (at most 256) and optional memory
-metadata. Breakpoints survive reset; a new load starts with an empty set.
+registers, fault metadata, sorted distinct `breakpoints` (at most 256),
+`watchpoints` (at most 32) and optional memory
+metadata. Both sets survive reset; a new load starts with empty sets.
 Sequence begins at one, continues across reset and never wraps. Run/step acceptance
 can report Running; poll or subscribe to learn completion. Newer observations can
 precede older correlated replies, so check key/generation/sequence before updating
@@ -241,9 +253,9 @@ Kind `2` carries `StreamEvent { subscription, update }`, without a request ID:
 
 A delta retains or replaces the complete register bank, including explicit null
 after native loss. Zero memory length retains the baseline bytes; nonzero length
-replaces the entire window. Breakpoints come from the baseline. Changes to the
-window metadata or breakpoint set require `full`. There are no
-individual-register, breakpoint or byte-range patches.
+replaces the entire window. Breakpoints and watchpoints come from the baseline. Changes to the
+window metadata, breakpoint or watchpoint set require `full`. There are no
+individual-register, breakpoint, watchpoint or byte-range patches.
 
 Only complete samples coalesce, in one dedicated output slot. The writer computes
 a delta against the last **delivered** sample and advances that baseline only after
@@ -341,8 +353,10 @@ Missing RSS samples do not prove compliance. Failure settles requests once; any
 request whose pipe write began reports `outcome_unknown: true`. Mutations are never
 retried automatically. A dead worker needs explicit restart and loses its machine.
 
-Worker deltas are reconstructed before WebView coalescing. The Channel keeps one
-unacknowledged observation and one latest pending sample; replies and a small failure
+Worker deltas are reconstructed before WebView coalescing. The native baseline and
+pending delivery share an immutable snapshot rather than copying its register bank
+and memory window. The Channel keeps one unacknowledged observation and one latest
+pending sample; replies and a small failure
 notice remain independent. Frontend leases and subscription serialization reject
 stale delivery. [Tauri Channels](https://tauri.app/develop/calling-frontend/) provide
 transport; application credit supplies the bound.
@@ -417,6 +431,14 @@ For example, a source document can use `push rdi; pop rax` with `--register rdi=
 `--register rsp=0x9000` and `--map 0x8000:4096:rw`, ending at its declared completion.
 The caller supplies the stack and argument; Oplab adds no call or return sequence.
 
+`--watch ADDRESS:SIZE:r|w|rw` adds a data watchpoint; repeat it up to 32 times
+(the limit precedes de-duplication). Addresses use `0x` hexadecimal; sizes accept
+decimal or `0x` hexadecimal. For example, `--watch 0x8000:8:w` watches writes
+overlapping eight bytes at `0x8000`. A match stops after the instruction or REP
+iteration, preserving its effects.
+A hit ends this one-shot CLI run with outcome `watchpoint`, preserving final state
+and reporting the hit separately from faults. It does not claim experiment completion.
+
 The timeout begins after input, assembly, loading and initial observation validation.
 It is checked between slices using Rust's monotonic `Instant`; a native call may
 overrun it. A terminal outcome reached within the last slice takes precedence over
@@ -428,10 +450,10 @@ supervisor; this CLI does not inherit the desktop supervisor's deadlines or RSS 
 
 - `{"type":"executed","data":{...}}` contains `target` and `completion`,
   `outcome`, decimal-string `instructions`/`dispatches`, canonical `registers`,
-  nullable `fault`, and nullable `memory: {address, bytes}`. Memory uses a bounded
+  nullable `fault` and `watchpoint`, and nullable `memory: {address, bytes}`. Memory uses a bounded
   JSON byte array; register/fault shapes and exact scalars match the worker contract.
-- `outcome` is `completed`, `budget`, `guest_fault`, `unsupported_environment` or
-  `timeout`. Non-completion outcomes exit 1 and retain final effects.
+- `outcome` is `completed`, `budget`, `guest_fault`, `unsupported_environment`,
+  `timeout` or `watchpoint`. Non-completion outcomes exit 1 and retain final effects.
 - `{"type":"error","data":{...}}` uses the standard `Diagnostic` for rejected
   input, assembly/loading failures or an unavailable native observation. It exits 1;
   no machine state is fabricated after a backend failure.

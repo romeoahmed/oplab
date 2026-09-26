@@ -2,16 +2,18 @@
   import './machine.css';
   import * as m from '$lib/paraglide/messages.js';
   import type { Locale } from '$lib/paraglide/runtime';
+  import type { DataWatchpoint } from '$lib/protocol/generated/DataWatchpoint';
   import type { Observation } from '$lib/protocol/generated/Observation';
   import type { RoundingMode } from '$lib/protocol/generated/RoundingMode';
   import type { VectorWrite } from '$lib/protocol/generated/VectorWrite';
-  import { Cpu, Keyboard, Binary, Rows3, Circle } from '@lucide/svelte';
+  import { Cpu, Keyboard, Binary, Rows3, Circle, FileCode } from '@lucide/svelte';
   import { Tabs } from 'bits-ui';
 
-  import { stateLabel } from '../presentation';
+  import { stateLabel, watchAccessLabel } from '../presentation';
   import Breakpoints from './Breakpoints.svelte';
   import Registers from './Registers.svelte';
   import Vectors from './Vectors.svelte';
+  import Watchpoints from './Watchpoints.svelte';
   const {
     observation,
     loadedCurrent,
@@ -21,6 +23,7 @@
     onsource,
     editable,
     onbreakpoint,
+    onwatchpoints,
     onregister,
     onvector,
     onrounding,
@@ -33,6 +36,7 @@
     loadedDocument?: string | null;
     onsource?: () => void;
     editable: boolean;
+    onwatchpoints: (points: DataWatchpoint[]) => void;
     onbreakpoint: (address: string, enabled: boolean) => void;
     onregister: (name: string, value: string) => void;
     onrounding: (mode: RoundingMode) => void;
@@ -88,7 +92,8 @@
         <button
           class="loaded-source"
           onclick={onsource}
-          title={m.reveal_loaded_document({}, options)}>{loadedDocument}</button
+          title={`${m.reveal_loaded_document({}, options)} · ${loadedDocument}`}
+          ><FileCode size={14} aria-hidden="true" /><span>{loadedDocument}</span></button
         >
       {/if}
       <div class="session-heading">
@@ -113,6 +118,18 @@
               ? m.source_unlinked({}, options)
               : m.source_changed({}, options)}
         </p>{/if}
+      {#if observation.status.type === 'watchpoint'}
+        <p class="watchpoint-stop" role="status">
+          {m.watchpoint_stopped(
+            {
+              pc: observation.status.data.pc,
+              access: watchAccessLabel(observation.status.data.access, locale),
+              address: observation.status.data.address,
+            },
+            options,
+          )}
+        </p>
+      {/if}
       <dl class="execution-counts">
         <div>
           <dt>{m.instructions_started({}, options)}</dt>
@@ -127,7 +144,9 @@
           <Tabs.Trigger value="simd"><Rows3 size={14} aria-hidden="true" />SIMD</Tabs.Trigger>
           <Tabs.Trigger value="breakpoints">
             <Circle size={12} aria-hidden="true" />{m.breakpoint_view({}, options)}
-            <span class="tab-count">{observation.breakpoints.length}</span>
+            <span class="tab-count"
+              >{observation.breakpoints.length + observation.watchpoints.length}</span
+            >
           </Tabs.Trigger>
         </Tabs.List>
         <Tabs.Content value="integer"
@@ -153,6 +172,13 @@
             disabled={!editable}
             {locale}
             onchange={onbreakpoint}
+          />
+          <Watchpoints
+            points={observation.watchpoints}
+            disabled={!editable}
+            {locale}
+            hit={observation.status.type === 'watchpoint' ? observation.status.data : null}
+            onchange={onwatchpoints}
           />
         </Tabs.Content>
       </Tabs.Root>

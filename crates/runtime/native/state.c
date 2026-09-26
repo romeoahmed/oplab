@@ -129,7 +129,8 @@ void oplab_state_init(CPUState *cpu) {
   env->aarch64 = 1;
   pstate_write(env, PSTATE_MODE_EL0t);
   env->cp15.scr_el3 |= SCR_NS | SCR_RW;
-  env->cp15.hcr_el2 |= HCR_RW;
+  /* Flat experiment RAM is Normal memory, not the MMU-off Device default. */
+  env->cp15.hcr_el2 |= HCR_RW | HCR_DC;
   env->cp15.cpacr_el1 = FIELD_DP64(0, CPACR_EL1, FPEN, 3);
   env->cp15.cpacr_el1 = FIELD_DP64(env->cp15.cpacr_el1, CPACR_EL1, ZEN, 3);
   env->cp15.cpacr_el1 = FIELD_DP64(env->cp15.cpacr_el1, CPACR_EL1, SMEN, 3);

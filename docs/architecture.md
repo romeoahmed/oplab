@@ -54,7 +54,7 @@ src/
     workbench/          # Composition, controller, recovery and preferences
       editor/           # CodeMirror, language support and CSS
       load/             # Raw-code and initial-condition inputs
-      machine/          # Registers, memory, breakpoints and execution history
+      machine/          # Registers, memory, breakpoints, watchpoints and execution history
       instructions/     # Disassembly and static analysis
   routes/               # SvelteKit entry points
 src-tauri/              # Shell, supervisor, capabilities and icons
@@ -188,13 +188,13 @@ Focusable separators support arrow keys, Shift for larger steps, Home/End for
 limits and double-click to restore defaults.
 They share bounds and persisted proportions with Appearance and hide in stacked
 layouts and focus mode. The machine panel starts at 28% width (320px minimum).
-Bottom observations start closed and open on assembly or binary import, at 32% height (180px minimum).
+Bottom observations start closed and open on assembly or binary import. Their default
+height is 32dvh (32% of the dynamic viewport height), with a 180px minimum.
 Closing or Mod-J toggling retains contents. Focus mode hides inspectors without
 unmounting the editor or disconnecting the worker.
 
 Grid, Flexbox, logical properties and container queries handle layout. Forms wrap;
-panels stack at 800px and below. Main actions use 32px targets, panel tools 28px
-and search options 24px. Familiar secondary actions use icons with tooltips;
+panels stack at 800px and below. Familiar secondary actions use icons with tooltips;
 ambiguous memory actions retain text. JetBrains Mono defaults to 14px without
 ligatures; preferences offer system monospace, 12–22px text, wrapping and panel
 proportions. Layout reset changes only proportions. Actual WebView acceptance is
@@ -223,6 +223,10 @@ SIMD views project active SVE lengths from maximum-width storage. `BigInt` and
 expanded lanes. Predicate views select the significant bits for `.b/.h/.s/.d`;
 native list ordinals preserve their actual bit indices. Architecture changes reset
 bank selection; ordinary observations preserve view choices and drafts. These banks are not complete CPU snapshots.
+
+Address-breakpoint and data-watchpoint forms use native field validation and disable
+submission while a request is pending. They display the acknowledged configuration;
+a rejected change leaves the previous set available for retry.
 
 Ready/paused edits await authoritative replies. Rust validates widths, alignment,
 state and native merges; observations do not overwrite a typed SIMD draft.

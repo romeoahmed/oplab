@@ -6,7 +6,11 @@ use super::*;
 use oplab_core::registers::VectorBits;
 use oplab_core::{
     address::Address,
-    protocol::{execution::Registers, scalar::HexAddress},
+    protocol::{
+        execution::{DataWatchpoint, Registers},
+        scalar::HexAddress,
+    },
+    watchpoint::WatchAccess,
 };
 use proptest::prelude::*;
 
@@ -31,6 +35,7 @@ fn capture(sequence: u64) -> Capture {
             }),
             fault: None,
             breakpoints: Vec::new(),
+            watchpoints: Vec::new(),
             memory: Some(MemoryWindow {
                 address: HexAddress::new(Address::new(0x2000)),
                 length: 8,
@@ -103,15 +108,17 @@ proptest! {
     fn complete_samples_survive_stream_encoding_and_metadata_changes(
         samples in prop::collection::vec((
             prop::collection::btree_set(any::<u64>(), 0..16),
+            prop::collection::btree_set(0_u64..=u64::MAX - 65535, 1..8),
+            2_u32..=65536,
             any::<[[u8; 32]; 16]>(), any::<u32>(),
         ), 1..16),
     ) {
         let mut encoder = Encoder::default();
         let mut sequence = 0;
         let mut retained: Option<Box<Observation>> = None;
-        // Metadata changes, a bank-only change, then inheritance.
-        for ((breakpoints, vectors, control), replace) in samples.iter()
-            .flat_map(|sample| [(sample, false), (sample, true), (sample, true)]) {
+        // Change length, access and registers separately, then inherit and clear.
+        for ((breakpoints, watches, length, vectors, control), phase) in samples.iter()
+            .flat_map(|sample| (0..6).map(move |phase| (sample, phase))) {
             sequence += 1;
             let mut sample = capture(sequence);
             sample.observation.breakpoints = breakpoints.iter()
@@ -119,9 +126,16 @@ proptest! {
             let Some(Registers::X86_64 { ymm, mxcsr, .. }) = &mut sample.observation.registers else {
                 return Err(TestCaseError::fail("missing register bank"));
             };
-            if replace {
+            if phase >= 3 {
                 **ymm = vectors.map(|bytes| vector(&bytes));
                 *mxcsr = *control;
+            }
+            if phase < 5 {
+                sample.observation.watchpoints = watches.iter().map(|&value| DataWatchpoint {
+                    address: HexAddress::new(Address::new(value)),
+                    length: if phase == 0 { 1 } else { *length },
+                    access: if phase < 2 { WatchAccess::Read } else { WatchAccess::Write },
+                }).collect();
             }
             let expected = sample.observation.clone();
             let expected_memory = sample.memory.clone();

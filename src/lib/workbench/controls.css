@@ -54,6 +54,15 @@
     font-family: var(--mono);
   }
 
+  select {
+    block-size: 32px;
+    max-inline-size: 100%;
+  }
+
+  :is(input, textarea, select):disabled {
+    opacity: 0.5;
+  }
+
   input:focus,
   select:focus {
     border-color: var(--accent);
@@ -107,6 +116,7 @@
   border-color: transparent;
   min-inline-size: 32px;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .icon-button:where(:focus-visible) {

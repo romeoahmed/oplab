@@ -70,7 +70,11 @@ impl Machine {
         })
     }
     pub(crate) fn reset(&mut self) -> Result<(), MachineError> {
-        self.native = initialize(&self.initial)?;
+        let mut native = initialize(&self.initial)?;
+        native
+            .set_watchpoints(self.native.watchpoints())
+            .map_err(|_| MachineError::Backend)?;
+        self.native = native;
         self.pending_repeat = None;
         self.bypass = None;
         self.trace.clear();
@@ -107,6 +111,20 @@ impl Machine {
         }
         self.breakpoints = next;
         Ok(())
+    }
+    pub(crate) fn watchpoints(&self) -> &[oplab_core::watchpoint::Watchpoint] {
+        self.native.watchpoints()
+    }
+    pub(crate) fn set_watchpoints(
+        &mut self,
+        points: &[oplab_core::watchpoint::Watchpoint],
+    ) -> Result<(), MachineError> {
+        if points.len() > oplab_core::watchpoint::MAX_WATCHPOINTS {
+            return Err(ValidationError::Length.into());
+        }
+        self.native
+            .set_watchpoints(points)
+            .map_err(|_| MachineError::Backend)
     }
     /// Initial memory, registers and permissions retained for reset.
     #[must_use]

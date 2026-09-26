@@ -11,6 +11,7 @@ pub(crate) enum SliceStop {
     Budget,
     Breakpoint(Address),
     Target(Address),
+    Watchpoint(oplab_core::watchpoint::WatchpointHit),
     Fault(GuestFault),
     Environment,
 }
@@ -81,6 +82,10 @@ impl Machine {
             self.pending_repeat = step.repeated.then_some(pc);
             match step.outcome {
                 Outcome::Finished => {}
+                Outcome::Watchpoint(hit) => {
+                    result.stop = SliceStop::Watchpoint(hit);
+                    break;
+                }
                 Outcome::Yield => break,
                 Outcome::Environment => {
                     result.stop = SliceStop::Environment;

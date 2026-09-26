@@ -55,7 +55,8 @@ export function vectorWidth(value: VectorBits): number {
  * Integer lanes remain exact; floating-point views retain signed zero. NaN payloads
  * remain available in the raw value, not in JavaScript's numeric interpretation.
  *
- * @throws RangeError - The value is not a canonical, bounded hexadecimal byte string.
+ * @throws RangeError
+ * The value is not a canonical, bounded hexadecimal byte string.
  */
 export function vectorLanes(value: VectorBits, format: LaneFormat): string[] {
   if (value.trim() !== value || !/^0x(?:[\da-f]{2}){1,256}$/.test(value))

@@ -6,7 +6,7 @@ mod setup;
 pub(super) use input::Input;
 use input::Prepared;
 use oplab_core::{
-    execution::{ExecutionState, Termination},
+    execution::{ExecutionState, PauseReason, Termination},
     protocol::{
         Diagnostic, DiagnosticCode,
         execution::{Fault, Registers},
@@ -38,6 +38,7 @@ struct Report {
     dispatches: Counter,
     registers: Registers,
     fault: Option<Fault>,
+    watchpoint: Option<oplab_core::protocol::execution::DataWatchpointHit>,
     memory: Option<Memory>,
 }
 
@@ -49,6 +50,7 @@ enum Outcome {
     GuestFault,
     UnsupportedEnvironment,
     Timeout,
+    Watchpoint,
 }
 
 #[derive(Serialize)]
@@ -86,6 +88,9 @@ fn execute(prepared: Prepared) -> Result<Report, Diagnostic> {
             .read_memory(address, u64::from(policy.memory_bytes))
             .map_err(|error| diagnostic(&error))?;
     }
+    session
+        .set_watchpoints(&policy.watchpoints)
+        .map_err(|error| diagnostic(&error))?;
     session.start().map_err(|error| diagnostic(&error))?;
     let started = Instant::now();
     let timeout = Duration::from_millis(policy.timeout_ms);
@@ -98,6 +103,7 @@ fn execute(prepared: Prepared) -> Result<Report, Diagnostic> {
                 }
                 session.advance().map_err(|error| diagnostic(&error))?;
             }
+            ExecutionState::Paused(PauseReason::Watchpoint(_)) => break Outcome::Watchpoint,
             ExecutionState::Terminated(Termination::Completed) => break Outcome::Completed,
             ExecutionState::Terminated(Termination::Budget) => break Outcome::Budget,
             ExecutionState::Terminated(Termination::GuestFault) => break Outcome::GuestFault,
@@ -130,6 +136,10 @@ fn execute(prepared: Prepared) -> Result<Report, Diagnostic> {
             .map_err(|error| diagnostic(&error))?
             .into(),
         fault: session.fault().map(Into::into),
+        watchpoint: match session.state() {
+            ExecutionState::Paused(PauseReason::Watchpoint(hit)) => Some(hit.into()),
+            _ => None,
+        },
         memory,
     })
 }

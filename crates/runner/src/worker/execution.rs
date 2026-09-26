@@ -148,6 +148,13 @@ impl BoundSession {
             fault,
             memory,
             breakpoints: self.machine.breakpoints().map(HexAddress::new).collect(),
+            watchpoints: self
+                .machine
+                .watchpoints()
+                .iter()
+                .copied()
+                .map(Into::into)
+                .collect(),
         };
         self.sequence = sequence;
         Ok((Reply::Observed(Box::new(observation)), payloads))
@@ -385,6 +392,17 @@ fn apply(
                 .collect::<Vec<_>>();
             session.set_breakpoints(&addresses, *enabled)?;
         }
+        SessionAction::Watchpoints(points) => {
+            if points.len() > oplab_core::watchpoint::MAX_WATCHPOINTS {
+                return Err(ValidationError::Length.into());
+            }
+            let points = points
+                .iter()
+                .copied()
+                .map(TryInto::try_into)
+                .collect::<Result<Vec<_>, _>>()?;
+            session.set_watchpoints(&points)?;
+        }
         SessionAction::Observe { memory } => return Ok(*memory),
         SessionAction::Close | SessionAction::ReadTrace => {
             return Err(ValidationError::Transition.into());
@@ -404,7 +422,7 @@ const fn diagnostic(error: &MachineError) -> Diagnostic {
     })
 }
 
-const fn status(state: ExecutionState) -> Status {
+fn status(state: ExecutionState) -> Status {
     match state {
         ExecutionState::Ready => Status::Ready,
         ExecutionState::Running => Status::Running,
@@ -416,6 +434,7 @@ const fn status(state: ExecutionState) -> Status {
         ExecutionState::Paused(PauseReason::Target(address)) => {
             Status::Target(HexAddress::new(address))
         }
+        ExecutionState::Paused(PauseReason::Watchpoint(hit)) => Status::Watchpoint(hit.into()),
         ExecutionState::Terminated(reason) => Status::Terminated(reason),
         ExecutionState::Crashed => Status::Crashed,
     }

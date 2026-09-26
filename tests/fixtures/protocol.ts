@@ -86,6 +86,7 @@ export function observation(sequence = '9007199254740993', target: Target = 'x86
     memory: null,
     fault: null,
     breakpoints: [],
+    watchpoints: [],
   };
 }
 

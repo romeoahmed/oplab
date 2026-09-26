@@ -30,7 +30,7 @@ Scalar, vector and native-call lowering have separate modules. Addressable local
 temporaries are promoted by LLVM's standard pipeline; CPU globals remain explicit
 loads/stores. Native QEMU SoftFloat and memory helpers retain their semantics.
 Unsupported TCG operations return an explicit fault.
-Lowering currently requires a 64-bit little-endian host. Both Rust and the native
+Lowering requires a 64-bit little-endian host. Both Rust and the native
 adapter reject other layouts at compile time. Vector broadcasts use LLVM shuffles;
 scalar shifts mask counts so TCG's unspecified results do not become LLVM poison.
 
@@ -60,6 +60,9 @@ instruction patches.
 
 Guest memory uses exact 4-KiB mappings, permissions and bounded buffers. Native
 MMU helpers retain endianness, access width, alignment and atomic operations.
+AArch64 sets `HCR_EL2.DC` before rebuilding translation flags so flat experiment
+RAM uses Normal memory rather than the MMU-off Device default. Ordinary unaligned
+loads/stores are allowed; instruction-specific alignment requirements remain.
 The private SDK uses R=1, W=2, X=4; the engine converts ELF permission bits at
 the boundary. Debugger access is independent of guest permissions. C `sigsetjmp`
 and QEMU exit boundaries contain native exceptions below Rust frames;
@@ -78,6 +81,17 @@ work. Breakpoints, completion and instruction budgets remain engine policy.
 Cache identity includes PC, code-segment base, translation flags, size and exact
 instruction bytes. Every dispatch translates current state before cache lookup;
 this reuses LLVM compilation, not QEMU translation. Debugger writes clear the cache.
+
+Data watchpoints use QEMU's `cpu_watchpoint_insert`/removal and TLB matching,
+including native helper and atomic paths. The owned `debug_check_watchpoint` hook
+records the first match and declines an architectural debug exception. The adapter
+returns that record at a successful dispatch boundary, avoiding QEMU TB restart
+and replay through its CPU loop. Fault exits discard the match. Replacing ranges
+flushes the TLB, including every page of removed multi-page ranges; compiled LLVM
+instructions are unchanged. The owner removes its watchpoints before CPU unrealize,
+while the TLB is still alive; QEMU CPU finalization does not free these entries.
+No upstream instruction or watchpoint code is patched. Boundary changes require
+rebuilding the SDK and worker together.
 
 See [QEMU's TCG operations](https://www.qemu.org/docs/master/devel/tcg-ops.html),
 [QOM ownership](https://www.qemu.org/docs/master/devel/qom.html),
